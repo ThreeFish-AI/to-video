@@ -1,14 +1,20 @@
 """source_ledger 的取证判据：repo 类硬校验 vs site 类只看正文（全程无网络）。
 
-sync/audit 用例同样无网络：抓取一律经 fake_http 打桩（与 fetch 用例同一姿势）。"""
+sync/audit 用例同样无网络：抓取一律经 fake_http 打桩（与 fetch 用例同一姿势）。
+
+真树切分：仅末节三条读 negentropy 真内容（claude-code-explained 台账 + 系列
+地图 + series.json），按 env 门控（`real_tree` 标记：设 TO_VIDEO_TEST_WORKSPACE
+=<工作区根> 启用）；其余用例纯离线（tmp_path + fake_http 打桩），无门控常跑。"""
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from argparse import Namespace
 from pathlib import Path
 
+import pytest
 import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -17,10 +23,23 @@ import source_ledger as sl
 SHA = "f9e8b280f715f9ba107d4517fd39bc5f8ddda618"
 SHA2 = "67a9126c6435a8654ba7a6f68c0fd2130f00a462"
 
-#: 真实 ep1 台账与系列地图（repo 树内，只读）
-INFLUENCE = Path(__file__).resolve().parents[2]
-EP1_PROJECT = INFLUENCE / "episodes" / "claude-code-explained-video"
-REAL_MAP = INFLUENCE / "source-map" / "claude-code-explained.toml"
+#: 真树门控：skill 仓内无 episodes/ 与 source-map/（双锚点：内容在工作区侧），
+#: 这三条端到端用例只在集成模式下有受检对象。
+_TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+real_tree = pytest.mark.skipif(
+    not _TEST_WS,
+    reason="读 negentropy 真内容树（claude-code-explained 台账 + source-map + "
+    "series.json）；集成模式设 TO_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
+)
+
+#: 真实 ep1 台账与系列地图（env 指向的内容工作区内，只读；None=未设 env）
+WORKSPACE = Path(_TEST_WS).resolve() if _TEST_WS else None
+EP1_PROJECT = (
+    WORKSPACE / "episodes" / "claude-code-explained-video" if WORKSPACE else None
+)
+REAL_MAP = (
+    WORKSPACE / "source-map" / "claude-code-explained.toml" if WORKSPACE else None
+)
 
 #: 最小系列地图夹具：2 pin × 3 章（ep1 1 章 + ep2 2 章），sitePaths 含多路径章。
 FIXTURE_MAP = f"""
@@ -368,14 +387,16 @@ def test_audit_accepts_unrelated_entry_names(tmp_path, monkeypatch):
     assert sl.cmd_audit(p, audit_args(m, 2)) == 0
 
 
-# ------------------------------------- ep1 已交付台账的命名字节兼容（真实树，只读）
+# --------------------- ep1 已交付台账的命名字节兼容（真实树，只读，env 门控）
 
 
+@real_tree
 def test_real_map_and_ep1_ledger_are_mutually_auditable():
     """真实系列地图 × ep1 真实台账：audit 零报警 = 命名方案字节兼容的端到端证据。"""
     assert sl.cmd_audit(EP1_PROJECT, audit_args(REAL_MAP, 1)) == 0
 
 
+@real_tree
 def test_real_map_derives_ep1_urls_byte_identical():
     """派生 URL 与已交付台账逐字节一致（audit 只查名与钉，URL 兼容须另证）。
 
@@ -392,9 +413,10 @@ def test_real_map_derives_ep1_urls_byte_identical():
         assert ledger[name]["url"] == spec["url"], name
 
 
+@real_tree
 def test_real_map_pins_cover_registered_episodes():
     """series.json 里**已登记**的每一集都必须被钉覆盖（地图可超前登记战役后续集）。"""
-    series = json.loads((INFLUENCE / "series.json").read_text(encoding="utf-8"))
+    series = json.loads((WORKSPACE / "series.json").read_text(encoding="utf-8"))
     entry = next(s for s in series["seriesList"] if s["id"] == "claude-code-explained")
     eps = {e["episode"] for e in entry["episodes"]}
     smap = sl.load_source_map(REAL_MAP)

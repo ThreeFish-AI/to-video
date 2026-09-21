@@ -3,7 +3,8 @@
 背景：集内 audio/ 是 gitignored 本地产物，换 worktree 即丢——版本库按
 （集 slug, 句 id, digest）三元组持久化合成成果，使「改稿只重配变更句」
 跨工作区成立。此处钉死四条不变量：回收等价缓存命中、digest 失配必 miss、
-历史版本并存不覆盖、禁用时全程直通。
+历史版本并存不覆盖、禁用时全程直通。库根解析（env 覆盖、旧名兼容读、
+旧默认目录迁移回退）同为机器属性契约，一并在此钉死。
 """
 
 from __future__ import annotations
@@ -83,13 +84,45 @@ def test_disabled_store_is_transparent(tmp_path):
 
 
 def test_env_override(monkeypatch, tmp_path):
-    monkeypatch.setenv("NE_TTS_STORE", str(tmp_path / "custom"))
+    monkeypatch.setenv("TO_VIDEO_TTS_STORE", str(tmp_path / "custom"))
     assert store_root(disabled=False) == tmp_path / "custom"
 
 
 def test_empty_env_disables_store(monkeypatch):
-    monkeypatch.setenv("NE_TTS_STORE", "")
+    monkeypatch.setenv("TO_VIDEO_TTS_STORE", "")
     assert store_root(disabled=False) is None
+
+
+def test_legacy_env_name_still_honored(monkeypatch, tmp_path):
+    """兼容读：清掉新名后，旧名 NE_TTS_STORE 仍生效（迁移期零配置失效）。"""
+    monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
+    monkeypatch.setenv("NE_TTS_STORE", str(tmp_path / "legacy-env"))
+    assert store_root(disabled=False) == tmp_path / "legacy-env"
+
+
+def test_default_falls_back_to_legacy_dir(monkeypatch, tmp_path):
+    """不设 env 时：LEGACY 目录存在 ⇒ 优先于「两者都不存在才落的新默认」。
+
+    回退目的是存量缓存原地命中。LEGACY/DEFAULT 指到 tmp 目录再测，不碰真实
+    家目录——真机上旧目录可能真实存在，直接断言会把测试变成环境依赖。
+    """
+    monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
+    monkeypatch.delenv("NE_TTS_STORE", raising=False)
+    legacy = tmp_path / "legacy-store"
+    legacy.mkdir()
+    monkeypatch.setattr(tts, "LEGACY_STORE", str(legacy))
+    # 新默认刻意不创建：存在与否正是本用例的输入
+    monkeypatch.setattr(tts, "DEFAULT_STORE", str(tmp_path / "fresh-store"))
+    assert store_root(disabled=False) == legacy
+
+
+def test_default_when_neither_dir_exists(monkeypatch, tmp_path):
+    """LEGACY 也不存在 ⇒ 落到新默认路径（目录允许尚不存在，deposit 时再建）。"""
+    monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
+    monkeypatch.delenv("NE_TTS_STORE", raising=False)
+    monkeypatch.setattr(tts, "LEGACY_STORE", str(tmp_path / "absent-legacy"))
+    monkeypatch.setattr(tts, "DEFAULT_STORE", str(tmp_path / "absent-default"))
+    assert store_root(disabled=False) == tmp_path / "absent-default"
 
 
 def test_store_read_error_degrades_to_miss(monkeypatch, tmp_path):

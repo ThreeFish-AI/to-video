@@ -3,27 +3,42 @@
 地图是 章→集归属 与 双钉 的唯一事实源（各集 notes 只链接不重述），故它的
 **自身一致性**必须独立执法：本文件只读 TOML/JSON 断言结构，不碰网络、
 不碰台账（台账一致性归 test_source_ledger.py 的 audit 用例）。
+
+整文件 env 门控：每条用例都断言真内容树（source-map/ + series.json +
+episodes/* 归档），skill 仓内没有这些内容（双锚点：内容在工作区侧）——
+与 test_source_ledger.py 不同，此处无纯离线用例可切分出来。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import source_ledger as sl
 
-INFLUENCE = Path(__file__).resolve().parents[2]
-SOURCE_MAP_DIR = INFLUENCE / "source-map"
+_TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+pytestmark = pytest.mark.skipif(
+    not _TEST_WS,
+    reason="整文件只断言 negentropy 真内容树（source-map + series.json + episodes "
+    "归档）；集成模式设 TO_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
+)
+
+#: 内容工作区根（env 指派）。未设 env 时全文件已 skip，占位值仅保模块体可导入。
+WORKSPACE = Path(_TEST_WS).resolve() if _TEST_WS else Path.cwd()
+SOURCE_MAP_DIR = WORKSPACE / "source-map"
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def load_series() -> dict[str, list[int]]:
     """→ {seriesId: [episode, …]}，集号顺序即清单顺序。"""
-    data = json.loads((INFLUENCE / "series.json").read_text(encoding="utf-8"))
+    data = json.loads((WORKSPACE / "series.json").read_text(encoding="utf-8"))
     return {s["id"]: [e["episode"] for e in s["episodes"]] for s in data["seriesList"]}
 
 
@@ -133,7 +148,7 @@ def test_map_has_human_counterpart_md():
 
 def archive_dirs() -> list[Path]:
     """→ 全部 `research/source-archive/` 目录（有归档的集才有）。"""
-    return sorted(p for p in INFLUENCE.glob("episodes/*/research/source-archive"))
+    return sorted(p for p in WORKSPACE.glob("episodes/*/research/source-archive"))
 
 
 def test_every_source_archive_carries_upstream_license():
@@ -145,7 +160,7 @@ def test_every_source_archive_carries_upstream_license():
     """
     missing: list[str] = []
     for d in archive_dirs():
-        rel = d.relative_to(INFLUENCE)
+        rel = d.relative_to(WORKSPACE)
         for name in ("LICENSE", "README.md"):
             if not (d / name).is_file():
                 missing.append(f"{rel}/{name}")
@@ -162,7 +177,7 @@ def test_source_archive_license_is_nonempty_text():
         if not lic.is_file():
             continue  # 缺失由上一条点名，此处不重复报
         text = lic.read_text(encoding="utf-8").strip()
-        assert len(text) > 200, f"{lic.relative_to(INFLUENCE)} 内容过短，疑为占位"
+        assert len(text) > 200, f"{lic.relative_to(WORKSPACE)} 内容过短，疑为占位"
         assert "Copyright" in text, (
-            f"{lic.relative_to(INFLUENCE)} 无 Copyright 行——版权声明是许可要求的一半"
+            f"{lic.relative_to(WORKSPACE)} 无 Copyright 行——版权声明是许可要求的一半"
         )

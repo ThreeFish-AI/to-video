@@ -6,12 +6,14 @@
 （那只是便利），也不能砍这里。
 
 覆盖五条：
-  1. skill 指针全部真实存在
+  1. skill 指针全部真实存在（**skill 根相对**——stages.toml 与 skills/ 同住
+     skill 仓，双锚点架构下不再有「子项目」这个锚）
   2. commands 每一项都是 pipeline.py 真实注册的子命令
   3. ordinal 恰好是 ①..⑨、无重无缺
   4. 每篇 skill 文档的 H1 与声明（ordinal / name / 文件号）逐字相符
-  5. .agent 路由壳的速查表覆盖全部九个 skill 文档（**校验而非生成**：生成物
-     会被手改，那是更隐蔽的第二事实源）
+  5. skill 根 SKILL.md（路由壳）的九阶段速查表覆盖全部九个 skill 文档，
+     且声明「关键不变量」节（**校验而非生成**：生成物会被手改，那是更隐蔽的
+     第二事实源）
 """
 
 from __future__ import annotations
@@ -19,20 +21,27 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
+import tomllib
+
 PIPELINE = Path(__file__).resolve().parents[1]
-INFLUENCE = PIPELINE.parent
 STAGES_TOML = PIPELINE / "stages.toml"
 PIPELINE_PY = PIPELINE / "scripts" / "pipeline.py"
-ROUTER = (
-    INFLUENCE.parents[1] / ".agent" / "skills" / "science-video-pipeline" / "SKILL.md"
-)
-
-ORDINALS = "①②③④⑤⑥⑦⑧⑨"
 
 sys.path.insert(0, str(PIPELINE / "scripts"))
+
+import paths  # noqa: E402 - sys.path 注入后导入
+
+#: skill 根（paths.SKILL 的存在理由就是「不数层数」；此处若改回 parents[N]，
+#: SKILL.md 被软链/换安装位时这些断言会静默锚错树）
+SKILL_ROOT = paths.SKILL
+
+#: 路由壳 = skill 根的 SKILL.md 本体（旧 .agent/skills/science-video-pipeline/
+#: SKILL.md 随抽取退役，路由职责由技能装载单位自己承担）
+ROUTER = SKILL_ROOT / paths.SKILL_MARKER
+
+ORDINALS = "①②③④⑤⑥⑦⑧⑨"
 
 
 def stages() -> list[dict]:
@@ -40,9 +49,9 @@ def stages() -> list[dict]:
 
 
 def test_skill_pointers_exist():
-    """skill 是**子项目相对**的轻量指针，全部须落到真实文件。"""
+    """skill 是**skill 根相对**的轻量指针，全部须落到真实文件。"""
     for st in stages():
-        target = INFLUENCE / st["skill"]
+        target = SKILL_ROOT / st["skill"]
         assert target.is_file(), f"{st['id']}: skill 指针失效 {st['skill']}"
 
 
@@ -59,36 +68,55 @@ def test_commands_are_registered_subcommands():
             )
 
 
-#: 子命令清单被抄进三份散文。抄件无执法就会漂——`stages` 上线时三处**全部**漏更，
-#: 而当时的守卫只查 stages.toml→parser 一个方向（声明多于实现），看不见反向缺口。
+#: 子命令声明被抄进多处：pipeline.py 文件头与 pipeline/README.md 是**穷举抄件**
+#: （{a|b|c} 清单），SKILL.md（路由壳——使用者从这里抄命令）刻意不复制穷举清单、
+#: 只在与 pipeline.py 同现的命令行里提及子命令。抄件无执法就会漂——`stages` 上线
+#: 时各处**全部**漏更，而当时的守卫只查 stages.toml→parser 一个方向（声明多于
+#: 实现），看不见反向缺口。（旧第四处「子项目 README」随双锚点抽取退役。）
 BRACE_LIST_RE = re.compile(r"\{([a-z|-]{20,})\}")
 DOCSTRING_LIST_RE = re.compile(r"^子命令：(.+)$", re.MULTILINE)
 
+#: SKILL.md 的提及形态：`…pipeline.py [--project $P] <cmd> …`——捕获入口脚本名
+#: （可带 --project 取值）之后的裸 token；`<cmd>` 占位与 flag（-- 开头）不匹配。
+SKILL_MD_CMD_RE = re.compile(r"pipeline\.py(?:\s+--project\s+\S+)?\s+([a-z][a-z-]*)")
 
-def documented_subcommand_lists() -> list[tuple[str, set[str]]]:
-    """→ [(出处, 该处声明的子命令集合)]。找不到清单即视为检测器失效并报错。"""
-    out: list[tuple[str, set[str]]] = []
+
+def documented_subcommand_lists() -> list[tuple[str, set[str], bool]]:
+    """→ [(出处, 该处声明的子命令集合, 是否穷举)]。找不到清单即视为检测器失效并报错。
+
+    穷举源断言 == 注册表（两个方向的漂移都拦）；SKILL.md 是指针式路由壳，
+    穷举不是它的职责——对它执法「提及即真实」（⊆）：它教出的每条命令都必须
+    argparse 认识，反向缺口（新增子命令未写进路由壳）由穷举源兜底。
+    """
+    out: list[tuple[str, set[str], bool]] = []
     m = DOCSTRING_LIST_RE.search(PIPELINE_PY.read_text(encoding="utf-8"))
     assert m, "pipeline.py 文件头的「子命令：」行形态变了，检测器该更新了"
-    out.append(("pipeline.py 文件头", {s.strip() for s in m.group(1).split("/")}))
-    for doc in (PIPELINE / "README.md", INFLUENCE / "README.md"):
-        hits = BRACE_LIST_RE.findall(doc.read_text(encoding="utf-8"))
-        assert hits, f"{doc.name}: 未找到 {{a|b|c}} 形态的子命令清单（检测器失效？）"
-        out += [(doc.name, set(h.split("|"))) for h in hits]
+    out.append(("pipeline.py 文件头", {s.strip() for s in m.group(1).split("/")}, True))
+    hits = BRACE_LIST_RE.findall((PIPELINE / "README.md").read_text(encoding="utf-8"))
+    assert hits, "README.md: 未找到 {a|b|c} 形态的子命令清单（检测器失效？）"
+    out += [("pipeline/README.md", set(h.split("|")), True) for h in hits]
+    mentioned = SKILL_MD_CMD_RE.findall(ROUTER.read_text(encoding="utf-8"))
+    assert mentioned, "SKILL.md: 未找到任何 pipeline.py 调用行（检测器失效？）"
+    out.append(("SKILL.md", set(mentioned), False))
     return out
 
 
 def test_documented_subcommand_lists_match_the_parser():
-    """三份散文抄件必须逐项等于 argparse 真实注册表。"""
+    """散文声明与 argparse 注册表对齐：穷举源逐项相等，路由壳提及即须真实。"""
     registered = set(
         re.findall(r'add_parser\("([a-z-]+)"', PIPELINE_PY.read_text(encoding="utf-8"))
     )
     assert registered, "未能从 pipeline.py 解析出任何子命令——解析器该更新了"
-    for where, listed in documented_subcommand_lists():
-        assert listed == registered, (
-            f"{where} 的子命令清单与 argparse 注册表不符："
-            f"缺 {sorted(registered - listed)} / 多 {sorted(listed - registered)}"
-        )
+    for where, listed, exhaustive in documented_subcommand_lists():
+        if exhaustive:
+            assert listed == registered, (
+                f"{where} 的子命令清单与 argparse 注册表不符："
+                f"缺 {sorted(registered - listed)} / 多 {sorted(listed - registered)}"
+            )
+        else:
+            assert listed <= registered, (
+                f"{where} 教出了 argparse 未注册的子命令：{sorted(listed - registered)}"
+            )
 
 
 # ---------------- 系列扇出白名单 ----------------
@@ -248,7 +276,7 @@ def test_skill_h1_matches_declaration():
     且改错就红的事实。
     """
     for st in stages():
-        p = INFLUENCE / st["skill"]
+        p = SKILL_ROOT / st["skill"]
         nn = p.name[:2]
         want = f"# Stage {st['ordinal']} {st['name']}（skill 规格 · {nn}）"
         first = p.read_text(encoding="utf-8").split("\n", 1)[0]
@@ -265,25 +293,65 @@ def test_declared_misalignment_is_real():
     assert by_ord["⑦"].startswith("06-"), "⑦ 不再对应 06-*，请同步所有入链"
 
 
-def test_router_table_covers_every_skill():
-    """.agent 路由壳必须链到全部九篇规格。
-
-    路由表把 ④⑤ 合并成一行（8 行覆盖 9 阶段），故按「文件是否被链接」判定，
-    而非按行数——判据要贴着不变量，不贴着排版。
-    """
+def _router_text() -> str:
     assert ROUTER.is_file(), f"路由壳不存在：{ROUTER}"
-    text = ROUTER.read_text(encoding="utf-8")
-    for st in stages():
-        name = Path(st["skill"]).name
-        assert name in text, f"路由壳未链到 {name}（{st['id']}）"
+    return ROUTER.read_text(encoding="utf-8")
+
+
+def _quick_reference_section(text: str) -> str:
+    """→ 「九阶段速查」节正文（该标题起，至下一个同级或更高级标题止）。
+
+    找不到该节即报错——它和「关键不变量」节都是 SKILL.md 完整版的契约结构，
+    缺席说明占位版尚未被完整版替换，而非本检测器失效。
+    """
+    m = re.search(r"^(#{1,6})[^\n]*九阶段速查[^\n]*$", text, re.MULTILINE)
+    assert m, "SKILL.md 缺「九阶段速查」节——占位版尚未落地为完整版"
+    rest = text[m.end() :]
+    stop = re.search(rf"^#{{1,{len(m.group(1))}}}\s", rest, re.MULTILINE)
+    return rest[: stop.start()] if stop else rest
+
+
+#: 速查表规格链接列的形态：pipeline/skills/NN-name.md（skill 根相对）
+SKILL_LINK_RE = re.compile(r"pipeline/skills/(\d{2}-[a-z-]+\.md)")
+
+
+def test_router_table_covers_every_skill():
+    """路由壳（skill 根 SKILL.md）的九阶段速查表必须链到全部九篇规格，一一对应。
+
+    判据三层：表内含规格链接的行恰 9 行（一阶段一行）；链接文件名无重复；
+    链接集合与 stages.toml 声明的 9 篇 skill 文件逐一相等——多链（指向已删文档）、
+    漏链（新阶段未入表）、重复（一链两用）三类漂移都会红。
+    """
+    section = _quick_reference_section(_router_text())
+    rows = [ln for ln in section.split("\n") if ln.lstrip().startswith("|")]
+    linked_rows = [ln for ln in rows if SKILL_LINK_RE.search(ln)]
+    assert len(linked_rows) == 9, (
+        f"速查表应 9 行（一阶段一行），实际 {len(linked_rows)} 行含规格链接"
+    )
+    names = SKILL_LINK_RE.findall(section)
+    assert len(names) == len(set(names)), f"速查表规格链接重复：{sorted(names)}"
+    want = {Path(st["skill"]).name for st in stages()}
+    assert set(names) == want, (
+        f"速查表链接与九篇规格不一一对应：缺 {sorted(want - set(names))} / "
+        f"多 {sorted(set(names) - want)}"
+    )
+
+
+def test_router_declares_key_invariants_section():
+    """路由壳须含「关键不变量」节——速查表答「做什么」，不变量答「什么不能破」。"""
+    text = _router_text()
+    assert re.search(r"^#{1,6}[^\n]*关键不变量", text, re.MULTILINE), (
+        "SKILL.md 缺「关键不变量」节——占位版尚未落地为完整版"
+    )
 
 
 def test_router_declares_subproject_ssot_paths():
-    """路由壳自称「内容 SSOT 在 skills/、工具 SSOT 在 scripts/」，这两条路径须真实。
+    """路由壳自称「内容 SSOT 在 pipeline/skills/、工具 SSOT 在 pipeline/scripts/」，
+    这两条路径须真实。
 
-    迁移会一次性打断它的 13 条链接，而此前**没有任何检查**覆盖它。
+    双锚点抽取会一次性打断它的全部相对链接，而搬迁前**没有任何检查**覆盖它。
     """
-    text = ROUTER.read_text(encoding="utf-8")
+    text = _router_text()
     for rel in ("pipeline/skills/", "pipeline/scripts/"):
         assert rel in text, f"路由壳未声明 SSOT 路径 {rel}"
-        assert (INFLUENCE / rel).is_dir(), f"SSOT 路径不存在：{rel}"
+        assert (SKILL_ROOT / rel).is_dir(), f"SSOT 路径不存在：{rel}"

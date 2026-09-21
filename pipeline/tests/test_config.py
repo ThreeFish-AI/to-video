@@ -1,28 +1,38 @@
 """pipeline.toml 的 schema / 默认值 / 校验。
 
 核心用例是 `test_real_episodes_resolve_identically_to_literal_values`：它把
-「从 4 集 toml 删掉机制常数」这次删除钉成**可证明的等价变换**——解析并填默认后
+「从集 toml 删掉机制常数」这次删除钉成**可证明的等价变换**——解析并填默认后
 的每一个 schema 已知键，必须仍等于删除前那些字面值。
 
 另一条要点是 `test_missing_config_announces_skipped_gate`：此前缺 pipeline.toml
 时时长预算门会静默退化为 [0, 999]，是个「你以为开着其实关着的门」。
+
+真集用例按 env 门控（双锚点：本仓是 skill 仓，无 episodes/）：
+  - 集成模式（TO_VIDEO_TEST_WORKSPACE=<工作区根>）→ 受检面 = 真树全部集；
+  - 未设 env → 受检面 = fixtures/golden-episode/ 的 tmp 镜像（目录名对齐
+    slug=golden-episode-video 以过身份校验；golden 本身按「删机制常数、留策略
+    声明」纪律书写，故等价变换判据在两种模式下同构成立）。
 """
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 PIPELINE = Path(__file__).resolve().parents[1]
-INFLUENCE = PIPELINE.parent
 SCRIPTS = PIPELINE / "scripts"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+GOLDEN_EPISODE_TOML = FIXTURES / "golden-episode" / "pipeline.toml"
 sys.path.insert(0, str(SCRIPTS))
 
-import config  # noqa: E402
+import config  # noqa: E402 - sys.path 注入后导入
 
-#: 删除前 4 集 toml 里逐字写着的值（机制常数）。删除后必须由默认值层还原出同一结果。
+#: 删除前各集 toml 里逐字写着的值（机制常数）。删除后必须由默认值层还原出同一结果。
 LITERALS_BEFORE_DELETION = {
     "narration.chars_per_min": 280,
     "tts.lang": "ZH",
@@ -31,8 +41,23 @@ LITERALS_BEFORE_DELETION = {
 }
 
 
-def episodes() -> list[Path]:
-    return sorted(p for p in (INFLUENCE / "episodes").iterdir() if p.is_dir())
+@pytest.fixture()
+def episodes(tmp_path: Path) -> list[Path]:
+    """受检集清单：集成模式 = 真树 episodes/ 全部集；否则 = golden 夹具镜像。
+
+    golden 进 tmp 而非直读 fixtures/：`episode.slug` 与工程目录名的一致性校验
+    要求目录名恰为 golden-episode-video，且用例永不改动夹具源文件。
+    """
+    ws = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+    if ws:
+        eps = sorted(p for p in (Path(ws) / "episodes").iterdir() if p.is_dir())
+        assert eps, f"TO_VIDEO_TEST_WORKSPACE={ws} 下无 episodes/ 集目录"
+        return eps
+    assert GOLDEN_EPISODE_TOML.is_file(), f"golden 夹具缺失：{GOLDEN_EPISODE_TOML}"
+    root = tmp_path / "golden-episode-video"
+    root.mkdir()
+    (root / "pipeline.toml").write_bytes(GOLDEN_EPISODE_TOML.read_bytes())
+    return [root]
 
 
 def get(cfg: dict, dotted: str):
@@ -40,16 +65,16 @@ def get(cfg: dict, dotted: str):
     return cfg.get(sec, {}).get(key)
 
 
-def test_real_episodes_validate_clean():
-    """4 集真实配置必须零 FAIL —— 否则 schema 与现实脱节。"""
-    for ep in episodes():
-        cfg, _origin, fails, _warns = config.load(ep, required=True)
+def test_real_episodes_validate_clean(episodes: list[Path]):
+    """受检集（真树集成模式 / golden）配置必须零 FAIL —— 否则 schema 与现实脱节。"""
+    for ep in episodes:
+        _cfg, _origin, fails, _warns = config.load(ep, required=True)
         assert not fails, f"{ep.name}: {fails}"
 
 
-def test_real_episodes_resolve_identically_to_literal_values():
+def test_real_episodes_resolve_identically_to_literal_values(episodes: list[Path]):
     """等价变换的证明：删掉的机制常数由默认值层原值还原。"""
-    for ep in episodes():
+    for ep in episodes:
         cfg, origin, _f, _w = config.load(ep, required=True)
         for dotted, want in LITERALS_BEFORE_DELETION.items():
             assert get(cfg, dotted) == want, f"{ep.name}.{dotted}"
@@ -59,27 +84,27 @@ def test_real_episodes_resolve_identically_to_literal_values():
             )
 
 
-def test_policy_declaration_stays_in_toml():
+def test_policy_declaration_stays_in_toml(episodes: list[Path]):
     """engine 是策略声明（有可见替代项 + .engine 签名护栏），必须留在 toml。"""
-    for ep in episodes():
+    for ep in episodes:
         _cfg, origin, _f, _w = config.load(ep, required=True)
         assert origin["tts.engine"] == "pipeline.toml", (
             f"{ep.name}: tts.engine 退化成默认值 —— 它是决策记录，不是默认值"
         )
 
 
-def test_machine_property_never_in_toml():
+def test_machine_property_never_in_toml(episodes: list[Path]):
     """server 是机器属性：只能来自默认值或环境变量，永不入受版本控制的 toml。"""
-    for ep in episodes():
+    for ep in episodes:
         _cfg, origin, _f, _w = config.load(ep, required=True)
         assert origin["tts.server"] in {"default", "env:INDEXTTS_SERVER"}, (
             f"{ep.name}: tts.server 被写进了 toml（机器属性不进共享配置）"
         )
 
 
-def test_env_override_applies(monkeypatch):
+def test_env_override_applies(monkeypatch, episodes: list[Path]):
     monkeypatch.setenv("INDEXTTS_SERVER", "http://127.0.0.1:9999")
-    cfg, origin, _f, _w = config.load(episodes()[0], required=True)
+    cfg, origin, _f, _w = config.load(episodes[0], required=True)
     assert get(cfg, "tts.server") == "http://127.0.0.1:9999"
     assert origin["tts.server"] == "env:INDEXTTS_SERVER"
 

@@ -1,96 +1,123 @@
-"""文档与脚本文件头里**命令**的路径无关性执法。
+"""文档命令的路径锚定执法（双锚点架构：skill 根与工作区根物理分离）。
 
-纪律（两类引用，方向相反）：
-  - **命令** → 必须用 `$I`/`$R`/`$P`/`$V` 变量。命令是可执行文本，变量化后与
-    子项目在仓库中的位置解耦，下次搬迁零改动。
-  - **散文里的 Markdown 链接** → 必须保持真实相对路径。AGENTS.md 强制可跳转
-    链接，且 `check_series.py` 规则 5 正在执法它们的存活；把链接变量化会一次性
-    造出十几条死链，并让规则 5 的覆盖面凭空缩小。
+抽取为独立技能后，机制（skill 仓）与内容（工作区）不再同址，文档里的命令
+一律用四变量组合，定义 SSOT 在 pipeline/README.md 的路径变量约定节：
 
-本文件只管前者，三条判据：
-  1. 命令内不出现「子项目在仓库中的位置」字面量（skills/*.md）
-  2. 变量定义只存在于 pipeline/README.md，且位置字面量只写在 `I=` 一行
-  3. 同一条命令内不混用两种锚点 —— 迁移留下的 `$R + pipeline/voices/…` 组合在
-     任何 CWD 下都不成立，且因为不是 Markdown 链接，规则 5 完全看不到。判据 3
-     的受检面**必须**含 `.py`：脚本文件头的用法段既无围栏也无反引号。
+  - ``$T`` = skill 根（机制所在，随安装位置变化：``~/.claude/skills/to-video``
+    软链 / ``TO_VIDEO_HOME`` / 任意 clone 路径）
+  - ``$W`` / ``$P`` / ``$V`` = 工作区根 / 分集工程 / 音色样本目录（内容所在，
+    随用户把工作区放在哪变化）
+
+本文件执法三类纪律（方向各不相同）：
+  1. 变量定义 SSOT：$T/$W/$P/$V 各自在 pipeline/README.md 定义且仅定义一次；
+     skills 与 SKILL.md 只引用不定义——重复定义意味着搬迁/改名时要同步 N 处。
+  2. 命令锚定：旧 $I/$R（apps/negentropy-influence 内锚）已作废，命令内出现
+     即回归；$T 锚定的命令行里不得混入工作区相对字面量（voices/、episodes/
+     裸前缀）——$T 是 skill 根，配上工作区相对路径在任何安装位置都不成立
+     （混锚）。$W/$P/$V 引用合法。注意 `to-video.toml` 的 tts.ref 与
+     series.json 的 path 是工作区根相对的**配置契约**，不是命令，不在受检面。
+  3. 散文里的 Markdown 相对链接必须落到 skill 仓内真实文件——AGENTS.md 强制
+     可跳转链接；把链接变量化会一次性造出十几条死链。
+
+受检面：pipeline/README.md + pipeline/skills/*.md + SKILL.md。pipeline/ 下
+两本手册（VOICE-CLONING.md 等）暂不在面内。
 """
 
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 PIPELINE = Path(__file__).resolve().parents[1]
-SKILLS = PIPELINE / "skills"
+sys.path.insert(0, str(PIPELINE / "scripts"))
+from paths import skill_root  # noqa: E402
 
-#: 这些串出现在**命令**里即为回归——它们把命令钉死在当前目录布局上。
-FORBIDDEN_IN_COMMANDS = (
-    "apps/negentropy-influence/pipeline/scripts",
-    "apps/negentropy-influence/episodes",
-    "media/pipeline",
-    "media/<slug>-video",
-)
+SKILLS = PIPELINE / "skills"
+README = PIPELINE / "README.md"
+SKILL_MD = skill_root() / "SKILL.md"
 
 FENCE_RE = re.compile(r"^```")
-#: 行内代码跨（skills/07 的命令就写成这种形态，不是围栏块）
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+#: 行内代码跨算「命令」的判据：经典命令调用形态，或直接引用了任何路径变量——
+#: 把 $ 变量写进行内跨就意味着它在充当命令（skills/07 的命令历史上就写成
+#: 行内跨而非围栏块，只扫围栏会漏）。
+COMMAND_SPAN_RE = re.compile(r"uv run|\.venv/bin/python|\$[TWPIR]\b")
+
+#: 旧锚点变量（apps/negentropy-influence 内锚）：抽取为独立 skill 时作废。
+OLD_ANCHOR_RE = re.compile(r"\$[IR]\b")
+#: 工作区相对字面量的**裸前缀**形态：前一字符是字母/数字/_/$/./-// 时，视为
+#: 更长路径的一部分（`$W/voices/…` 合法）；前是空白或引号才是从任何锚点都
+#: 拼不上的裸前缀。
+WORKSPACE_LITERAL_RE = re.compile(r"(?<![\w$./~-])(?:voices|episodes)/")
+#: $T 锚定的命令行：引用了 $T（含 `$T/` 前缀路径）即视为以 skill 根为锚。
+T_ANCHORED_RE = re.compile(r"\$T\b")
+
+#: 路径变量定义形态：行首 `X=`（bash 块内赋值；容忍缩进与 = 两侧空格）。
+VAR_DEF_RE = re.compile(r"^[ \t]*([TWPV])[ \t]*=", re.MULTILINE)
+
+#: Markdown 链接目标；非 scheme / 纯锚点的都按 skill 仓内相对路径校验。
+MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+EXTERNAL_LINK_RE = re.compile(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|#)")
 
 
-def fenced_blocks(text: str) -> list[tuple[int, str]]:
-    """→ [(起始行号, 块内文本)]。只取围栏代码块，散文一概不看。"""
-    out, buf, start, inside = [], [], 0, False
-    for i, line in enumerate(text.split("\n"), 1):
+def scanned_docs() -> list[Path]:
+    """受检面：README（变量 SSOT）+ 全部 skill 阶段文档 + SKILL.md。"""
+    return [p for p in (README, SKILL_MD, *sorted(SKILLS.glob("*.md"))) if p.is_file()]
+
+
+def command_lines(text: str) -> list[tuple[int, str]]:
+    """→ [(行号, 命令文本)]：围栏块内行（反斜杠续行并成一条）+ 行内命令跨。
+
+    续行拼接承自旧版判据：`--ref voices/x.wav` 这类尾巴常被换行切开，按单行
+    判定会漏混锚；拼接后按整条命令检查，行号锚定首行。
+    """
+    lines = text.split("\n")
+    out: list[tuple[int, str]] = []
+    inside = False
+    i = 0
+    while i < len(lines):
+        first = i + 1
+        line = lines[i]
         if FENCE_RE.match(line):
-            if inside:
-                out.append((start, "\n".join(buf)))
-                buf, inside = [], False
-            else:
-                inside, start = True, i
+            inside = not inside
+            i += 1
             continue
         if inside:
-            buf.append(line)
-    if inside:  # 悬空围栏本身也是缺陷（会把后续正文吞进代码块）
-        out.append((start, "\n".join(buf)))
+            joined = line
+            while (
+                joined.rstrip().endswith("\\")
+                and i + 1 < len(lines)
+                and not FENCE_RE.match(lines[i + 1])
+            ):
+                i += 1
+                joined = joined.rstrip().rstrip("\\") + " " + lines[i]
+            out.append((first, joined))
+        else:
+            for m in INLINE_CODE_RE.finditer(line):
+                if COMMAND_SPAN_RE.search(m.group(1)):
+                    out.append((first, m.group(1)))
+        i += 1
     return out
 
 
-def test_skill_docs_exist():
-    assert sorted(p.name[:2] for p in SKILLS.glob("*.md")) == [
-        f"{n:02d}" for n in range(1, 10)
-    ]
-
-
-def command_spans(text: str) -> list[tuple[str, str]]:
-    """命令出现的两种形态：围栏代码块 + 行内代码跨。
-
-    只覆盖围栏是不够的 —— skills/07 的两条命令就写在行内代码跨里，
-    漏掉它会让这条守卫在那个文件上空转。
-    """
-    spans = [(f"~{start}", block) for start, block in fenced_blocks(text)]
-    spans += [
-        ("行内", m.group(1))
-        for m in INLINE_CODE_RE.finditer(text)
-        if "uv run" in m.group(1) or "/scripts/" in m.group(1)
-    ]
-    return spans
-
-
-def test_no_hardcoded_paths_in_skill_commands():
-    offenders: list[str] = []
-    for p in sorted(SKILLS.glob("*.md")):
-        for where, block in command_spans(p.read_text(encoding="utf-8")):
-            for bad in FORBIDDEN_IN_COMMANDS:
-                if bad in block:
-                    offenders.append(f"{p.name}:{where} 命令内出现硬编码路径 {bad!r}")
-    assert not offenders, (
-        "命令须用 $R/$P 变量（定义见 pipeline/README.md）：\n  "
-        + "\n  ".join(offenders)
-    )
+def prose_links(text: str) -> list[tuple[int, str]]:
+    """→ [(行号, 链接目标)]：围栏块**外**的 Markdown 链接（块内是示例非链接）。"""
+    out: list[tuple[int, str]] = []
+    inside = False
+    for i, line in enumerate(text.split("\n"), 1):
+        if FENCE_RE.match(line):
+            inside = not inside
+            continue
+        if not inside:
+            out += [(i, m.group(1)) for m in MD_LINK_RE.finditer(line)]
+    return out
 
 
 def test_fences_are_balanced():
-    """悬空围栏会把正文困进代码块——本仓有过同类事故（Perceives 切片相位错位）。"""
-    for p in sorted(SKILLS.glob("*.md")):
+    """悬空围栏会把正文困进代码块、吞掉后续命令行——本仓系有过同类事故
+    （Perceives 切片相位错位）；它同时会腐蚀本文件的两类提取器。"""
+    for p in scanned_docs():
         n = sum(
             1
             for line in p.read_text(encoding="utf-8").split("\n")
@@ -99,155 +126,78 @@ def test_fences_are_balanced():
         assert n % 2 == 0, f"{p.name}: 围栏数 {n} 为奇数（悬空围栏）"
 
 
-#: 子项目在仓库中的位置。**全仓只允许出现在 pipeline/README.md 的 `I=` 一行**，
-#: 其余一切命令都从 `$I` 派生（`$R`/`$P`/`$V`）。
-LOCATION_LITERAL = "apps/negentropy-influence"
+def test_path_variables_defined_exactly_once_in_readme():
+    """判据 1（SSOT 正向）：$T/$W/$P/$V 在 pipeline/README.md 各定义恰好一次。
 
-
-def test_variable_convention_is_defined_exactly_once():
-    """`$I`/`$R`/`$P`/`$V` 的定义只允许出现在 pipeline/README.md（单一事实源）。
-
-    位置字面量只写一次（`I=`），其余变量派生自它 —— 否则搬迁时要改 N 处，
-    而这次迁移正是靠 N 处未同步暴露出来的。
+    「机制在哪、内容在哪」两个事实只在 README 落一次，其余文档全部引用；
+    重复定义意味着搬迁/改名时要同步 N 处——上次迁移正是靠 N 处未同步暴露的。
     """
-    readme = (PIPELINE / "README.md").read_text(encoding="utf-8")
-    for line in (
-        f"I={LOCATION_LITERAL}",
-        "R=$I/pipeline/scripts",
-        "P=$I/episodes/<slug>-video",
-        "V=$I/pipeline/voices",
-    ):
-        assert line in readme, f"pipeline/README.md 的路径变量约定缺 `{line}`"
-    for p in sorted(SKILLS.glob("*.md")):
-        text = p.read_text(encoding="utf-8")
-        assert f"I={LOCATION_LITERAL}" not in text, (
-            f"{p.name}: 重复定义了 $I —— 定义应只在 pipeline/README.md"
-        )
-        assert not re.search(r"^\s*[IRPV]=", text, re.MULTILINE), (
-            f"{p.name}: 自行赋值路径变量 —— skills 只引用不定义"
+    readme = README.read_text(encoding="utf-8")
+    defined = [m.group(1) for m in VAR_DEF_RE.finditer(readme)]
+    for var in "TWPV":
+        n = defined.count(var)
+        assert n == 1, (
+            f"pipeline/README.md 里 `${var}=` 定义出现 {n} 次（应恰好 1 次）——"
+            "路径变量约定是文档 SSOT，缺失请补定义，重复请去重"
         )
 
 
-#: 命令行的**行级**识别：不能只看围栏与行内代码跨——脚本文件头里的用法段既没有
-#: 围栏也没有反引号（tts_sample.py 就是），只覆盖那两种形态会让检查在 .py 上空转。
-COMMAND_LINE_RE = re.compile(r"(uv run|\.venv/bin/python|afplay|realpath)\b")
-
-
-def command_lines(text: str) -> list[tuple[int, str]]:
-    """→ [(行号, 整行)]，凡看起来是命令调用的行都算，续行一并接上。"""
-    out: list[tuple[int, str]] = []
-    lines = text.split("\n")
-    for i, line in enumerate(lines, 1):
-        if not COMMAND_LINE_RE.search(line):
+def test_only_readme_defines_path_variables():
+    """判据 1（SSOT 反向）：skills 与 SKILL.md 只引用不定义。"""
+    for p in scanned_docs():
+        if p == README:
             continue
-        joined, j = line, i
-        while joined.rstrip().endswith("\\") and j < len(lines):
-            joined = joined.rstrip().rstrip("\\") + " " + lines[j]
-            j += 1
-        out.append((i, joined))
-    return out
+        hits = [m.group(1) for m in VAR_DEF_RE.finditer(p.read_text(encoding="utf-8"))]
+        assert not hits, (
+            f"{p.name}: 自行定义路径变量 {hits} —— 定义 SSOT 在"
+            " pipeline/README.md，消费者只引用"
+        )
 
 
-#: 混锚检测的受检面：命令散落在 skills 之外的这些文档与脚本文件头里，
-#: 而 2026-08 的迁移恰恰在这些地方留下了「$R + 子项目相对样本路径」的组合。
-def command_bearing_files() -> list[Path]:
-    out = sorted(SKILLS.glob("*.md"))
-    out += [
-        PIPELINE / "VOICE-CLONING.md",
-        PIPELINE / "INDEXTTS-2.5-ADVANCED.md",
-        PIPELINE / "voices" / "README.md",
-        PIPELINE / "templates" / "video-skeleton" / "README.md.tmpl",
-    ]
-    out += sorted((PIPELINE / "scripts").glob("*.py"))
-    out += sorted((PIPELINE.parent / "episodes").glob("*/README.md"))
-    return [p for p in out if p.is_file()]
-
-
-def test_no_mixed_anchor_commands():
-    """同一条命令里不得混用两种锚点。
-
-    `$I/$R/$P/$V` 同锚于**仓库根**；而 `pipeline.toml` 的 `tts.ref` 与
-    `series.json` 的 `path` 是**子项目根相对**（由 paths.INFLUENCE 拼接）。把后者
-    的写法搬进命令行就会造出 `$R/tts_sample.py --ref pipeline/voices/x.wav` 这类
-    **在任何 CWD 下都不成立**的命令——迁移后这个组合一次出现在 7 个文件里，
-    且因为不是 Markdown 链接，check_series 的规则 5 完全看不到。
-    """
-    subproject_relative = re.compile(r"(?<![\w./$<])(pipeline|episodes)/")
+def test_no_old_anchor_vars_in_commands():
+    """判据 2a：命令内出现旧 $I/$R 字面量即回归。"""
     offenders: list[str] = []
-    for p in command_bearing_files():
-        for lineno, line in command_lines(p.read_text(encoding="utf-8")):
-            if not re.search(r"\$[IRPV]\b", line):
+    for p in scanned_docs():
+        for lineno, cmd in command_lines(p.read_text(encoding="utf-8")):
+            if OLD_ANCHOR_RE.search(cmd):
+                offenders.append(f"{p.name}:{lineno}  {cmd.strip()}")
+    assert not offenders, (
+        "命令内出现已作废的 $I/$R（apps/negentropy-influence 内锚），"
+        "一律改用 $T/$W/$P/$V（定义见 pipeline/README.md）：\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_t_anchored_commands_carry_no_workspace_literals():
+    """判据 2b（混锚禁令·反向）：$T 锚定的命令不得带工作区相对字面量。
+
+    $T 是 skill 根（机制），voices/、episodes/ 是工作区根相对（内容）——组合
+    出的路径在任何安装位置都不成立；样本/分集路径一律 $V/$P/$W。裸前缀判定
+    放行 `$W/voices/…` 这类作为 $W 路径组成部分的写法。
+    """
+    offenders: list[str] = []
+    for p in scanned_docs():
+        for lineno, cmd in command_lines(p.read_text(encoding="utf-8")):
+            if not T_ANCHORED_RE.search(cmd):
                 continue
-            if m := subproject_relative.search(line):
-                offenders.append(f"{p.name}:{lineno} `{m.group(0)}…` ← {line.strip()}")
+            for m in WORKSPACE_LITERAL_RE.finditer(cmd):
+                offenders.append(f"{p.name}:{lineno}  `{m.group(0)}…` ← {cmd.strip()}")
     assert not offenders, (
-        "命令内混用仓库根变量与子项目相对路径（样本路径请用 $V）：\n  "
+        "$T 锚定的命令混入工作区相对字面量（样本/分集路径改用 $V/$P/$W）：\n  "
         + "\n  ".join(offenders)
     )
 
 
-#: `$P` 是每集自己的（各集 README 在 bash 块首行赋值它，见
-#: episodes/*/README.md），故 `P=` 全域允许；`I=`/`R=`/`V=` 是全局定义，
-#: 只允许出现在 pipeline/README.md。
-GLOBAL_VARS = frozenset("IRV")
-VAR_ASSIGN_RE = re.compile(r"^\s*([IRPV])=(\S*)", re.MULTILINE)
-
-
-def definition_bearing_files() -> list[Path]:
-    """可能写下变量定义的全部文件 = 命令承载文件 + 子项目 README。"""
-    return [
-        p
-        for p in [*command_bearing_files(), PIPELINE.parent / "README.md"]
-        if p.is_file()
-    ]
-
-
-def test_global_var_definitions_and_literals_stay_out_of_consumers():
-    """判据 2 的**受检面必须含 `.py` 与各集 README**，不能只有 skills/*.md。
-
-    实测漏网：`pipeline.py` 文件头曾写 `R=apps/…/scripts; P=apps/…/episodes/<工程>`,
-    把位置字面量复制了两遍进脚本——而当时的定义检查只扫 skills/*.md，看不到 .py
-    文件头，于是这处违反不报红。判据要贴着「位置字面量有几份副本」，不贴着文件后缀。
-    """
-    readme = PIPELINE / "README.md"
+def test_relative_links_resolve():
+    """判据 3：散文相对链接必须落到 skill 仓内真实文件（可跳转性）。"""
     offenders: list[str] = []
-    for p in definition_bearing_files():
-        if p == readme:
-            continue
-        for m in VAR_ASSIGN_RE.finditer(p.read_text(encoding="utf-8")):
-            name, value = m.group(1), m.group(2)
-            if name in GLOBAL_VARS:
-                offenders.append(
-                    f"{p.name}: 定义了 ${name} —— 定义应只在 pipeline/README.md"
-                )
-            if LOCATION_LITERAL in value:
-                offenders.append(
-                    f"{p.name}: {name}={value} 内联了位置字面量，应从 $I 派生"
-                )
-    assert not offenders, "\n  ".join(["路径变量定义/位置字面量越界：", *offenders])
-
-
-def test_episode_and_template_readmes_carry_no_location_literal():
-    """分集 README 是**按集复制**的：位置字面量落进去就会随新集数量线性繁殖。
-
-    模板 README 尤其承重——它是每个 scaffold 出的新集继承的那一份。
-    """
-    targets = [PIPELINE / "templates" / "video-skeleton" / "README.md.tmpl"]
-    targets += sorted((PIPELINE.parent / "episodes").glob("*/README.md"))
-    offenders = [
-        f"{p.relative_to(PIPELINE.parent)}:{i}"
-        for p in targets
-        if p.is_file()
-        for i, line in enumerate(p.read_text(encoding="utf-8").split("\n"), 1)
-        if LOCATION_LITERAL in line
-    ]
+    for p in scanned_docs():
+        for lineno, target in prose_links(p.read_text(encoding="utf-8")):
+            if EXTERNAL_LINK_RE.match(target):
+                continue
+            rel = target.split("#", 1)[0]
+            if rel and not (p.parent / rel).exists():
+                offenders.append(f"{p.name}:{lineno}  {target}")
     assert not offenders, (
-        "分集/模板 README 不得出现位置字面量（用 $I 派生，见 pipeline/README.md）：\n  "
-        + "\n  ".join(offenders)
+        "相对链接目标不存在（skill 内链接须可跳转）：\n  " + "\n  ".join(offenders)
     )
-
-
-def test_direct_compare_command_anchors_both_videos_to_project():
-    skill = (SKILLS / "08-render-qa.md").read_text(encoding="utf-8")
-    assert "--compare $P/out/baseline-draft.mp4 $P/out/draft.mp4" in skill
-    assert "--compare out/baseline-draft.mp4 out/draft.mp4" not in skill

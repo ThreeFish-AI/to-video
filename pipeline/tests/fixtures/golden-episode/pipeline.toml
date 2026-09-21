@@ -1,0 +1,48 @@
+# 本集可执行参数的**唯一来源**（ISSUE-161：可执行参数不落散文文档，README 只引用配置）。
+# 编排入口：uv run --no-project $T/pipeline/scripts/pipeline.py --project $P <cmd>
+# （$T/$P 见 $T/pipeline/README.md 路径变量约定）
+#
+# 只写**本集偏离**：机制常数（chars_per_min / lang / draft_scale / draft_jpeg_quality）
+# 的默认值在 pipeline/scripts/config.py，不要抄回这里。字段表见 pipeline/README.md，
+# 跑 `pipeline.py doctor` 可打印带来源标注的生效配置全表。
+#
+# 本文件是 test_config.py 的 golden 夹具：真集用例在 skill 仓内（无 episodes/）
+# 的替身，形态对齐 horizon-context-video 一类的现实集——必填节齐、archify 全量
+# 阈值覆写，且**不含**任何机制常数（等价变换判据要求它们由默认值层还原）。
+
+[episode]
+slug = "golden-episode-video"
+
+[narration]
+# 口径提示——280 字/分是**含停顿的等效**口径，双口径门以 manifest 实测为准。
+# 安全窗取 [13.0, 14.6]，约 185–195 句。
+target_minutes = [13.0, 14.6]
+
+[tts]
+engine = "indextts"
+# me-bright = 长录音的 start=0.36 / 12s 选段；样本路径**工作区根相对**（$V 下），
+# ref_sha1 取 12 位（同 tts.py 口径）。
+# ⚠️ 风格预设的 alpha 是在**特定选段**上标定的，换选段即失效（$V/refs.toml）。
+ref = "voices/me-bright.wav"
+ref_sha1 = "54b699cce97f"
+style = "sunny-steady"
+
+[archify]
+# 覆盖门阈值即验收声明：低于此线说明图例覆盖回退，覆盖门直接红。
+min_diagrams = 30
+min_cues = 60
+min_anchor_ratio = 0.60
+min_chapter_ratio = 0.70
+# 覆盖度：最长连续无锚句上限（幕边界不重置）；分幕锚定率下限
+max_unanchored_run = 6
+min_scene_anchor_ratio = 0.45
+# 丰富度：cue 密度（cue/分钟）；sidecar 图型多样性
+min_cues_per_minute = 6.0
+min_diagram_types = 4
+# 布局：全屏切换集禁画中画回退（策略声明，非普适不变量）
+forbid_inset = true
+# 豁免零锚判定的幕：P0 片头常驻 badge 不入图例锚定口径
+exempt_scenes = ["P0"]
+# 重录（record_archify_all.py）：slug → 交付工程图的映射。约定优先 + 例外表。
+html_pattern = "golden-episode--{slug}.html"
+html_overrides = { next-episode-blueprint = "previous-episode--architecture.html" }

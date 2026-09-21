@@ -15,19 +15,44 @@
 恰好齐全，模板的 seed 却曾缺这两个键，于是 scaffold 出的新集开箱即 6 个 TS2339
 而漂移门照样报 0 处。补口在 `test_template_theme_covers_frozen_component_tokens`：
 凡 seeded 档被 frozen 档消费，那个接口必须单独立判据。
+
+## 双锚点下的正控沙箱（承重）
+
+正控必须**注入漂移**才能证明门会红，但注入对象绝不能是受版本控制的模板或
+真集（旧教训：注入一度落在已发布分集文件上，还原只靠 try/finally）。双锚点
+架构（skill 根 / 内容工作区物理分离）下，沙箱由两半拼成：
+
+  - **假 skill 根**（`mirror_skill`）：SKILL.md 哨兵 + 从真 `pipeline/scripts/`
+    原样拷来的脚本 + 模板全量拷贝。`paths.SKILL` 自 `__file__` 向上找
+    SKILL.md——裸拷脚本进 tmp 会在**导入期**就大声退出（旧嵌套镜像因此在
+    机制抽取后整体失效），假哨兵必须随行。drift 登记与漂移注入都落在副本上，
+    真仓文件分毫不动。
+  - **平铺工作区**（`flat_ws`）：哨兵 + series.json + episodes/。工作区锚由
+    CWD 哨兵搜索提供（subprocess 传 `cwd=工作区根`）。
+
+沙箱里的分集不再从真树复制：由（副本里的真）scaffold 实例化——scaffold 产物
+与模板字节相同正是 scaffold 自身的执法对象（见
+test_scaffold_produces_gate_clean_episode），恰好也是漂移门正控需要的干净基线。
+真树判据（baselineOf 在册、逃逸表指向实存文件）改为 env 门控的集成模式
+（TO_VIDEO_TEST_WORKSPACE，见 conftest 文件头）：本仓是 skill 仓，没有 episodes/。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 PIPELINE = Path(__file__).resolve().parents[1]
-INFLUENCE = PIPELINE.parent
+#: 本仓根 = 真 skill 根（含 SKILL.md）。scaffold 行为用例经绝对路径调真脚本。
+SKILL_ROOT = PIPELINE.parent
 SCRIPTS = PIPELINE / "scripts"
 TEMPLATE = PIPELINE / "templates" / "video-skeleton"
 VERIFY = SCRIPTS / "verify_skeleton.py"
@@ -35,61 +60,68 @@ SCAFFOLD = SCRIPTS / "scaffold.py"
 
 GATED_CLASSES = ("frozen", "overridable", "regioned", "structured")
 
+#: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）；离线为 None。
+#: 真树判据只在集成模式下运行——本仓（skill 仓）没有 episodes/，离线无从对账。
+INTEGRATION_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+needs_real_tree = pytest.mark.skipif(
+    not INTEGRATION_WS,
+    reason="真树判据：skill 仓离线无 episodes/，集成模式（TO_VIDEO_TEST_WORKSPACE）下运行",
+)
+
 
 def skeleton() -> dict:
     return tomllib.loads((TEMPLATE / "skeleton.toml").read_text(encoding="utf-8"))
 
 
-def run(script: Path, *args: str) -> subprocess.CompletedProcess:
+def _clean_env() -> dict[str, str]:
+    """剥掉 TO_VIDEO_*：锚点 env（TO_VIDEO_WORKSPACE）优先级高于 CWD 搜索，
+    外部残留会让用例静默锚去别处；集成模式的 env 尤其必须挡在门外。"""
+    return {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
+
+
+def run(
+    script: Path, *args: str, cwd: Path | None = None
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(script), *args],
         capture_output=True,
         text=True,
         check=False,
+        cwd=cwd,
+        env=_clean_env(),
     )
 
 
-# ── 镜像子项目：正控在副本上做，绝不改真文件 ──────────────────────────────
-#
-# 正控必须**注入漂移**才能证明门会红，但注入对象一度是受版本控制的**已发布**分集
-# 文件（types.ts / package.json），还原只靠 try/finally：pytest 被 Ctrl-C 或进程
-# 被杀就会把 `// injected drift` 留在工作树里，两个 workspace 并行跑还会互相踩。
-# test_check_series.py 早已给出正解——在 tmp_path 里搭一个带 `.influence-root`
-# 哨兵的假子项目再跑脚本。verify_skeleton/scaffold 同样只靠哨兵定位，故照搬即可。
+# ── 正控沙箱：假 skill 根 + 平铺工作区，绝不改真文件 ────────────────────────
 
 
-def mirror(tmp_path: Path, *, episodes: list[str], scripts: tuple[str, ...]) -> Path:
-    """在 tmp_path 下搭一个最小可跑的子项目副本 → 返回镜像的子项目根。
+def mirror_skill(tmp_path: Path) -> Path:
+    """在 tmp 下搭一个**自包含的假 skill 根** → 返回它。
 
-    只镜像门真正读的东西：哨兵 + series.json + 模板全量 + 受门档位对应的分集文件
-    + 指定脚本（含同目录依赖 paths.py）。REPO 由「子项目在 apps/<name>/」派生，
-    故这两级目录必须如实搭出来（与 test_check_series 的 INFLUENCE_REL 同理）。
+    只镜像门与脚手架真正读的东西：SKILL.md 哨兵 + 真 scripts/ 的
+    verify_skeleton.py / scaffold.py（含同目录依赖 paths.py）+ 模板全量。
+    skeleton.toml 的 drift 登记注入（register_drift）发生在副本上。
     """
-    import shutil
-
-    inf = tmp_path / "apps" / "negentropy-influence"
-    (inf / "pipeline" / "scripts").mkdir(parents=True)
-    (inf / ".influence-root").write_text("# 假子项目哨兵\n", encoding="utf-8")
-    shutil.copytree(TEMPLATE, inf / "pipeline" / "templates" / "video-skeleton")
-    for name in (*scripts, "paths.py"):
-        shutil.copy2(SCRIPTS / name, inf / "pipeline" / "scripts" / name)
-
-    skel = skeleton()
-    gated = [rel for cls in GATED_CLASSES for rel in skel["classes"].get(cls, [])]
-    for slug in episodes:
-        for rel in gated:
-            src = INFLUENCE / "episodes" / slug / rel
-            if not src.is_file():
-                continue
-            dst = inf / "episodes" / slug / rel
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-    (inf / "episodes").mkdir(exist_ok=True)
-    return inf
+    skill = tmp_path / "skill"
+    (skill / "pipeline" / "scripts").mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# 假 skill 根哨兵\n", encoding="utf-8")
+    for name in ("verify_skeleton.py", "scaffold.py", "paths.py"):
+        shutil.copy2(SCRIPTS / name, skill / "pipeline" / "scripts" / name)
+    shutil.copytree(TEMPLATE, skill / "pipeline" / "templates" / "video-skeleton")
+    return skill
 
 
-def write_series(inf: Path, series: list[tuple[str, list[str]]]) -> None:
-    (inf / "series.json").write_text(
+def flat_ws(tmp_path: Path, sentinel: str = ".to-video-root") -> Path:
+    """平铺假工作区：哨兵 + 空 seriesList + episodes/（两脚本的最小消费面）。"""
+    ws = tmp_path / "ws"
+    (ws / "episodes").mkdir(parents=True)
+    (ws / sentinel).write_text("# 假工作区哨兵\n", encoding="utf-8")
+    (ws / "series.json").write_text('{"seriesList": []}\n', encoding="utf-8")
+    return ws
+
+
+def write_series(ws: Path, series: list[tuple[str, list[str]]]) -> None:
+    (ws / "series.json").write_text(
         json.dumps(
             {
                 "seriesList": [
@@ -109,6 +141,39 @@ def write_series(inf: Path, series: list[tuple[str, list[str]]]) -> None:
         ),
         encoding="utf-8",
     )
+
+
+#: 沙箱探针集：scaffold 实例化 ⇒ 字节即模板 ⇒ 天然无登记豁免、天然与模板一致。
+#: 旧版须从真树挑「当前恰好干净」的两集（CLEAN_A/CLEAN_B），那是对真树状态的
+#: 间接依赖；scaffold 产物把这层依赖消掉了。
+PROBE_A = "probe-a-video"
+PROBE_B = "probe-b-video"
+
+
+def scaffold_into(
+    skill: Path, ws: Path, slug: str, title: str = "自检"
+) -> subprocess.CompletedProcess:
+    """在平铺工作区上经（副本里的真）scaffold 实例化一集。
+
+    cwd=工作区根 ⇒ 哨兵搜索锚定工作区——scaffold 建集模式要求 CWD 在工作区内
+    或 TO_VIDEO_WORKSPACE 指派，二者都是双锚点的工作区锚来源。
+    """
+    return run(
+        skill / "pipeline" / "scripts" / "scaffold.py", slug, "--title", title, cwd=ws
+    )
+
+
+def register_drift(
+    skill: Path, episode: str, rel: str, fingerprint: str | None
+) -> None:
+    """往镜像 skill 的 skeleton.toml 追加一条 `[[drift]]`。"""
+    toml = skill / "pipeline" / "templates" / "video-skeleton" / "skeleton.toml"
+    pin = f'fingerprint = "{fingerprint}"\n' if fingerprint else ""
+    with toml.open("a", encoding="utf-8") as fh:
+        fh.write(
+            f'\n[[drift]]\nepisode = "{episode}"\npath = "{rel}"\n{pin}'
+            'reason = "正控用条目"\n'
+        )
 
 
 def test_declared_paths_exist_in_template():
@@ -147,17 +212,19 @@ def test_every_template_file_is_classified():
     assert not unclassified, f"模板文件未归档位（不受任何门约束）：{unclassified}"
 
 
+@needs_real_tree
 def test_drift_entries_reference_real_episodes_and_paths():
     """逃逸表不能指向不存在的集或路径——陈旧豁免会静默放行真实漂移。"""
+    influence = Path(INTEGRATION_WS).resolve()
     skel = skeleton()
-    slugs = {p.name for p in (INFLUENCE / "episodes").iterdir() if p.is_dir()}
+    slugs = {p.name for p in (influence / "episodes").iterdir() if p.is_dir()}
     for d in skel.get("drift", []):
         assert d["episode"] in slugs, f"drift 指向不存在的集：{d['episode']}"
         # 「缺失」哨兵 = 登记一次合法退役（整文件删除、模板保留给其他集）；
         # 哈希指纹的条目仍必须指向实存文件，否则就是陈旧豁免
         is_absent = d.get("fingerprint") == "缺失"
         assert (
-            is_absent or (INFLUENCE / "episodes" / d["episode"] / d["path"]).is_file()
+            is_absent or (influence / "episodes" / d["episode"] / d["path"]).is_file()
         ), (
             f"drift 指向不存在的文件：{d['episode']}/{d['path']}"
             '（若为合法退役，fingerprint 须钉 "缺失" 哨兵）'
@@ -174,45 +241,46 @@ def test_drift_entries_reference_real_episodes_and_paths():
         )
 
 
+@needs_real_tree
 def test_baseline_series_exists():
     skel = skeleton()
     ids = {
         s["id"]
-        for s in json.loads((INFLUENCE / "series.json").read_text(encoding="utf-8"))[
-            "seriesList"
-        ]
+        for s in json.loads(
+            (Path(INTEGRATION_WS).resolve() / "series.json").read_text(encoding="utf-8")
+        )["seriesList"]
     }
     assert skel["baselineOf"] in ids, (
         f"baselineOf={skel['baselineOf']!r} 不在 series.json"
     )
 
 
-def test_gate_is_currently_clean():
-    """全部既有漂移都已登记 —— 否则门一上线就红，而一上线就红的门会被立刻关掉。"""
-    r = run(VERIFY, "--strict")
+def test_baselineof_absent_series_warns(tmp_path):
+    """**正控（baselineOf 点名）**：空 seriesList 工作区（`--init-workspace` 后
+    的首跑形态）必须打出「模板时新性暂无担保」WARN——新工作区首集自建基线是
+    合法形态，但 I2 此刻无人担保，点名而非静默。真脚本 + 真模板，工作区是假的。
+    """
+    ws = flat_ws(tmp_path)
+    r = run(VERIFY, cwd=ws)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "未登记漂移 0 处" in r.stdout, r.stdout
-
-
-#: 正控用的两集：当前对全部受门档位都与模板一致，且在 skeleton.toml 里**无**
-#: drift 条目——否则真登记表会把注入的漂移顺手豁免掉，正控自己失效。
-CLEAN_A = "claude-code-explained-video"
-CLEAN_B = "experience-era-agents-video"
+    assert "baselineOf" in r.stdout and "不在本工作区 series.json" in r.stdout, r.stdout
 
 
 def test_gate_actually_detects_drift(tmp_path):
     """**正控**：制造一处未登记漂移，门必须报出来并在 --strict 下失败。
 
-    一个不会红的门等于没门。本条是这套机制的合法性来源。注入发生在镜像副本上。
+    一个不会红的门等于没门。本条是这套机制的合法性来源。注入发生在沙箱副本上。
     """
-    inf = mirror(tmp_path, episodes=[CLEAN_A], scripts=("verify_skeleton.py",))
-    write_series(inf, [("solo", [CLEAN_A])])
-    verify = inf / "pipeline" / "scripts" / "verify_skeleton.py"
-    assert run(verify, "--strict").returncode == 0, "镜像基线本身就不干净"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    write_series(ws, [("solo", [PROBE_A])])
+    verify = skill / "pipeline" / "scripts" / "verify_skeleton.py"
+    assert run(verify, "--strict", cwd=ws).returncode == 0, "沙箱基线本身就不干净"
 
-    victim = inf / "episodes" / CLEAN_A / "video" / "src" / "types.ts"
+    victim = ws / "episodes" / PROBE_A / "video" / "src" / "types.ts"
     victim.write_bytes(victim.read_bytes() + b"\n// positive-control: injected drift\n")
-    r = run(verify, "--strict")
+    r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 1, f"门未能失败：\n{r.stdout}"
     assert "types.ts" in r.stdout, r.stdout
 
@@ -222,28 +290,19 @@ def test_gate_catches_structured_drift_via_tmpl_fallback(tmp_path):
     返回 None、I2 整段跳过——单集系列连 I1 也无比较对象，package.json 于是完全
     不受门。注入依赖漂移必须被 STALE 抓到（回退读 .tmpl 后模板指纹可得）。
     """
-    inf = mirror(tmp_path, episodes=[CLEAN_A], scripts=("verify_skeleton.py",))
-    write_series(inf, [("solo", [CLEAN_A])])
-    verify = inf / "pipeline" / "scripts" / "verify_skeleton.py"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    write_series(ws, [("solo", [PROBE_A])])
+    verify = skill / "pipeline" / "scripts" / "verify_skeleton.py"
 
-    victim = inf / "episodes" / CLEAN_A / "video" / "package.json"
+    victim = ws / "episodes" / PROBE_A / "video" / "package.json"
     d = json.loads(victim.read_text(encoding="utf-8"))
     d["dependencies"]["react"] = "^18.0.0"  # 依赖漂移 = structured 档的执法对象
     victim.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
-    r = run(verify, "--strict")
+    r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 1, f"structured 漂移未被抓住：\n{r.stdout}"
     assert "package.json" in r.stdout, r.stdout
-
-
-def register_drift(inf: Path, episode: str, rel: str, fingerprint: str | None) -> None:
-    """往镜像的 skeleton.toml 追加一条 `[[drift]]`。"""
-    toml = inf / "pipeline" / "templates" / "video-skeleton" / "skeleton.toml"
-    pin = f'fingerprint = "{fingerprint}"\n' if fingerprint else ""
-    with toml.open("a", encoding="utf-8") as fh:
-        fh.write(
-            f'\n[[drift]]\nepisode = "{episode}"\npath = "{rel}"\n{pin}'
-            'reason = "正控用条目"\n'
-        )
 
 
 def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
@@ -254,21 +313,24 @@ def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
     import verify_skeleton as vs
 
     rel = "video/src/types.ts"
-    inf = mirror(tmp_path, episodes=[CLEAN_A, CLEAN_B], scripts=("verify_skeleton.py",))
-    write_series(inf, [("pair", [CLEAN_A, CLEAN_B])])
-    verify = inf / "pipeline" / "scripts" / "verify_skeleton.py"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    assert scaffold_into(skill, ws, PROBE_B).returncode == 0
+    write_series(ws, [("pair", [PROBE_A, PROBE_B])])
+    verify = skill / "pipeline" / "scripts" / "verify_skeleton.py"
 
     # B 集偏离（A 集仍等于模板，故 I1 有方向、能走到 DRIFT-CHANGED 分支）
-    victim = inf / "episodes" / CLEAN_B / rel
+    victim = ws / "episodes" / PROBE_B / rel
     victim.write_bytes(victim.read_bytes() + b"\n// drift v1\n")
     fp_v1 = vs.fingerprint(victim, rel, "frozen")
 
-    register_drift(inf, CLEAN_B, rel, fp_v1)
-    assert run(verify, "--strict").returncode == 0, "指纹相符却未放行"
+    register_drift(skill, PROBE_B, rel, fp_v1)
+    assert run(verify, "--strict", cwd=ws).returncode == 0, "指纹相符却未放行"
 
     # 偏离内容再变一次：同一条登记不得继续兜住它
     victim.write_bytes(victim.read_bytes() + b"\n// drift v2\n")
-    r = run(verify, "--strict")
+    r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 1, f"豁免未随偏离改变而失效：\n{r.stdout}"
     assert "DRIFT-CHANGED" in r.stdout, r.stdout
 
@@ -280,16 +342,18 @@ def test_i2_honours_the_drift_registry(tmp_path):
     import verify_skeleton as vs
 
     rel = "video/src/types.ts"
-    inf = mirror(tmp_path, episodes=[CLEAN_A], scripts=("verify_skeleton.py",))
-    write_series(inf, [("solo", [CLEAN_A])])
-    verify = inf / "pipeline" / "scripts" / "verify_skeleton.py"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    write_series(ws, [("solo", [PROBE_A])])
+    verify = skill / "pipeline" / "scripts" / "verify_skeleton.py"
 
-    victim = inf / "episodes" / CLEAN_A / rel
+    victim = ws / "episodes" / PROBE_A / rel
     victim.write_bytes(victim.read_bytes() + b"\n// legit episode-local deviation\n")
-    assert run(verify, "--strict").returncode == 1, "未登记的偏离竟然放行"
+    assert run(verify, "--strict", cwd=ws).returncode == 1, "未登记的偏离竟然放行"
 
-    register_drift(inf, CLEAN_A, rel, vs.fingerprint(victim, rel, "frozen"))
-    r = run(verify, "--strict")
+    register_drift(skill, PROBE_A, rel, vs.fingerprint(victim, rel, "frozen"))
+    r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 0, f"已登记的偏离仍被 STALE 判红：\n{r.stdout}"
 
 
@@ -297,23 +361,24 @@ def test_i2_honours_the_overridable_class(tmp_path):
     """`overridable` 的覆写许可对 I1 与 I2 必须**同时**有效。
 
     I2 若不认档位，「全系列都行使许可」就会报 STALE —— 而**单集系列行使一次即是
-    全系列**（claude-code-explained 今天就是单集系列，timing.json 恰是文档鼓励
-    「改节奏只动 JSON」的那个文件）。于是档位声明的「只报 INFO，不 FAIL」变成
-    只在多集系列成立，等于把许可撤回一半，并逼人为一次合法覆写去登记 [[drift]]。
+    全系列**。于是档位声明的「只报 INFO，不 FAIL」变成只在多集系列成立，等于
+    把许可撤回一半，并逼人为一次合法覆写去登记 [[drift]]。
     """
     rel = "video/src/timing.json"
     assert rel in skeleton()["classes"]["overridable"], "档位前提变了，本用例该更新"
-    inf = mirror(tmp_path, episodes=[CLEAN_A], scripts=("verify_skeleton.py",))
-    write_series(inf, [("solo", [CLEAN_A])])
-    verify = inf / "pipeline" / "scripts" / "verify_skeleton.py"
-    assert run(verify, "--strict").returncode == 0, "镜像基线本身就不干净"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    write_series(ws, [("solo", [PROBE_A])])
+    verify = skill / "pipeline" / "scripts" / "verify_skeleton.py"
+    assert run(verify, "--strict", cwd=ws).returncode == 0, "沙箱基线本身就不干净"
 
-    victim = inf / "episodes" / CLEAN_A / rel
+    victim = ws / "episodes" / PROBE_A / rel
     timing = json.loads(victim.read_text(encoding="utf-8"))
     timing["sceneGapSec"] = timing["sceneGapSec"] + 0.3  # 行使覆写许可
     victim.write_text(json.dumps(timing), encoding="utf-8")
 
-    r = run(verify, "--strict")
+    r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 0, f"行使 overridable 许可却被判红：\n{r.stdout}"
     assert "STALE" not in r.stdout, r.stdout
 
@@ -321,17 +386,17 @@ def test_i2_honours_the_overridable_class(tmp_path):
 def test_scaffold_produces_gate_clean_episode(tmp_path):
     """scaffold 出来的新集必须立刻通过冻结档比对（模板即真理）。
 
-    在镜像里 scaffold：真 `episodes/` 下不留探针目录，也不怕并行跑测试互踩。
+    真脚本绝对路径调用 + cwd=平铺工作区根（scaffold 的工作区锚来自 CWD 哨兵
+    搜索）；真 episodes/ 下不留探针目录，也不怕并行跑测试互踩。
     """
     import hashlib
 
     slug = "pytest-probe-video"
-    inf = mirror(tmp_path, episodes=[], scripts=("verify_skeleton.py", "scaffold.py"))
-    write_series(inf, [("solo", [CLEAN_A])])
-    r = run(inf / "pipeline" / "scripts" / "scaffold.py", slug, "--title", "自检")
+    ws = flat_ws(tmp_path)
+    r = run(SCAFFOLD, slug, "--title", "自检", cwd=ws)
     assert r.returncode == 0, r.stdout + r.stderr
 
-    dest = inf / "episodes" / slug
+    dest = ws / "episodes" / slug
     skel = skeleton()
     for rel in skel["classes"]["frozen"]:
         a = hashlib.md5((TEMPLATE / rel).read_bytes()).hexdigest()
@@ -353,8 +418,8 @@ def test_scaffold_produces_gate_clean_episode(tmp_path):
     # 占位符必须全部渲染
     for rel in ("pipeline.toml", "README.md", "video/package.json"):
         assert "{{" not in (dest / rel).read_text(encoding="utf-8"), rel
-    # 未登记到 series.json 的工程会被门点名
-    out = run(inf / "pipeline" / "scripts" / "verify_skeleton.py").stdout
+    # 未登记到 series.json 的工程会被门点名（真 verify + 真模板 + 假工作区）
+    out = run(VERIFY, cwd=ws).stdout
     assert slug in out and "未登记到 series.json" in out, out
 
 
@@ -365,23 +430,73 @@ def test_scaffolded_config_does_not_block_authoring_stages(tmp_path):
     import config
 
     slug = "pytest-probe-video"
-    inf = mirror(tmp_path, episodes=[], scripts=("scaffold.py",))
-    assert (
-        run(
-            inf / "pipeline" / "scripts" / "scaffold.py", slug, "--title", "自检"
-        ).returncode
-        == 0
-    )
-    dest = inf / "episodes" / slug
+    ws = flat_ws(tmp_path)
+    assert run(SCAFFOLD, slug, "--title", "自检", cwd=ws).returncode == 0
+    dest = ws / "episodes" / slug
     _cfg, _origin, fails, _warns = config.load(dest, required=True)
     assert not fails, f"scaffold 产物未通过配置校验：{fails}"
 
 
-def test_scaffold_rejects_bad_slug_and_existing_dir():
-    r = run(SCAFFOLD, "no-suffix", "--title", "x")
+def test_scaffold_rejects_bad_slug_and_existing_dir(tmp_path):
+    ws = flat_ws(tmp_path)
+    r = run(SCAFFOLD, "no-suffix", "--title", "x", cwd=ws)
     assert r.returncode != 0 and "-video" in (r.stdout + r.stderr)
-    r = run(SCAFFOLD, "claude-code-explained-video", "--title", "x")
+    (ws / "episodes" / "claude-code-explained-video").mkdir()
+    r = run(SCAFFOLD, "claude-code-explained-video", "--title", "x", cwd=ws)
     assert r.returncode != 0 and "已存在" in (r.stdout + r.stderr)
+
+
+def test_init_workspace_is_idempotent(tmp_path):
+    """`--init-workspace` 落盘全部工作区工件，且幂等：既有文件 skip-if-exists
+    （--force 才覆盖）——用户已写的 series.json 不会被二跑抹回模板。
+    """
+    ws = tmp_path / "inited"
+    r = run(SCAFFOLD, "--init-workspace", str(ws))
+    assert r.returncode == 0, r.stdout + r.stderr
+    for rel in (
+        ".to-video-root",
+        "series.json",
+        "series.md",
+        "to-video.toml",
+        ".gitignore",
+        "README.md",
+        "scripts/pipeline.py",
+        "scripts/check_series.py",
+        "voices/README.md",
+        "voices/refs.toml",
+        "episodes/.gitkeep",
+        "source-map/.gitkeep",
+    ):
+        assert (ws / rel).is_file(), f"init 未落盘 {rel}"
+    # 幂等：改写 series.json 后二跑必须保留用户内容
+    (ws / "series.json").write_text(
+        '{"seriesList": [{"id": "user-authored"}]}\n', encoding="utf-8"
+    )
+    r2 = run(SCAFFOLD, "--init-workspace", str(ws))
+    assert r2.returncode == 0 and "保留既有" in r2.stdout, r2.stdout + r2.stderr
+    assert '"user-authored"' in (ws / "series.json").read_text(encoding="utf-8")
+
+
+def test_workspace_wrapper_resolves_skill_via_env(tmp_path):
+    """init 落盘的工作区薄包装：TO_VIDEO_HOME → 本仓真 check_series，且从
+    **任意 CWD** 都锚回该工作区（包装器以自身位置写 TO_VIDEO_WORKSPACE，
+    双锚点的工作区锚经 env 移交）。
+
+    断言锚定真脚本的退出语：空 seriesList 是 load_series 的大声退出——只有
+    链路真打通（包装器 → 真 paths.py → 真检查器）才会出现这句话。
+    """
+    ws = tmp_path / "inited"
+    assert run(SCAFFOLD, "--init-workspace", str(ws)).returncode == 0
+    r = subprocess.run(
+        [sys.executable, str(ws / "scripts" / "check_series.py")],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,  # 刻意不在工作区内：锚不得依赖调用现场
+        env={**_clean_env(), "TO_VIDEO_HOME": str(SKILL_ROOT)},
+    )
+    assert r.returncode != 0
+    assert "无 seriesList" in r.stdout + r.stderr, r.stdout + r.stderr
 
 
 def test_template_readme_qa_commands_are_runnable():
@@ -408,7 +523,6 @@ def test_paths_docstring_lists_all_real_importers():
     doc = (SCRIPTS / "paths.py").read_text(encoding="utf-8")
     m = re.search(r"## 导入边界.*?`(.*?)`.*?可以 `import paths`", doc, re.DOTALL)
     assert m, "paths.py 导入边界小节形态变化，检测器该更新了"
-    import subprocess
 
     r = subprocess.run(
         ["grep", "-l", r"from paths import", "-r", str(SCRIPTS)],
@@ -416,7 +530,9 @@ def test_paths_docstring_lists_all_real_importers():
         text=True,
         check=True,
     )
-    real = {Path(p).name for p in r.stdout.split()} - {"paths.py"}
+    # 只认 .py：grep -r 会扫进 __pycache__ 的 paths.cpython-*.pyc（本测试自身的
+    # 导入副作用），把缓存文件当「导入方」报假红
+    real = {Path(p).name for p in r.stdout.split() if p.endswith(".py")} - {"paths.py"}
     allowed = set(re.findall(r"`(\w+\.py)`", doc))
     assert real <= allowed, f"实际导入方超出清单：{real - allowed}"
     assert "tts.py" not in real, "红线：tts.py 不可 import paths（拷出路径会断）"
