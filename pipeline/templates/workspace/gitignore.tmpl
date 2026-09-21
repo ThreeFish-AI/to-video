@@ -1,0 +1,20 @@
+# to-video 工作区产物纪律（init-workspace 生成，可按需增删）
+
+.temp/
+uv.lock
+
+# 生物特征：声音样本永不入库，只留指纹清单
+voices/*
+!voices/README.md
+!voices/refs.toml
+
+# TTS 与渲染产物（通配到分集级，新集自动覆盖）
+episodes/*/video/public/audio/
+episodes/**/*.mp4
+episodes/**/*.mp3
+episodes/**/*.wav
+
+# archify 录制派生物（HTML 是 SSOT，sidecar json 入库）
+episodes/*/video/public/archify/*.webm
+episodes/*/video/public/archify/*.mp4
+episodes/*/video/public/archify/*-end.png

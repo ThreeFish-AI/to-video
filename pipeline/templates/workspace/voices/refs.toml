@@ -1,0 +1,13 @@
+# 参考音色样本指纹清单（唯一入库文件）
+#
+# 结构示例（指纹口径：sha1 前 12 位同 tts.py；sha256 全量供人工核对）：
+# [my-sample]
+# source = "~/path/to/source-recording.mp3"   # 原始录音位置（机器属性，不入库口径）
+# start = 0.0
+# duration = 12
+# sha1 = "TODOTODOTODO"
+# sha256 = ""
+# locked_styles = ["sunny"]
+#
+# 工作流：prospect_ref 选段 → prepare_ref 裁样 → refs.py verify/rebuild 执法。
+# 录制要求见同目录 README.md；生物特征纪律：wav 永不入库。

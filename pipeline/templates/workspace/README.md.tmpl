@@ -1,0 +1,39 @@
+# {{WORKSPACE_TITLE}}（to-video 内容工作区）
+
+> 科普视频**内容工作区**：episodes/ 各集成片工程 + series.json 发布顺序 SSOT +
+> source-map/ 信源地图 + voices/ 音色样本指纹。制作机制（九阶段流水线）由
+> [to-video](https://github.com/ThreeFish-AI/to-video) 技能提供，安装于
+> `~/.claude/skills/to-video`（或 `TO_VIDEO_HOME` 指向的目录）。
+
+## 目录
+
+```
+.
+├── .to-video-root      # 工作区哨兵（skill 脚本靠它定位工作区，勿删）
+├── series.json         # 发布顺序 SSOT（机读，顶层 seriesList[]）
+├── series.md           # 作品总览（人读）
+├── source-map/         # 多集系列的章节→集归属信源地图
+├── voices/             # 参考音色样本（gitignored 生物特征；refs.toml 只存指纹）
+├── to-video.toml       # 工作区机制配置（check_series 工程级受检面与系列 id 集）
+├── scripts/            # 工作区级薄包装（pipeline.py / check_series.py → skill）
+└── episodes/<slug>-video/   # 每集独立工程（research/ script/ scripts/ video/）
+```
+
+## 常用命令
+
+```bash
+# $T = skill 根（安装位置），$W = 本工作区根，$P = $W/episodes/<slug>-video
+T=~/.claude/skills/to-video
+W="$(pwd)"
+
+uv run --no-project scripts/pipeline.py --project episodes/<slug>-video status   # 阶段新鲜度
+uv run --no-project scripts/pipeline.py --project episodes/<slug>-video check   # ④⑤ 内容门
+uv run --no-project scripts/check_series.py                                    # 系列一致性
+```
+
+## 不变量
+
+- 逐字稿只改 `script/narration.md`；`narration.json` / `manifest.json` 是派生物。
+- **口播永不出现他集标题与集数序号**——顺序只在视觉层与 series.json。
+- 声音样本是生物特征：不入库（refs.toml 只存指纹），试听后即删。
+- 骨架同步由 skill 的 `verify_skeleton.py` 按 skeleton.toml 冻结档执法。
