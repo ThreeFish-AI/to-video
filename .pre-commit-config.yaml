@@ -1,0 +1,13 @@
+# 与源仓同纪律：默认 ruff 配置（无 [tool.ruff]，行长 88），auto-fix 后提交会被
+# 中断——审阅修复内容后 git add -p 重提即可。
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff
+        name: ruff lint (to-video)
+        args: [--fix]
+        files: ^pipeline/
+      - id: ruff-format
+        name: ruff format (to-video)
+        files: ^pipeline/
