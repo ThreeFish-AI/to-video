@@ -10,9 +10,9 @@
     find      逐条断言定点搜索，返回命中处上下文（校准表的主力）
     render    指定页光栅化为 PNG（看图；无需 poppler/ffmpeg）
 
-依赖仅 pymupdf，从仓库根调用：
+依赖仅 pymupdf：
 
-    uv run --no-project --with pymupdf $R/paper_extract.py \\
+    uv run --no-project --with pymupdf $T/pipeline/scripts/paper_extract.py \\
         "<论文.pdf>" find "far more frequently and cheaply"
 
 注意：论文 PDF 通常不入库（根 .gitignore 屏蔽 /assets/），须传绝对路径；

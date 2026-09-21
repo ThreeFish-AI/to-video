@@ -18,8 +18,8 @@
 或收敛，否则第一次运行就红，而一个「一上线就红」的门只会被立刻关掉。
 
 用法：
-  uv run --no-project $R/verify_skeleton.py            # 报告
-  uv run --no-project $R/verify_skeleton.py --strict    # 有未登记漂移即退出码 1
+  uv run --no-project $T/pipeline/scripts/verify_skeleton.py            # 报告
+  uv run --no-project $T/pipeline/scripts/verify_skeleton.py --strict    # 有未登记漂移即退出码 1
 """
 
 from __future__ import annotations
@@ -125,9 +125,9 @@ def main() -> int:
         (d["episode"], d["path"]): (d.get("reason", ""), d.get("fingerprint"))
         for d in skel.get("drift", [])
     }
-    series_list = json.loads((paths.WORKSPACE / "series.json").read_text(encoding="utf-8"))[
-        "seriesList"
-    ]
+    series_list = json.loads(
+        (paths.WORKSPACE / "series.json").read_text(encoding="utf-8")
+    )["seriesList"]
 
     known_ids = {s["id"] for s in series_list}
     if baseline_series and baseline_series not in known_ids:
@@ -146,9 +146,7 @@ def main() -> int:
     ]
 
     unregistered = 0
-    print(
-        f">> 骨架漂移门 · 模板 {TEMPLATE} · 受门 {len(gated)} 文件\n"
-    )
+    print(f">> 骨架漂移门 · 模板 {TEMPLATE} · 受门 {len(gated)} 文件\n")
 
     for series in series_list:
         eps = [e["slug"] for e in series["episodes"]]

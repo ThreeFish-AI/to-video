@@ -45,7 +45,7 @@ skip 语义（点名，绝不静默）：
   「无法解析」刷屏）。（extract_cues 上移自 episode check_archify.scene_cues——
   那侧改为 import 本函数，单一提取器。）
 
-用法：uv run --no-project $R/check_archify_coverage.py --project $P
+用法：uv run --no-project $T/pipeline/scripts/check_archify_coverage.py --project $P
 退出码：0 = 通过；1 = 有 FAIL。WARN 不影响退出码但列明。
 pipeline.py `check` 在 check_script 之后自动串联本门（`all` / `--series check`
 随之获得）——不加 flag：忘带 flag = 检查面静默缩小（ISSUE-168 失效形态）。

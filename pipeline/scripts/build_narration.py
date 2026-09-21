@@ -15,7 +15,7 @@ narration.md 是单一事实源；本脚本是纯派生转换，不做任何内�
 未标注的句子不产生 ttsText 字段，取值与历史完全一致 ⇒ 存量缓存摘要不失效。
 标注本身携带原字，故一处书写即可派生两者，不存在两份副本漂移。
 
-用法：uv run --no-project $R/build_narration.py --project $P
+用法：uv run --no-project $T/pipeline/scripts/build_narration.py --project $P
      工程内薄包装等价于：uv run --no-project scripts/build_narration.py
 """
 
@@ -40,9 +40,7 @@ FORMAT_DOC = "pipeline/README.md 第二节格式契约"
 #: TO_VIDEO_INDEX_TTS_ROOT 覆盖（默认 ~/tools/index-tts）。存在则用于 WARN 级「音节是否在表内」，
 #: 缺失时格式类 ERROR 仍然生效（规则内联在 pron_marks.py，不依赖该文件）。
 PINYIN_VOCAB = (
-    Path(
-        os.environ.get("TO_VIDEO_INDEX_TTS_ROOT", "~/tools/index-tts")
-    ).expanduser()
+    Path(os.environ.get("TO_VIDEO_INDEX_TTS_ROOT", "~/tools/index-tts")).expanduser()
     / "checkpoints"
     / "pinyin.vocab"
 )
@@ -110,7 +108,9 @@ def main() -> None:
         # 否则会静默合成出读错音的整集（单槽位 mp3，事后只能靠听发现）
         for e in mark_errors:
             print(f"FAIL  {e}", file=sys.stderr)
-        sys.exit(f"发音标注校验失败（{len(mark_errors)} 处）—— 语法见 $R/pron_marks.py")
+        sys.exit(
+            f"发音标注校验失败（{len(mark_errors)} 处）—— 语法见 $T/pipeline/scripts/pron_marks.py"
+        )
 
     dst.write_text(
         json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

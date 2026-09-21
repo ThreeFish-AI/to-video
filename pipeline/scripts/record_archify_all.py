@@ -1,9 +1,9 @@
 """archify 工程图批量重录驱动（遍历分集 views/ 清单，逐图调 record_archify.py）。
 
-用法（仓库根）：
-  uv run --with playwright python $R/record_archify_all.py --project $P
-  uv run --with playwright python $R/record_archify_all.py --project $P --dry-run
-  uv run --with playwright python $R/record_archify_all.py --project $P --only agent-identity --force
+用法（任意目录，$T/$P 锚定见 pipeline/README.md）：
+  uv run --with playwright python $T/pipeline/scripts/record_archify_all.py --project $P
+  uv run --with playwright python $T/pipeline/scripts/record_archify_all.py --project $P --dry-run
+  uv run --with playwright python $T/pipeline/scripts/record_archify_all.py --project $P --only agent-identity --force
 
 为什么要有这个驱动：mp4 / *-end.png 是派生产物（根 .gitignore 明写「HTML 为 SSOT，
 sidecar json 入库」），所以**换一个 worktree 就要全量重录一次**——这是常规操作而非

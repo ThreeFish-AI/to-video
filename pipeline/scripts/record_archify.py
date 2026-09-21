@@ -1,11 +1,11 @@
 """archify 工程图引导故事录制器（Playwright + 系统 Chrome，2026-09 Context Layer 双集引入）。
 
-用法（仓库根）：
+用法（任意目录，$T/$P 锚定见 pipeline/README.md）：
   # 旧行为（整故事一段，逐字节兼容）
-  uv run --with playwright python $R/record_archify.py <工程图.html 绝对路径> <输出.webm> <sidecar.json>
+  uv run --with playwright python $T/pipeline/scripts/record_archify.py <工程图.html 绝对路径> <输出.webm> <sidecar.json>
 
   # 逐章录制（推荐）：每章一段 webm，片内 lead 约 2s（实测 1.96–4.60s，须测定不可估算）
-  uv run --with playwright python $R/record_archify.py <html> <忽略> <sidecar.json> \
+  uv run --with playwright python $T/pipeline/scripts/record_archify.py <html> <忽略> <sidecar.json> \
       --mode chapter --all-chapters --out-dir <目录> [--views <views.json>]
 
 行为：

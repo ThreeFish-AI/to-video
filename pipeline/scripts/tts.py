@@ -16,9 +16,9 @@
   丢整集合成成果，改稿只重配变更句。历史版本按 digest 文件名并存，不互相覆盖。
 
 用法：
-  edge：    uv run --no-project --with edge-tts --with mutagen $R/tts.py \
+  edge：    uv run --no-project --with edge-tts --with mutagen $T/pipeline/scripts/tts.py \
                 --project $P [--voice zh-CN-YunxiNeural] [--rate +4%] [--force]
-  indextts：uv run --no-project --with mutagen $R/tts.py \
+  indextts：uv run --no-project --with mutagen $T/pipeline/scripts/tts.py \
                 --project $P --engine indextts --ref <参考样本.wav> \
                 [--style passionate] [--server http://127.0.0.1:8766] [--force]
   情感三来源（互斥）：--style/--emo-vector 向量注入 · --emo-ref <另一段录音> 语调迁移
@@ -51,7 +51,9 @@ CONCURRENCY_EDGE = 6
 CONCURRENCY_INDEXTTS = 1  # 服务端串行锁推理；>1 会在锁后排队，排队时长计入客户端超时
 RETRIES = 4
 HTTP_TIMEOUT = 600  # MPS fp32 长句可达数分钟；须覆盖队列等待
-MANUAL = str(Path(__file__).resolve().parents[1] / "VOICE-CLONING.md")  # skill 内同目录文档
+MANUAL = str(
+    Path(__file__).resolve().parents[1] / "VOICE-CLONING.md"
+)  # skill 内同目录文档
 
 # --plan 排期估算用的实测常数（MPS fp32，长跑折算口径：含降频、机器争用与逐句开销）。
 # RTF_1BEAM 来自三集 596 句连续跑 8.5 小时 / 40.2 分钟纯语音；RTF_MULTIBEAM 由同句
@@ -75,7 +77,7 @@ AVG_SEC_PER_LINE = 4.2  # 三集每句音频均值
 # 分支，且那条的 0.8 作用在**已乘 emo_bias 的和**上、且在 alpha 之前。
 # emo_bias（infer_v2_5.py:493 硬编码）8 维严重不等权：
 #   sad/afraid=1.0 > happy/disgusted/melancholic=0.9375 > angry=0.875 > surprised=0.6875 > calm=0.5625
-# 后果：从社区/WebUI 抄来的 (vec, alpha) 经本仓复现实际**强 16%–33%**（含 calm 越重偏差越大，
+# 后果：从社区/WebUI 抄来的 (vec, alpha) 经本管线复现实际**强 16%–33%**（含 calm 越重偏差越大，
 # confident 档最失真），跨来源参数迁移必须重新试听定档。详见 INDEXTTS-2.5-ADVANCED.md §3.2。
 #
 # 另注：alpha 恰好等于「替换掉本人语调的百分比」**仅当名义向量和 = 1.0** ——
@@ -212,7 +214,7 @@ STYLE_PRESETS: dict[str, dict] = {
 #
 # **分层 SSOT**：`SAMPLING_PASSTHROUGH_DEFAULTS`（7 个经 **generation_kwargs 透传给 HF
 # generate 的参数）是唯一的数据副本，服务端 tts_server.py 运行时从本模块导入它（那个进程
-# 不受本仓版本控制约束之外的依赖影响——导入是纯常量读取）；本字典在其上追加两个
+# 不受本 skill 版本控制之外的依赖影响——导入是纯常量读取）；本字典在其上追加两个
 # **非透传**键：text_normalization（v2.5 infer() 的独立形参）与 seed（本服务自己 set_seed），
 # 它们不进 SAMPLING_RANGES/SAMPLING_CLI 的透传校验路径。
 #
@@ -1032,7 +1034,7 @@ async def main() -> None:
         default=None,
         type=int,
         help="[indextts] 生成上限 50–1815（上游默认 1500 ≈30 s；1815 为架构上限 ≈36.2 s）。"
-        "溢出后果不是音频被裁短，而是文本尾部根本没被念出。本仓单句远未触顶，通常不需要动",
+        "溢出后果不是音频被裁短，而是文本尾部根本没被念出。本管线单句远未触顶，通常不需要动",
     )
     smp.add_argument(
         "--interval-silence",
@@ -1368,11 +1370,11 @@ async def main() -> None:
         if sampling_only and not health.get("supports_sampling_params"):
             parser.error(
                 f"当前服务不支持采样参数（{','.join(sorted(sampling_only))}）：服务端代码过旧，"
-                f"请用本仓当前 tts_server.py 重启服务，见 {MANUAL} §二"
+                f"请用本 skill 当前 tts_server.py 重启服务，见 {MANUAL} §二"
             )
         if "seed" in sampling and not health.get("supports_seed"):
             parser.error(
-                f"当前服务不支持 --seed：服务端代码过旧，请用本仓当前 tts_server.py 重启服务，见 {MANUAL} §二"
+                f"当前服务不支持 --seed：服务端代码过旧，请用本 skill 当前 tts_server.py 重启服务，见 {MANUAL} §二"
             )
         if sampling.get("text_normalization") is False and not health.get(
             "supports_text_normalization"

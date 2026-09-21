@@ -38,10 +38,10 @@ A/B 对拍（有帧时 advisory；零匹配帧硬失败，供重制/重构回归
     后按每镜中点帧号，逐行打印 `remotion still` 命令——复制即可执行，无需先有
     draft.mp4（`still` 直接渲帧，首帧打包 ~100s、后续 4–5s/帧）。
 
-用法：uv run --no-project [--with pillow --with numpy] $R/qa_frames.py \
+用法：uv run --no-project [--with pillow --with numpy] $T/pipeline/scripts/qa_frames.py \
           --project $P <video.mp4> [--scene P2|--last-n 6|句id…] [--check]
-     uv run --no-project $R/qa_frames.py --project $P --check-theme
-     uv run --no-project $R/qa_frames.py --project $P --stills-plan [--chars-per-sec 5]
+     uv run --no-project $T/pipeline/scripts/qa_frames.py --project $P --check-theme
+     uv run --no-project $T/pipeline/scripts/qa_frames.py --project $P --stills-plan [--chars-per-sec 5]
 输出：抽帧 <工程>/out/frames/{句id}.png；体检结果打屏，FAIL 使退出码非零。
 """
 

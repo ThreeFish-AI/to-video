@@ -22,17 +22,17 @@
         毫无信噪比；故 site 只对**剥标签归一后的正文文本**比对指纹，漂移报 **WARN**
         （「正文已变，去复核笔记」），raw 漂移则完全忽略。
 
-用法（仓库根，零第三方依赖）。注意 `--project` 定义在顶层 parser，须写在子命令**之前**：
-    uv run --no-project $R/source_ledger.py --project $P list
-    uv run --no-project $R/source_ledger.py --project $P verify
-    uv run --no-project $R/source_ledger.py --project $P fetch \\
+用法（零第三方依赖）。注意 `--project` 定义在顶层 parser，须写在子命令**之前**：
+    uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P list
+    uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P verify
+    uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P fetch \\
         --name s01-repo --kind repo --via "pinned commit" \\
         --url https://raw.githubusercontent.com/o/r/<sha>/s01/README.zh.md
     # sync/audit 消费系列信源地图（多章批量取证，规格：skills/01 §多章批量取证）：
-    uv run --no-project $R/source_ledger.py --project $P sync \\
-        --map $I/source-map/<series>.toml --episode 2 [--dry-run] [--refetch]
-    uv run --no-project $R/source_ledger.py --project $P audit \\
-        --map $I/source-map/<series>.toml --episode 1   # 离线，不抓任何 URL
+    uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P sync \\
+        --map $W/source-map/<series>.toml --episode 2 [--dry-run] [--refetch]
+    uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P audit \\
+        --map $W/source-map/<series>.toml --episode 1   # 离线，不抓任何 URL
 
 退出码：0 = 全部未变（或仅 WARN）；1 = 有 FAIL。
 """
@@ -55,7 +55,7 @@ import tomllib
 _BLOCK_RE = re.compile(r"(?is)<(script|style)\b.*?</\1>")
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
-USER_AGENT = "negentropy-source-ledger/1.0 (+pipeline)"
+USER_AGENT = "to-video-source-ledger/1.0 (+skill)"
 TIMEOUT = 30
 
 
@@ -100,7 +100,7 @@ def toml_escape(s: str) -> str:
 
 def render_ledger(entries: dict) -> str:
     head = (
-        "# 非论文信源清单（可复现取证链，工具：$R/source_ledger.py）\n"
+        "# 非论文信源清单（可复现取证链，工具：$T/pipeline/scripts/source_ledger.py）\n"
         "#\n"
         "# kind=repo 指向固定 commit，raw 指纹漂移即 FAIL（说明 URL 里的 ref 不是不可变引用）。\n"
         "# kind=site 指向线上页面，只对剥标签归一后的正文比对指纹，漂移报 WARN（去复核笔记）。\n"

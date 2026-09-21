@@ -46,7 +46,7 @@
     蓝/绿邻域；expand 的二维平行列表天然按系列分组，跨系列互不可见。
 
 用法：uv run --no-project <skill>/pipeline/scripts/check_series.py（自工作区内任意目录）
-退出码：0 = 一致；1 = 有 FAIL。挂牌 pre-commit 后自动覆盖子项目相关提交。
+退出码：0 = 一致；1 = 有 FAIL。挂牌 pre-commit 后自动覆盖工作区相关提交。
 
 受检范围按根拆分（见 COVERED_GLOBS_INFLUENCE / PROJECT_GLOBS）：工作区侧
 用相对 glob，故本脚本内不出现任何「工作区在宿主仓库中的位置」字面量。
@@ -78,6 +78,7 @@ def _cfg_list(section_key: str) -> tuple[str, ...]:
     data = tomllib.loads(WORKSPACE_TOML.read_text(encoding="utf-8"))
     sec = data.get("check_series", {})
     return tuple(sec.get(section_key, ()))
+
 
 #: 顺序词。白名单：「下期」顺序无关收尾语；「前两集」从终集视角恒真（相对表述，改序仍成立）
 ORDINAL_WORDS = re.compile(
@@ -130,7 +131,7 @@ CN_NUM = {
 }
 
 #: 受检文件集（规则 2/3/5 的扫描范围；.context 等工作区目录不含）。
-#: **按根拆分**是刻意的：子项目侧写相对 glob，路径字面量便从本脚本彻底消失
+#: **按根拆分**是刻意的：工作区侧写相对 glob，路径字面量便从本脚本彻底消失
 #: —— 于是「误把 `apps/negentropy-influence/**` 写宽成 `apps/**`」这个陷阱
 #: 结构性不可能发生（实测宽化会炸出 12 条其他子项目的既存死链假 FAIL）。
 #: 排除 templates/：模板是**机制**（与各集字面同源、由 verify_skeleton.py 执法），

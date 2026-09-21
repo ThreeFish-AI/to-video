@@ -18,7 +18,7 @@
 （WARN-only）。动效列可写 `@enter:fall`、`@stagger`、`@draw` 等（动词表从本集
 video/src/motion/hooks.ts 的 use* 导出**派生**，单一事实源不复制）；镜内声明了
 @动词 而该幕场景文件未调用对应 use 模型 → WARN——「FadeUp 写在分镜里却没进代码」
-（本仓实测发生过 3 处）这一缺陷类的机械化。反向（代码用了模型而分镜没写）不报：
+（实测发生过 3 处）这一缺陷类的机械化。反向（代码用了模型而分镜没写）不报：
 动效列是意图摘要而非全量清单。
 
 可选 --pre-tts（TTS 前置门）：只跑**不需要分镜**的检查——时长预算（估算口径；
@@ -31,7 +31,7 @@ manifest 若在则含实测口径）+ 读法陷阱 + 发音标注合法性（bui
 （候选表见 pron_marks.POLYPHONE_CANDIDATES；与 --pre-tts 互斥——一个是门、
 一个是注意力清单，混跑会让退出码语义含混）。退出码恒 0。
 
-用法：uv run --no-project $R/check_script.py --project $P
+用法：uv run --no-project $T/pipeline/scripts/check_script.py --project $P
 退出码：0 = 通过；1 = 有 FAIL。WARN 不影响退出码但会列明。
 """
 

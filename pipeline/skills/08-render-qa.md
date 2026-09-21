@@ -6,30 +6,30 @@
 
 ```bash
 # 草渲（0.5x，jpeg 60——参数已固化在 remotion.config.ts + pipeline.toml）
-uv run --no-project $R/pipeline.py --project $P render
+uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render
 
 # 抽帧三选一：幕抽样 / 指定句 / 末 N 句（尾幕渐黑缺陷的必查项）
 # ⚠️ 草渲 --check 须带 --scale 0.5：字幕带/亮块间隔按全分辨率像素常数计算，不折算则判据双向失真
-# ⚠️ 视频路径按 CWD 解析（非 --project 相对）——**直调本脚本**时从仓库根须写 $P/out/draft.mp4；
+# ⚠️ 视频路径按 CWD 解析（非 --project 相对）——**直调本脚本**时须写锚定路径 $P/out/draft.mp4；
 #    而经 `pipeline.py qa --video` 时 cwd 已是分集工程，须写 out/draft.mp4（两者不可互抄）
-uv run --no-project --with pillow --with numpy $R/qa_frames.py \
+uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py \
     --project $P $P/out/draft.mp4 --scene P2 [--check --scale 0.5]
-uv run --no-project --with pillow --with numpy $R/qa_frames.py \
+uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py \
     --project $P $P/out/draft.mp4 p6-11 p6-13b --check --scale 0.5
-uv run --no-project --with pillow --with numpy $R/qa_frames.py \
+uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py \
     --project $P $P/out/draft.mp4 --last-n 6 --check --scale 0.5
 
 # 主题对比度（零依赖，不需视频；新配色/改 theme.ts 后必跑）
-uv run --no-project $R/qa_frames.py --project $P --check-theme
+uv run --no-project $T/pipeline/scripts/qa_frames.py --project $P --check-theme
 
 # beat 头部连抽（每 beat 首句起点连抽 N 帧）——入场瞬态的机械补盲：
 # ISSUE-170 实证「落位态干净、入场越界」会被句中点采样整段错过（此模式冻帧判定关闭）
-uv run --no-project --with pillow --with numpy $R/qa_frames.py \
+uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py \
     --project $P $P/out/draft.mp4 --beat-heads 4 --check --scale 0.5
 
 # A/B 对拍（重制/重构回归）：同帧号抽两版逐帧差异，按差异像素占比降序；
 # advisory（有匹配帧时退出码 0；零匹配硬失败）——「意图变更之外的一切差异」都须归因后才能接受
-uv run --no-project --with pillow --with numpy $R/qa_frames.py \
+uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py \
     --project $P --compare $P/out/baseline-draft.mp4 $P/out/draft.mp4 --scene P4
 ```
 

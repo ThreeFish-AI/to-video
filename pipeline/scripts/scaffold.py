@@ -12,7 +12,7 @@
    刻意不用 .tsx 后缀，免得被 tsc 收进去）。切割线是有意的：脚手架只拿走**机械
    复制**（那 391 行你本来就不该逐行读的冻结基建），保留**创作性撰写**（theme
    与 scenes 必须读 skills/06 才写得对）。手抄一遍学到的东西不该被一键抹掉。
-2. **不改根 .gitignore**。会修改仓库根文件的脚手架是爆炸半径的意外扩张；且
+2. **不改工作区根 .gitignore**。会修改工作区根文件的脚手架是爆炸半径的意外扩张；且
    ignore 规则已通配到分集级，新集自动覆盖，本来就无需这一步。
 3. **不写 series.json**。登记发布顺序是内容决策（要定 episode 序号、色板、
    sourceKind），不是机械步骤。⚠️ 漏登**没有阻塞门**：`check_series.py` 只遍历
@@ -44,8 +44,6 @@ def render(text: str, subs: dict[str, str]) -> str:
     for k, v in subs.items():
         text = text.replace(f"{{{{{k}}}}}", v)
     return text
-
-
 
 
 #: 工作区骨架的「点名 → 目标名」映射（模板里不带点前缀，防模板自吞）。
@@ -177,9 +175,7 @@ def main() -> int:
     for d in ("research", "script"):
         (dest / d).mkdir(parents=True, exist_ok=True)
 
-    print(
-        f">> 已实例化 {dest}：复制 {copied} 文件 / 渲染 {rendered} 模板\n"
-    )
+    print(f">> 已实例化 {dest}：复制 {copied} 文件 / 渲染 {rendered} 模板\n")
     print("接下来**必须**人工完成的（脚手架刻意不代做）：")
     print(
         "  1. research/ 取证：Stage ① —— A 型论文走 paper_extract.py，B 型走 source_ledger.py"
@@ -205,7 +201,9 @@ def main() -> int:
         f"\n  冻结档位与漂移判据见 {TEMPLATE / 'skeleton.toml'}"
         f"（{len(skel['classes'].get('frozen', []))} 个 frozen 文件已复制，勿改）"
     )
-    print("  实例化后立刻跑一次：uv run --no-project $R/verify_skeleton.py")
+    print(
+        "  实例化后立刻跑一次：uv run --no-project $T/pipeline/scripts/verify_skeleton.py"
+    )
     return 0
 
 

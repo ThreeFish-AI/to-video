@@ -22,7 +22,7 @@ IndexTTS 整集合成是 2 小时量级的无人值守长跑，而本机（M4 ba
 - 基线 1.868 s/字：EP1 v3 B 遍（sunny-steady）187 句实测墙钟折算——同机同档
   的历史口径，非上游论文数字。
 
-用法：uv run --no-project $R/tts_progress.py --project $P [--window 30]
+用法：uv run --no-project $T/pipeline/scripts/tts_progress.py --project $P [--window 30]
 退出码恒 0（监视器不打断长跑；处置决策在人）。
 """
 

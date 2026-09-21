@@ -2,7 +2,7 @@
 
 > **文档定位**：本文是公共视频管线声音克隆能力（用自己的声音配音 + 轻快/自信/正能量等风格控制）的**单一参考**——回答「怎么用现有能力做完一集」。
 > 上游能力面、机制循证与提升路线图见进阶篇 [INDEXTTS-2.5-ADVANCED.md](./INDEXTTS-2.5-ADVANCED.md)（不复制本文参数值，只做映射与解释）。
-> 管线总纲见 [README.md](./README.md)；参考音色样本目录约定见 [voices/README.md](./voices/README.md)；读音标注台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md)。
+> 管线总纲见 [README.md](./README.md)；参考音色样本目录约定见 [templates/workspace/voices/README.md](./templates/workspace/voices/README.md)（工作区实例化后的 `$V/README.md`）；读音标注台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md)。
 
 ## 目录
 
@@ -22,9 +22,9 @@
 
 **架构**（管线脚本轻依赖 与 重型推理环境 完全解耦）：
 
-![声音克隆双侧架构：本仓 pipeline 轻依赖脚本（tts.py 整集逐句 / tts_sample.py 单句小样）经 HTTP 127.0.0.1:8766 调用 ~/tools/index-tts 重依赖推理侧（FastAPI 服务 → IndexTTS-2.5 常驻模型 MPS 串行推理 → 22.05kHz WAV → MP3 编码回传），产出 {id}.mp3 + manifest.json 与 .temp/voice-samples 试听小样。](../../../docs/assets/architecture/apps/voice-cloning--architecture-dark.png)
+![声音克隆双侧架构：skill 侧 pipeline 轻依赖脚本（tts.py 整集逐句 / tts_sample.py 单句小样）经 HTTP 127.0.0.1:8766 调用 ~/tools/index-tts 重依赖推理侧（FastAPI 服务 → IndexTTS-2.5 常驻模型 MPS 串行推理 → 22.05kHz WAV → MP3 编码回传），产出 {id}.mp3 + manifest.json 与 .temp/voice-samples 试听小样。](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/architecture/apps/voice-cloning--architecture-dark.png)
 
-> 图源（可 diff 文本）：[`voice-cloning--architecture.mmd`](../../../docs/assets/mermaid/apps/voice-cloning--architecture.mmd) · 交互版（下载到本地打开）：[`voice-cloning--architecture.html`](../../../docs/assets/architecture/apps/voice-cloning--architecture.html)
+> 图源（可 diff 文本，存于源仓）：[`voice-cloning--architecture.mmd`](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/mermaid/apps/voice-cloning--architecture.mmd) · 交互版（下载到本地打开）：[`voice-cloning--architecture.html`](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/architecture/apps/voice-cloning--architecture.html)
 
 **契约不变**：无论哪个引擎，输出仍是 `<工程>/video/public/audio/{id}.mp3` 与 `manifest.json`（`durationSec` 为实测时长），下游（Remotion 场景、字幕、抽帧 QA）零改动。
 
@@ -42,7 +42,7 @@
 ### 2.2 步骤
 
 ```bash
-# 1) clone 仓库（仓库外，避免污染本仓）
+# 1) clone 仓库（仓库外，避免污染 skill 仓与工作区）
 mkdir -p ~/tools && cd ~/tools
 git clone https://github.com/index-tts/index-tts.git
 cd index-tts
@@ -58,12 +58,12 @@ uv run hf download IndexTeam/IndexTTS-2.5 --local-dir checkpoints
 
 ### 2.3 启动推理服务
 
-在 index-tts 根目录：
+在 index-tts 根目录（`~/tools/index-tts` 为默认位置，工具侧可经 `TO_VIDEO_INDEX_TTS_ROOT` 覆盖）：
 
 ```bash
 cd ~/tools/index-tts
 uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --with lameenc \
-    python <本仓绝对路径>/$R/tts_server.py \
+    python $T/pipeline/scripts/tts_server.py \
     --model-dir checkpoints --indextts-version 2.5 --host 127.0.0.1 --port 8766 \
     [--use-qwen-emo]   # 可选：加载 QwenEmotion（0.6B，约 +1.5 GB 内存），启用 --emo-text 自然语言情感
 ```
@@ -99,9 +99,10 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 ### 3.2 长录音裁剪（prepare_ref.py）
 
 ```bash
-# 从长录音截取 [180s, 192s) 共 12s，归一化峰值、转 16-bit 单声道 WAV，输出到 voices/
+# 从长录音截取 [180s, 192s) 共 12s，归一化峰值、转 16-bit 单声道 WAV，输出到 $V
 uv run --no-project --with soundfile --with numpy \
-    $R/prepare_ref.py ~/Documents/dify/me-1.mp3 --start 180 --duration 12
+    $T/pipeline/scripts/prepare_ref.py ~/Documents/dify/me-1.mp3 \
+    --start 180 --duration 12 --out $V/me-1.wav
 # → $V/me-1.wav（此段即已上线三集成片所用样本，sha1 3ed0d9d60d4b）
 ```
 
@@ -110,7 +111,7 @@ uv run --no-project --with soundfile --with numpy \
 **选段辅助**——长录音里挑哪一段？用 [scripts/prospect_ref.py](./scripts/prospect_ref.py) 按滑窗扫客观指标（F0 中位=音高、F0 起伏=语调、音节率=语速、谱质心=明亮度，并对静音过多/发声过少扣分），先筛候选再试听：
 
 ```bash
-uv run --no-project --with soundfile --with numpy $R/prospect_ref.py \
+uv run --no-project --with soundfile --with numpy $T/pipeline/scripts/prospect_ref.py \
     ~/Documents/dify/me-1.mp3 ~/Documents/dify/me-2.mp3 --window 12 --top 4
 # 输出可直接当 prepare_ref.py 的 --start 用；多个文件会放在同一把尺子下排序
 ```
@@ -121,7 +122,7 @@ uv run --no-project --with soundfile --with numpy $R/prospect_ref.py \
 
 ```bash
 uv run --no-project --with soundfile --with numpy \
-    $R/prospect_ref.py --accept <候选1.wav> [<候选2.wav> …]
+    $T/pipeline/scripts/prospect_ref.py --accept <候选1.wav> [<候选2.wav> …]
 # 整段评估（不滑窗）：保真度硬结论 + 风格参考值 + 超 15s / 低带宽告警
 ```
 
@@ -159,7 +160,7 @@ uv run --no-project --with soundfile --with numpy \
 
 **三条可直接复用的结论：**
 
-1. **`me-1` @106s 是目前所有已勘探选段里韵律动态最大的一段**：`IQR_rel` 比成片在用的 `me-bright` 段高 **+18%**，静音占比高 0.08——即「起伏更大且停顿更多」，正是抑扬顿挫的两个维度。且它与 `me-bright`（@0.36s）、`me-1.wav`（@180s）同源不同窗，无重叠。复现：`uv run --no-project --with soundfile --with numpy $R/prepare_ref.py ~/Documents/dify/me-1.mp3 --start 106 --duration 12 --out $V/me-1-106.wav`（sha1 `3c109eff6aa8`）。
+1. **`me-1` @106s 是目前所有已勘探选段里韵律动态最大的一段**：`IQR_rel` 比成片在用的 `me-bright` 段高 **+18%**，静音占比高 0.08——即「起伏更大且停顿更多」，正是抑扬顿挫的两个维度。且它与 `me-bright`（@0.36s）、`me-1.wav`（@180s）同源不同窗，无重叠。复现：`uv run --no-project --with soundfile --with numpy $T/pipeline/scripts/prepare_ref.py ~/Documents/dify/me-1.mp3 --start 106 --duration 12 --out $V/me-1-106.wav`（sha1 `3c109eff6aa8`）。
 2. **样本起伏高 ≠ 克隆起伏高，本轮又添两个反例**：`me-full-1` @146s / @100s 的样本起伏分别 44.7 / 43.0（均高于 `me-bright` 的 36.4），克隆出来却只有 37.4 / 35.1（低于 `me-bright` 的 38.5）。**唯一有效判据始终是纯克隆小样**，样本侧指标只能用来生成候选、不能用来否决候选。
 3. **take 噪声只能在同一协议下估计**：§6.6 对 `sunny-steady @ me-bright` 的 7 句配对得到 `|ΔIQR_rel|` 中位 10.4%；旧表 `me-1` @0s 的原始 `f0_iqr` 34.1 与本表 `me-1` @0.36s 的 38.5 既不是同一窗口，也不是同一指标，不能拿来验证该噪声。故行间差异是否可解读，须在同一窗口、文本、seed 和 `IQR_rel` 口径下复测；§3.3 那句「换段落即起伏 +25~40%」仍应按原实验口径理解。
 
@@ -209,7 +210,7 @@ uv run --no-project --with soundfile --with numpy \
 
 > **`sunny-steady` 的来历**：与 `sunny` 同方向同强度同语速，只把束宽 1→3。同文本同样本实测：语调起伏 **48.4 → 43.5**（更收敛、更"稳"）、音节率 4.10 → 4.55，而亮度基本不掉（谱质心 1245 → 1223）——是目前唯一"不牺牲明快度就让语气更可信"的旋钮。代价是 GPT 段耗时按束宽放大：单句墙钟由 20–35 秒变为 **56–131 秒**（同机同参两次实测的区间，受机器负载影响大），整集排期须按 §4.3b 的 3 束口径乘上去。
 
-> **`sunny` 的来历**（也是一份调参范例）：方向由 QwenEmotion 对「轻快、爽朗、自信、阳光」推出——happy 近乎独载；但 Qwen 的原始强度会顶到 Σ=0.8 上限，实测把克隆音高推到 **199–223 Hz**，而该说话人自然区间只有 142–163 Hz，听感"像另一个人在用力"。**保留方向、把强度压到 0.35**（留 65% 给本人真实语调）+ `df 0.95` 后即为 `sunny`。**该档在 `voices/me-bright.wav` 上定档**（`prepare_ref.py ~/Documents/dify/me-1.mp3 --start 0.36 --duration 12`），换回更闷的样本会失去明快感（见 §3.3）。定式可复用：**Qwen 选方向 → 人工压强度 → 固化成预设**。
+> **`sunny` 的来历**（也是一份调参范例）：方向由 QwenEmotion 对「轻快、爽朗、自信、阳光」推出——happy 近乎独载；但 Qwen 的原始强度会顶到 Σ=0.8 上限，实测把克隆音高推到 **199–223 Hz**，而该说话人自然区间只有 142–163 Hz，听感"像另一个人在用力"。**保留方向、把强度压到 0.35**（留 65% 给本人真实语调）+ `df 0.95` 后即为 `sunny`。**该档在 `$V/me-bright.wav` 上定档**（`prepare_ref.py ~/Documents/dify/me-1.mp3 --start 0.36 --duration 12`），换回更闷的样本会失去明快感（见 §3.3）。定式可复用：**Qwen 选方向 → 人工压强度 → 固化成预设**。
 
 ### 4.2 自定义向量（--emo-vector）
 
@@ -262,7 +263,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 
 5. **最后定束宽**：想让语气更"稳/可信"就上 3 束（`--style sunny-steady`），代价是整集墙钟 ×2–5；赶工或改稿频繁期用 1 束的 `sunny`。
 
-**推荐位**：日常/批量用 **`sunny`（明快阳光）**，成片定稿用 **`sunny-steady`（明快稳健）**——两档参数完全相同、只差束宽，故可"先用 sunny 快速迭代文稿，定稿再用 sunny-steady 重跑一遍"（换档会改摘要 → 全量重合成；机器空闲时两遍合计约 4 小时、并非数量级负担，见 §4.3b 复测）。两档都配 `voices/me-bright.wav`。历史上曾推荐 `passionate`，但其有效注入 0.70 在本人样本上偏"用力"，已改为 sunny 系。**任何情况下都先跑小样确认，再全量合成。**
+**推荐位**：日常/批量用 **`sunny`（明快阳光）**，成片定稿用 **`sunny-steady`（明快稳健）**——两档参数完全相同、只差束宽，故可"先用 sunny 快速迭代文稿，定稿再用 sunny-steady 重跑一遍"（换档会改摘要 → 全量重合成；机器空闲时两遍合计约 4 小时、并非数量级负担，见 §4.3b 复测）。两档都配 `$V/me-bright.wav`。历史上曾推荐 `passionate`，但其有效注入 0.70 在本人样本上偏"用力"，已改为 sunny 系。**任何情况下都先跑小样确认，再全量合成。**
 
 ## 五、小样试听与逐集合成
 
@@ -273,7 +274,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 ```bash
 # 1) 生成参考样本（已有可跳过）。推荐档：me-1.mp3 的 [0.36s, 12.36s) 这一段更亮更快
 uv run --no-project --with soundfile --with numpy \
-    $R/prepare_ref.py ~/Documents/dify/me-1.mp3 --start 0.36 --duration 12 \
+    $T/pipeline/scripts/prepare_ref.py ~/Documents/dify/me-1.mp3 --start 0.36 --duration 12 \
     --out $V/me-bright.wav      # sha1 54b699cce97f · sunny 档即在此样本上定档
 # 换段落先用 prospect_ref.py 筛候选（§3.2），成片曾用的更闷一档是 --start 180（§3.3）
 
@@ -281,22 +282,22 @@ uv run --no-project --with soundfile --with numpy \
 curl -s http://127.0.0.1:8766/health
 
 # 3) 单档试听：合成后立即播放
-uv run --no-project --with mutagen $R/tts_sample.py \
+uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
     --ref $V/me-bright.wav --style sunny --play
 
 # 4) 全风格 A/B：全部预设按 STYLE_PRESETS 顺序各一遍，顺序试听择优（档数见 --list-styles）
 #    顺序即 STYLE_PRESETS 的定义序，含 §4.1 的候选档；sunny-steady/sunny-clear 自带 3 束。
 #    下方 6.3 分钟是仅 7 档的历史测量；当前排期以 --list-styles 输出的档数与各档束宽重新估算。
-uv run --no-project --with mutagen $R/tts_sample.py \
+uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
     --ref $V/me-bright.wav --all-styles --play
 
 # 5) 觉得向量注入「有合成味」：改用语调迁移——音色仍是本样本，语气搬自另一段录音
-uv run --no-project --with mutagen $R/tts_sample.py \
+uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
     --ref $V/me-1.wav --emo-ref $V/me-bright.wav \
     --label emoref-bright --play          # --emo-alpha 0.7 可只迁移七成
 
 # 6) 说不清参数、只说得清感觉：用自己的话描述（服务需 --use-qwen-emo）
-uv run --no-project --with mutagen $R/tts_sample.py \
+uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
     --ref $V/me-bright.wav --emo-text "轻快、爽朗、自信、阳光" \
     --label qwen-brisk --play             # 回显 8 维向量；强度务必自己再压（§4.4 第 3 步）
 ```
@@ -459,7 +460,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 ## 八、许可与合规
 
 - **模型许可**：IndexTTS-2.5 按 [bilibili 模型使用许可协议](https://github.com/index-tts/index-tts/blob/main/LICENSE)（bilibili Model Use License）发布——**个人/研究用途可用；商用需联系 indexspeech@bilibili.com**。制作对外发布的视频前请自行评估许可范围。
-- **声音权利**：克隆他人声音必须获得本人书面同意；本仓 `$V/`（即 `pipeline/voices/`）下样本已被根 `.gitignore` 忽略，绝不入库。
+- **声音权利**：克隆他人声音必须获得本人书面同意；`$V/`（工作区 `voices/`）下样本已被工作区根 `.gitignore` 忽略，绝不入库。
 - **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；当前默认引擎仍为 edge，行为与历史完全一致。
 
 ## 九、备选方案与参考文献
@@ -471,7 +472,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 | edge-tts | ❌ 仅预置 | 仅 rate | 无需部署 | 本管线默认引擎（零成本回退） |
 | **IndexTTS-2.5** | ✅ 单样本零样本 | ✅ 向量+强度+语速 | ✅ MPS fp32 | **主方案**；中英日西阿 |
 | IndexTTS-2 | ✅ | ✅ 向量（无语速） | ✅ fp16 成熟 | 服务端一键回退档（`--indextts-version 2`） |
-| index-tts-2.5-mlx（社区 MLX 移植） | ✅ | ❌ 砍掉全部情感控制 | ✅ 最省内存 | 0.1.1（2026-08-14）**已支持 2.5**、自带 int8 GPT 权重、uvx 一键；但主动放弃 `emo_vector`/`emo_audio_prompt`/`emo_text` 与束搜索 ⇒ 本仓风格体系与 alpha 标定全部失效，不可直接替换（评估前置动作见进阶篇 §6） |
+| index-tts-2.5-mlx（社区 MLX 移植） | ✅ | ❌ 砍掉全部情感控制 | ✅ 最省内存 | 0.1.1（2026-08-14）**已支持 2.5**、自带 int8 GPT 权重、uvx 一键；但主动放弃 `emo_vector`/`emo_audio_prompt`/`emo_text` 与束搜索 ⇒ 本 skill 风格体系与 alpha 标定全部失效，不可直接替换（评估前置动作见进阶篇 §6） |
 | GPT-SoVITS | ✅ 微调最佳 | 依赖参考音频 | 推理可/训练差 | 需训练工作流，过重 |
 | CosyVoice 2 | ✅ 3–10s | instruct 指令 | ✅ | 克隆相似度略逊 |
 | 云端（Azure Custom Voice 等） | ✅ | ✅ | 无需 | 收费/审核/隐私，不采纳 |

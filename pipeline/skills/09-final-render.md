@@ -36,7 +36,7 @@ cd $P/video
 
 ```bash
 # 字幕（B 站/YouTube 上传件；cue 终点不含句间停顿——外挂字幕静默期不留字）
-uv run --no-project $R/captions.py --project $P
+uv run --no-project $T/pipeline/scripts/captions.py --project $P
 ```
 
 - [ ] `out/final.mp4`（1080p30，h264/aac192K；`remotion ffmpeg -i` 核流摘要）

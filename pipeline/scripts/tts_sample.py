@@ -7,15 +7,15 @@
   成片走完全相同的合成路径，听感可直接外推。
 - 前置：参考音色样本（prepare_ref.py 产出）+ 已启动的 tts_server.py。
 
-用法（仓库根执行）：
+用法（任意目录执行，$T/$V 锚定见 pipeline/README.md）：
   # 单档试听（科普推荐档）
-  uv run --no-project --with mutagen $R/tts_sample.py \
+  uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
       --ref $V/me-bright.wav --style sunny --play
   # 全风格 A/B（STYLE_PRESETS 逐档各合成一遍，含各自的 alpha/语速/束宽）
-  uv run --no-project --with mutagen $R/tts_sample.py \
+  uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
       --ref $V/me-bright.wav --all-styles --play
 
-产物：<仓库根>/.temp/voice-samples/{风格}.mp3（已被根 .gitignore 忽略）——内含本人音色，
+产物：PROJECT 根下 .temp/voice-samples/{风格}.mp3（锚定见 paths.PROJECT；已被 .gitignore 忽略）——内含本人音色，
 属生物特征信息，试听后请及时清理。完整手册见 pipeline/VOICE-CLONING.md §5.1。
 """
 
@@ -46,7 +46,7 @@ from tts import (  # noqa: E402 - 必须在 sys.path 注入之后导入
     tts_text,
 )
 
-# 试听小样落仓库根 .temp/（AGENTS.md：临时产物一律收敛至此），由 pipeline.py
+# 试听小样落 PROJECT 根 .temp/（协作协议：临时产物一律收敛至此），由 pipeline.py
 # clean-samples 清理 —— 两处路径必须一致，故统一取自 paths.PROJECT。
 from paths import PROJECT  # noqa: E402 - 必须在 sys.path 注入之后导入（惰性锚）
 
@@ -127,11 +127,11 @@ def check_server(
         sys.exit(
             "当前服务不支持采样参数（temperature/top_p/top_k/length_penalty/"
             "repetition_penalty/max_mel_tokens/interval_silence）：\n"
-            f"  服务端代码过旧，请用本仓当前 tts_server.py 重启服务：\n{server_launch_hint()}"
+            f"  服务端代码过旧，请用本 skill 当前 tts_server.py 重启服务：\n{server_launch_hint()}"
         )
     if "seed" in sampling and not health.get("supports_seed"):
         sys.exit(
-            "当前服务不支持 --seed：服务端代码过旧，请用本仓当前 tts_server.py 重启服务：\n"
+            "当前服务不支持 --seed：服务端代码过旧，请用本 skill 当前 tts_server.py 重启服务：\n"
             f"{server_launch_hint()}"
         )
     if sampling.get("text_normalization") is False and not health.get(

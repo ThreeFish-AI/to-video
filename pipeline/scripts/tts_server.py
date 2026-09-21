@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """IndexTTS 声音克隆推理服务——运行于 index-tts 工程环境内的本地 HTTP 服务。
 
-- 位置约定：本脚本属于公共管线（SSOT），但必须在 index-tts checkout（如 ~/tools/index-tts）
-  的 uv 环境内运行（torch/indextts 等重依赖不进入本仓）；
+- 位置约定：本脚本属于公共管线（SSOT），但必须在 index-tts checkout 的 uv 环境内运行
+  （默认 ~/tools/index-tts；工具侧可经 TO_VIDEO_INDEX_TTS_ROOT 另指。torch/indextts 等
+  重依赖不进入本 skill）；
 - 启动（在 index-tts 根目录）：
     uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --with lameenc \
-        python <本仓>/$R/tts_server.py --model-dir checkpoints --port 8766
+        python $T/pipeline/scripts/tts_server.py --model-dir checkpoints --port 8766
 - 端点：
     GET  /health     —— 服务与模型元信息（version/device/dtype/encoder + 四个 supports_* 能力位）
     POST /synthesize —— JSON 请求合成，返回 MP3 bytes（X-Audio-Format 头）
@@ -41,8 +42,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, field_validator
 
-# 客户端 tts.py 与本服务分属两个运行环境（本仓轻依赖 vs index-tts venv），但服务启动
-# 脚本就是从本仓拷贝/引用这份 tts_server.py —— 采样默认值等共享常量以 tts.py 为 SSOT。
+# 客户端 tts.py 与本服务分属两个运行环境（skill 侧轻依赖 vs index-tts venv），但服务启动
+# 脚本就是从 skill 仓拷贝/引用这份 tts_server.py —— 采样默认值等共享常量以 tts.py 为 SSOT。
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tts import SAMPLING_PASSTHROUGH_DEFAULTS as SAMPLING_DEFAULTS  # noqa: E402
 

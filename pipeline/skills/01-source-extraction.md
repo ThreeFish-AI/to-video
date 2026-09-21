@@ -67,14 +67,14 @@
 
 # B 型信源 · 文档 / 代码 / 课程站点
 
-> 首次实践：[claude-code-explained-video](../../episodes/claude-code-explained-video/research/source-notes.md)
+> 首次实践：[claude-code-explained-video](https://github.com/ThreeFish-AI/negentropy/blob/master/apps/negentropy-influence/episodes/claude-code-explained-video/research/source-notes.md)
 > （课程站点 4 页 + 代码仓库 @ 固定提交）。产出文件名用 `research/source-notes.md`
 > 以区别于 A 型的 `paper-notes.md`。
 
 ## 与 A 型的根本差异
 
 论文是冻结的，站点和仓库是活的。**逐字稿在录完音之后就冻住了，而信源还在动** —— 这就是
-[ISSUE-162](../../../../docs/.agents/issue.md) 的成因。B 型的全部增量纪律都从这一条推出。
+[ISSUE-162](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md) 的成因。B 型的全部增量纪律都从这一条推出。
 
 ## 一、双轨取证（缺一不可）
 
@@ -88,11 +88,11 @@
 B 轨只比对**剥标签归一后的正文**指纹，漂移报 **WARN**（去复核笔记），因为构建产物哈希天天变。
 
 ```bash
-uv run --no-project $R/source_ledger.py --project $P fetch --name s01-code --kind repo \
+uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P fetch --name s01-code --kind repo \
     --pinned-ref <sha> --via "pinned commit, MIT" --url https://raw.githubusercontent.com/o/r/<sha>/f.py
-uv run --no-project $R/source_ledger.py --project $P fetch --name s01-site --kind site \
+uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P fetch --name s01-site --kind site \
     --via "SSG 预渲染" --url https://example.com/zh/s01/
-uv run --no-project $R/source_ledger.py --project $P verify    # 交付前必跑
+uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P verify    # 交付前必跑
 ```
 
 ## 二、证据三级（B 型的核心发明，必须写进事实源头部）
@@ -142,7 +142,7 @@ uv run --no-project $R/source_ledger.py --project $P verify    # 交付前必跑
 
 ## 多章批量取证（多集系列 / 多章一集）
 
-> 规格落地：[source-map/](../../source-map/)（首例 [claude-code-explained](../../source-map/claude-code-explained.md)）。
+> 规格落地：[source-map/](https://github.com/ThreeFish-AI/negentropy/blob/master/apps/negentropy-influence/source-map/)（首例 [claude-code-explained](https://github.com/ThreeFish-AI/negentropy/blob/master/apps/negentropy-influence/source-map/claude-code-explained.md)；工作区落点 `$W/source-map/`）。
 > 适用：一个系列吃同一信源的多章（如课程站点 + 仓库），或一集吃 ≥3 章。
 
 1. **章节→集归属、钉选（pinnedRef）、README 文件名（随修订变）只在系列级 `source-map/<series-id>.toml` 登记一次**；
@@ -152,8 +152,8 @@ uv run --no-project $R/source_ledger.py --project $P verify    # 交付前必跑
 2. **台账条目由 `sync` 从地图派生、不手写**（`{slug}-readme` / `{slug}-code` / `{slug}-site`，
    多 sitePath 时 `{slug}-site-{path}`）——与既有交付集的字节兼容，防命名漂移：
    ```bash
-   uv run --no-project $R/source_ledger.py --project $P sync  --map $I/source-map/<sid>.toml --episode N [--dry-run] [--refetch]
-   uv run --no-project $R/source_ledger.py --project $P audit --map $I/source-map/<sid>.toml --episode N   # 离线，无网络
+   uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P sync  --map $W/source-map/<sid>.toml --episode N [--dry-run] [--refetch]
+   uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P audit --map $W/source-map/<sid>.toml --episode N   # 离线，无网络
    ```
    `audit` 三断言：条目齐 / 无跨集混入（防证据串集）/ repo 条目 `pinned_ref` = 地图钉值。
 3. **钉在未合并分支时**（raw URL 随分支强推/删除而失效，verify 会 FAIL 兜底）：台账已登记

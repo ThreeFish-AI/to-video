@@ -19,16 +19,16 @@
 ## 用法（在 index-tts 根目录）
 
     cd ~/tools/index-tts
-    ./.venv/bin/python <本仓>/$R/tts_bench.py --check-only
-    ./.venv/bin/python <本仓>/$R/tts_bench.py \
-        --ref <本仓>/$V/me-bright.wav --runs 8 [--empty-cache]
+    ./.venv/bin/python $T/pipeline/scripts/tts_bench.py --check-only
+    ./.venv/bin/python $T/pipeline/scripts/tts_bench.py \
+        --ref $V/me-bright.wav --runs 8 [--empty-cache]
 
 `--empty-cache` 在每次调用后清 MPS 缓存并 gc——用于判定漂移是否来自分配器累积。
 若开启后漂移消失，则长跑（整集 2 小时）也应在服务端逐句清理。
 
 ## 成对 A/B 模式（`--ab-param`）
 
-    ./.venv/bin/python <本仓>/$R/tts_bench.py \
+    ./.venv/bin/python $T/pipeline/scripts/tts_bench.py \
         --ref <样本.wav> --texts <每行一句的文本文件> \
         --ab-param length_penalty --ab-values 0.0,0.8 --num-beams 3 --cooldown 60
 

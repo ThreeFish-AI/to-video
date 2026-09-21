@@ -11,11 +11,11 @@
 
 ## 骨架复制适配策略
 
-**复制源头有名字**：[templates/video-skeleton/](../templates/video-skeleton/)。新集用它实例化（`uv run --no-project $R/scaffold.py <slug>-video --title "…"`），**不要**再 `cp -r` 任一既有集——「任一」意味着 4 个同权真理声明者。冻结档位（frozen / overridable / regioned / structured / seeded）、分组语义与已登记漂移的**机器可读单一事实源**是 [skeleton.toml](../templates/video-skeleton/skeleton.toml)，判据由 `verify_skeleton.py` 执行：
+**复制源头有名字**：[templates/video-skeleton/](../templates/video-skeleton/)。新集用它实例化（`uv run --no-project $T/pipeline/scripts/scaffold.py <slug>-video --title "…"`），**不要**再 `cp -r` 任一既有集——「任一」意味着 4 个同权真理声明者。冻结档位（frozen / overridable / regioned / structured / seeded）、分组语义与已登记漂移的**机器可读单一事实源**是 [skeleton.toml](../templates/video-skeleton/skeleton.toml)，判据由 `verify_skeleton.py` 执行：
 
 ```bash
-uv run --no-project $R/verify_skeleton.py          # 漂移报告
-uv run --no-project $R/verify_skeleton.py --strict  # 有未登记漂移即失败
+uv run --no-project $T/pipeline/scripts/verify_skeleton.py          # 漂移报告
+uv run --no-project $T/pipeline/scripts/verify_skeleton.py --strict  # 有未登记漂移即失败
 ```
 
 要点（详见 skeleton.toml 内注）：
@@ -53,7 +53,7 @@ uv run --no-project $R/verify_skeleton.py --strict  # 有未登记漂移即失�
 
 | 母题 | 出处 | 适用 |
 |---|---|---|
-| 终端窗口 + 打字机 | [claude-code-explained-video](../../episodes/claude-code-explained-video/video/src/components/motifs.tsx) `Terminal` | 任何「人机对话/命令行」痛点开场 |
+| 终端窗口 + 打字机 | [claude-code-explained-video](https://github.com/ThreeFish-AI/negentropy/blob/master/apps/negentropy-influence/episodes/claude-code-explained-video/video/src/components/motifs.tsx) `Terminal` | 任何「人机对话/命令行」痛点开场 |
 | **恒定视觉锚**（环形循环） | 同上 `LoopRing` | 主题是「某个东西始终不变」时：锁死 `stroke` 与 `strokeWidth`（绝对像素、不随 size 缩放），让「不变」被**看见**而不是被听说 |
 | 字典分发表 | 同上 `DispatchTable` | 键值查表、注册表、路由表 |
 | 闸门路由 | 同上 `GateRouter` | 多级判定/准入/过滤管线 |
@@ -76,7 +76,7 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
 - **令牌（tokens.ts）**：时长六档 `DUR.f1..f6`（2/3/5/7/12/21 帧，Carbon DTCG 六档
   @30fps；弃 M3 十六档——30fps 量化下 6 对相邻档同帧数，伪选择）；缓动
   `standard/decelerate/accelerate/linear`（M3 贝塞尔控制点）；弹簧 `settle`(damping 200，
-  本仓既有 9/10 调用点的实测手感——**刻意不抄规格散文里的 stiffness 120/damping 18**，
+  工作区既有 9/10 调用点的实测手感——**刻意不抄规格散文里的 stiffness 120/damping 18**，
   视觉连续性优先于纸面参数) / `settleSoft`(170) / `snap`(12，轻过冲)；`SAFE_TOP_Y=920`
   字幕安全带 SSOT；`EXIT_FACTOR=0.4` 出场快于入场。
 - **窗口（window.ts）**：`progress/win/beatProgress/clamp01` 纯函数——「clamped 0→1
@@ -117,7 +117,7 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
    它读成「有两种」，唯一性即失。副产品是工程护栏：元素词表被钉死在
    `box / edges / lineLoop / basic 材质`，新增 3D **不引入新类型面**（tsc 风险为零）。
 2. **读感来自转物体，不来自动相机**。正交 + `zoom:1` 下 1 世界单位 = 1 CSS 像素，这是
-   3D 与 DOM 叠层能手算对位的唯一前提；相机一动就要走投影反算（本仓 `BAR_BASE 45` 那道
+   3D 与 DOM 叠层能手算对位的唯一前提；相机一动就要走投影反算（工作区 `BAR_BASE 45` 那道
    疤即此类）。**相机零动画**，深度靠物体静置俯角/偏航。副产品：无相机插值 ⇒ 无浮点累积。
 3. **每个颜色是 token 字面值或有注释的确定性派生，永不是「光 × 材质」的乘积**。真光照让
    像素成为运行时乘积——没有名字、不可 grep、`--check-theme` 看不见、WCAG 无法预算，而

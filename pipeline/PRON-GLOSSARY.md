@@ -30,7 +30,7 @@
 （文档里的表没有消费者，只会与扫描器漂移）。逐句扫描报告：
 
 ```bash
-uv run --no-project $R/check_script.py --project $P --pron-candidates
+uv run --no-project $T/pipeline/scripts/check_script.py --project $P --pron-candidates
 ```
 
 ## 边界

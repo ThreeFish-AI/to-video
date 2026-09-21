@@ -4,11 +4,11 @@
 > 「怎么用现有能力做完一集」（部署／样本／风格档／合成／缓存／排障）。本文回答另一个正交问题：
 > **上游到底有什么能力、机制为何、还能怎么更好**。
 >
-> **本文不复制任何本仓参数值**——风格预设数值一律以 `tts.py --list-styles` 与
+> **本文不复制任何本 skill 参数值**——风格预设数值一律以 `tts.py --list-styles` 与
 > [VOICE-CLONING.md](./VOICE-CLONING.md) §4.1 为准，可执行参数一律以各集 `pipeline.toml` 为准。
 > 本文只写「上游事实」（源码坐标 + 论文表号）与「二者的映射关系」。
 >
-> **证据锚点**：上游为本机 clone `~/tools/index-tts`<sup>[[8]](#ref8)</sup>，**HEAD `4f8792f`**；权重为 HF 公开发布的
+> **证据锚点**：上游为本机 clone `~/tools/index-tts`（默认位置，可经 `TO_VIDEO_INDEX_TTS_ROOT` 覆盖）<sup>[[8]](#ref8)</sup>，**HEAD `4f8792f`**；权重为 HF 公开发布的
 > `IndexTeam/IndexTTS-2.5` 基座（`gpt.pth` 字节数与 HF 发布版逐字节一致）。所有 `file:line`
 > 均指该 HEAD；升级上游后需复核。实测数据一律标注日期与口径（机器空闲／有负载、单句／整集）。
 
@@ -40,7 +40,7 @@
 | `duration_factor`                                              | `1.0`            | ✅ `--duration-factor`                   | v2.5 专属；方向易搞反，见 §3.4                                          |
 | `use_random`                                                   | `False`          | 🔒 硬编码 `False`                        | 开启必掉保真度，见 §3.3                                                 |
 | `interval_silence`                                             | `200` ms         | ✅ `--interval-silence`（本轮接通）      | 仅作用于**单请求内分段之间**，本管线逐句合成故默认不生效                |
-| `max_text_tokens_per_segment`                                  | `120`            | ❌ 不暴露（刻意）                        | 对本仓完全惰性，见 §4.4                                                 |
+| `max_text_tokens_per_segment`                                  | `120`            | ❌ 不暴露（刻意）                        | 对本管线完全惰性，见 §4.4                                                 |
 | `text_normalization`                                           | `True`           | ✅ `--no-text-normalization`（本轮接通） | **不要关**，见 §2.2                                                     |
 | `temperature`/`top_p`/`top_k`                                  | `0.8`/`0.8`/`30` | ✅（本轮接通）                           | 束搜索下仍生效，见 §4.1                                                 |
 | `length_penalty`                                               | `0.0`            | ✅（本轮接通）                           | 数学上非中性，但**实测在本工作负载惰性**（11 对样本零效应），见 §4.2    |
@@ -55,9 +55,9 @@
 
 ### 2.1 中文归一化链路（wetext，不是 NeMo）
 
-![IndexTTS 逐句合成流程：narration.md 逐字稿经 build_narration.py 派生 text／ttsText、tts.py tts_text() 标点规整后 POST /synthesize 送入上游，在 infer_v2_5.py 内按 :699 lang_prefix、:701 clean_pattern、:703-707 归一化分支（zh 走 wetext TextNormalizer）、:711 全局小写、:714 发音标注展开为 SPECIAL_TOKEN、:719 按 118 token 预算分段、:723 tiktoken 编码的固定顺序流转，最终进入 T2S 自回归产出语义码。](../../../docs/assets/architecture/apps/indextts--synthesis-flow-dark.png)
+![IndexTTS 逐句合成流程：narration.md 逐字稿经 build_narration.py 派生 text／ttsText、tts.py tts_text() 标点规整后 POST /synthesize 送入上游，在 infer_v2_5.py 内按 :699 lang_prefix、:701 clean_pattern、:703-707 归一化分支（zh 走 wetext TextNormalizer）、:711 全局小写、:714 发音标注展开为 SPECIAL_TOKEN、:719 按 118 token 预算分段、:723 tiktoken 编码的固定顺序流转，最终进入 T2S 自回归产出语义码。](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/architecture/apps/indextts--synthesis-flow-dark.png)
 
-> 图源（可 diff 文本）：[`indextts--synthesis-flow.mmd`](../../../docs/assets/mermaid/apps/indextts--synthesis-flow.mmd) · 交互版（下载到本地打开）：[`indextts--synthesis-flow.html`](../../../docs/assets/architecture/apps/indextts--synthesis-flow.html)
+> 图源（可 diff 文本，存于源仓）：[`indextts--synthesis-flow.mmd`](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/mermaid/apps/indextts--synthesis-flow.mmd) · 交互版（下载到本地打开）：[`indextts--synthesis-flow.html`](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/architecture/apps/indextts--synthesis-flow.html)
 
 三条容易踩空的事实：
 
@@ -96,7 +96,7 @@
 归一化。逐字稿为字幕可读性把句子拆到 ≤43 字，反而**提高**了出现纯 ASCII 短句的概率——
 两个既有约束的隐性冲突。
 
-已上线三集曾有 8 句年份读错，修复与成门记于 [issue.md ISSUE-164](../../../docs/.agents/issue.md)；
+已上线三集曾有 8 句年份读错，修复与成门记于 [issue.md ISSUE-164](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md)；
 禁写清单是 [check_script.py](./scripts/check_script.py) 的 `READING_TRAPS`，写稿侧规约见
 [skills/03-narration.md](./skills/03-narration.md)。
 
@@ -142,9 +142,9 @@
 
 ### 3.1 融合公式与 alpha 的物理含义
 
-![IndexTTS-2.5 中一条 12 秒参考音频分出 CAMPPlus 风格、w2v-BERT L17 语义、log-mel 前缀三路信号：风格向量既作余弦最近邻查询从 73 行情感原型库挑出「最像你」的原型行、又经 spk_emb_proj 投影成为 conds_latent 基底；语义嵌入作为 E_self 基底参与 emovec 加权融合，融合结果与音色投影在同一 1280 维槽位相加后驱动 T2S 自回归与 25 步 CFM 扩散。](../../../docs/assets/architecture/apps/indextts--reference-audio-dark.png)
+![IndexTTS-2.5 中一条 12 秒参考音频分出 CAMPPlus 风格、w2v-BERT L17 语义、log-mel 前缀三路信号：风格向量既作余弦最近邻查询从 73 行情感原型库挑出「最像你」的原型行、又经 spk_emb_proj 投影成为 conds_latent 基底；语义嵌入作为 E_self 基底参与 emovec 加权融合，融合结果与音色投影在同一 1280 维槽位相加后驱动 T2S 自回归与 25 步 CFM 扩散。](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/architecture/apps/indextts--reference-audio-dark.png)
 
-> 图源（可 diff 文本）：[`indextts--reference-audio.mmd`](../../../docs/assets/mermaid/apps/indextts--reference-audio.mmd) · 交互版（下载到本地打开）：[`indextts--reference-audio.html`](../../../docs/assets/architecture/apps/indextts--reference-audio.html)
+> 图源（可 diff 文本，存于源仓）：[`indextts--reference-audio.mmd`](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/mermaid/apps/indextts--reference-audio.mmd) · 交互版（下载到本地打开）：[`indextts--reference-audio.html`](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/assets/architecture/apps/indextts--reference-audio.html)
 
 `emovec = Σ(wᵢ·Bᵢ) + (1 − Σwᵢ)·E_self`（`:766-767`），其中 `wᵢ` 是 alpha 缩放后的分量。
 把它写成 `Σ(wᵢ°·α)·Bᵢ + (1 − α·Σwᵢ°)·E_self` 就能看清：
@@ -169,7 +169,7 @@ GPT 看到的条件方向越偏离说话人身份）。论文的 GRL 只保证 e
 最终 emovec），而是 **`emo_alpha` 被消费两次**——先在 `:605-608` 缩放向量，又在 `:763`
 用作参考音频的隐空间插值系数，语义混乱且不可预测。
 
-### 3.2 emo_bias 的 8 维不等权，与本仓口径的显式差异
+### 3.2 emo_bias 的 8 维不等权，与本管线口径的显式差异
 
 `emo_bias` 硬编码在 `infer_v2_5.py:493`（不在 `config.yaml`）：
 
@@ -189,9 +189,9 @@ GPT 看到的条件方向越偏离说话人身份）。论文的 GRL 只保证 e
 - 上游 `emo_text` 路径**既无 bias 也无上限**（Qwen 每维只 clamp 到 `[0, 1.2]`，8 维理论可达 9.6，
   会让 `(1−Σw)` 变成大负数）。本服务的 `_qwen_vector_sync` 是**我们补的**修补。
 
-**后果（按上游 webui 口径复算本仓 5 个非中性预设）**：实际注入比本仓口径**弱 15.8%–33.3%**
+**后果（按上游 webui 口径复算本管线 5 个非中性预设）**：实际注入比本管线口径**弱 15.8%–33.3%**
 （`confident` 最失真，因其 `calm` 占比最重），且成分构成会移位。**从社区/WebUI/HF Space
-抄来的任何 `(vec, alpha)` 数值，经本仓 API 复现时都不是原意——跨来源参数迁移当前不可靠，
+抄来的任何 `(vec, alpha)` 数值，经本管线 API 复现时都不是原意——跨来源参数迁移当前不可靠，
 必须重新试听定档。**
 
 「不采用 emo_bias」是一个**显式的设计选择**而非遗漏：bias 是上游为 WebUI 交互体验做的感知
@@ -240,7 +240,7 @@ GPT 看到的条件方向越偏离说话人身份）。论文的 GRL 只保证 e
   溢出风险；真正决定溢出的是参考音色的内在语速。
 
 **方向勘误**：`df<1` = 更快 = 每个音素分到的时间更短 = 咬字**更紧更糊**。护密集技术句
-清晰度的正确方向是 `df>1`（可试 1.03/1.05，建议上限 1.10）。本仓 `passionate` 档原注释
+清晰度的正确方向是 `df>1`（可试 1.03/1.05，建议上限 1.10）。本管线 `passionate` 档原注释
 「df 0.97 护清晰度」方向写反，已更正（数值本身与「激情=略快」自洽，故未改）。
 
 **本管线永远运行在论文的「自由时长模式」**：v2.5 的 GPT 里没有论文<sup>[[2]](#ref2)</sup>
@@ -261,7 +261,7 @@ GPT 看到的条件方向越偏离说话人身份）。论文的 GRL 只保证 e
 生效顺序：RepetitionPenalty → Temperature → TopK → TopP。
 
 `top_k` 在 `num_beams>1` 下的安全下界是 **2**（`min_tokens_to_keep = n_eos+1 = 2`）；`top_k=1`
-会踩到 multinomial 的非零元素数下界，本仓客户端与服务端均已禁用该值（`0` = 关闭 TopK，合法）。
+会踩到 multinomial 的非零元素数下界，本管线客户端与服务端均已禁用该值（`0` = 关闭 TopK，合法）。
 
 ### 4.2 `length_penalty=0.0` 不是中性
 
@@ -287,7 +287,7 @@ GPT 看到的条件方向越偏离说话人身份）。论文的 GRL 只保证 e
 > **一句都没有改善**。两档的「尾覆盖 <0.9 的句数」都是 3——那 3 句是 ASR 伪影，不是吞尾。
 >
 > **为什么惰性**：`length_penalty` 只在比较**长度不同**的已完成假设时起作用；若 3 条束都在
-> 同一长度收束，除数 `len^lp` 就是公共因子、排序不变。本仓旁白单句 35–49 字，束间长度差异
+> 同一长度收束，除数 `len^lp` 就是公共因子、排序不变。本管线旁白单句 35–49 字，束间长度差异
 > 太小，不足以让它咬合。
 >
 > **前一版本的记载已作废**：曾观测到某长句 `lp=0` 的 GPT 段 180.5 s vs `lp=0.8` 的 19.3 s
@@ -355,7 +355,7 @@ w2v-BERT-2.0 的 `preprocessor_config.json` 中 `sampling_rate=16000` + `stride=
 序列末位不是 `stop_mel_token`」（束搜索到 `max_length` 仍无束自然收束），紧随的 `code_lens`
 循环在找不到 stop token 时直接取全长，输出一段在上限处**突然断掉**的完整长度音频。
 
-`max_text_tokens_per_segment=120` 对本仓**完全惰性**：段预算 = `min(120, 600-2) − len(lang_prefix)`
+`max_text_tokens_per_segment=120` 对本管线**完全惰性**：段预算 = `min(120, 600-2) − len(lang_prefix)`
 = 118 字，而三集单行最长 49/43/38 字 ⇒ `split_text_by_tokens` 从不分段（`:430-431` 直接返回）。
 **明确记录为「不要动」**，以阻止未来在此参数上浪费实验轮次。这也意味着 `interval_silence`
 在本管线默认不生效（句间停顿由 `video/src/timing.json` 的 `sentenceGapSec` 提供，二者不是
@@ -417,8 +417,8 @@ MPS 上的算子非确定性并未破坏可复现性。种子在 `_infer_sync` �
 
 ### 已知缺陷：客户端内容寻址 vs 服务端路径寻址
 
-上游按**路径字符串**缓存条件张量（`:619`、`:681`），本仓客户端按**内容 sha1**
-（`tts.py` 的 `ref_sha1`）。**服务常驻期间原地覆盖同一个 `voices/*.wav`，会产出「sha1 是新的、
+上游按**路径字符串**缓存条件张量（`:619`、`:681`），本管线客户端按**内容 sha1**
+（`tts.py` 的 `ref_sha1`）。**服务常驻期间原地覆盖同一个 `$V/*.wav`，会产出「sha1 是新的、
 音色是旧的」音频**——而这正好命中 §3.3 定式里「裁 3–4 份候选各跑小样」这个高频动作。
 规避：给每个候选用不同文件名（或内容寻址路径），不要原地覆盖。
 
@@ -474,7 +474,7 @@ s2mel 权重截至 2026-08-20 未公开发布。
 ### 6.3 同口径重算：3–4× 的「未解缺口」已基本解释完（2026-08-20）
 
 社区 MLX 移植 `index-tts-2.5-mlx`<sup>[[9]](#ref9)</sup> 0.1.1 报 PyTorch-MPS 基线 RTF
-**1.11–1.17**（M5 Pro），而本仓整集折算 **8.8–9.2**（M4 base）——曾记为「剩余 3–4× 无解释」。
+**1.11–1.17**（M5 Pro），而本管线整集折算 **8.8–9.2**（M4 base）——曾记为「剩余 3–4× 无解释」。
 按其 README 的确切口径（**RTF = synth ÷ 音频时长，`load`(权重加载) 与 `clone`(说话人嵌入)
 均排除**；warm、3 次均值；该移植主动砍掉全部情感控制）重算本机：
 
@@ -486,7 +486,7 @@ s2mel 权重截至 2026-08-20 未公开发布。
 
 | 分项                                                              | 倍数            | 依据                         |
 | ----------------------------------------------------------------- | --------------- | ---------------------------- |
-| 本仓管线开销（HTTP + mp3 编码 + 情感向量 + 长跑降频 + 逐句往返）  | **2.1×**        | 整集 9.0 → 对齐档 4.37       |
+| 本管线开销（HTTP + mp3 编码 + 情感向量 + 长跑降频 + 逐句往返）    | **2.1×**        | 整集 9.0 → 对齐档 4.37       |
 | 硬件（M4 base 120 GB/s / 10 GPU 核 vs M5 Pro 273+ GB/s / ~20 核） | 2–3×（估）      | 带宽与核数比                 |
 | **残差**                                                          | **约 1.3–1.9×** | 4.37 ÷ 1.14 = 3.8×，扣掉硬件 |
 
@@ -608,7 +608,7 @@ TensorRT-LLM）。仓库内**无 vLLM 后端**，README 只给外链 recipe。
 
 **把 dtype 改成 fp16/bf16 的收益上限可算**：AR 常驻权重 1.93 GB → 0.96 GB，按 25 tok/s 折算
 最多省 0.20–0.30 个 RTF，相对总 RTF 8.8–9.2 即 **2–3%**；而 S2M+BigVGAN 段的 autocast 被
-`:826-827` 硬编码 `dtype=None`，低精度根本覆盖不到那两段。叠加本仓已记录的 NaN 失效模式，
+`:826-827` 硬编码 `dtype=None`，低精度根本覆盖不到那两段。叠加本管线已记录的 NaN 失效模式，
 **风险收益不对称，明确不做**。旁证：4090 上 2.5 的 bf16（0.2065）本身就不比 fp32（0.2060）快
 ——说明 2.5 架构里已经没有对低精度友好的 compute-bound 块了。
 
@@ -632,9 +632,9 @@ TensorRT-LLM）。仓库内**无 vLLM 后端**，README 只给外链 recipe。
 | 12  | 重录目标风格参考样本            | 换段落即 F0 +12~16%、起伏 +25~40%（VOICE-CLONING §3.3）；好段落必须放开头（§5） | 一次录制（**须本人操作**）                                             | 工具已就绪：`prospect_ref.py --accept` 判保真度（削波/底噪/动态/带宽/超 15s），再跑纯克隆小样比风格（合格线 F0 ≥155 Hz、起伏 ≥34） | 🟡 **工具就绪，待录音**                                                                                                                                                                                              |
 | 13  | `prospect_ref.py` 增保真度门    | 现公式 5 项全是「风格」、0 项「保真度」；谱质心把「亮」与「噪」混淆             | 排名口径变更（质心改限带、静音改绝对阈）                               | 成片在用的 180s 段**被放行** ✅，且正确标出更脏的窗口（底噪 −46 dB/动态 29 dB）；超 15s 与 5 kHz 带限反例均被拦                     | ✅ **已做**                                                                                                                                                                                                          |
 | 14  | 进程级分片并行（双实例）        | 原假设「瓶颈是发射/同步开销」                                                   | —                                                                      | —                                                                                                                                  | ⛔ **不做**：#6 已定因为**热节流**而非吞吐受限（换页/分配器/泄漏均排除）。两个进程只会更快撞上同一个热墙——单实例都已在 6 次调用内漂 2.4×                                                                             |
-| 15  | 降 `diffusion_steps` / 关 CFG   | s2mel 占 45–73%，步数 25→12 本可省该段一半                                      | —                                                                      | —                                                                                                                                  | ⛔ **不可做**：二者是 `infer()` **函数体内的局部字面量**（`:829-830`），既非参数也非模块常量 ⇒ 无法传入、无法 monkeypatch，只能改上游源码——那是 `glossary.yaml` 被否决的同一模式（不受本仓版本控制、换机即静默失效） |
+| 15  | 降 `diffusion_steps` / 关 CFG   | s2mel 占 45–73%，步数 25→12 本可省该段一半                                      | —                                                                      | —                                                                                                                                  | ⛔ **不可做**：二者是 `infer()` **函数体内的局部字面量**（`:829-830`），既非参数也非模块常量 ⇒ 无法传入、无法 monkeypatch，只能改上游源码——那是 `glossary.yaml` 被否决的同一模式（不受本 skill 版本控制、换机即静默失效） |
 | 16  | 迁 MLX / 换栈                   | 见 §6.3                                                                         | 砍掉全部情感控制 ⇒ 整套风格体系失效                                    | —                                                                                                                                  | ⛔ **不推荐**：#4 已完成分母校准，缺口基本可归因，无大块性能余量支持换栈                                                                                                                                             |
-| 17  | 升级到 2.5-RL 权重              | 论文中文 WER 4.36→3.93、SS 77.10→77.92                                          | 整集重录                                                               | —                                                                                                                                  | ⛔ **权重未公开**（见下）；订阅 upstream release 即可，无需本仓工程                                                                                                                                                  |
+| 17  | 升级到 2.5-RL 权重              | 论文中文 WER 4.36→3.93、SS 77.10→77.92                                          | 整集重录                                                               | —                                                                                                                                  | ⛔ **权重未公开**（见下）；订阅 upstream release 即可，无需本 skill 工程                                                                                                                                              |
 
 ### 7.1 候选档怎么定档（#10 / #11 的收尾动作）
 
@@ -644,17 +644,17 @@ TensorRT-LLM）。仓库内**无 vLLM 后端**，README 只给外链 recipe。
 ```bash
 # 0) 先确认测量环境合格（§6.5）——否则听感之外的任何数字都不可归因
 cd ~/tools/index-tts
-./.venv/bin/python <本仓>/$R/tts_bench.py --check-only
+./.venv/bin/python $T/pipeline/scripts/tts_bench.py --check-only
 
 # 1) 客观面：同一批句子在两档之间成对 A/B（逐句交替顺序以抵消热漂移）
 #    #10 比「表达力密度」——F0 中位/起伏/音节率/限带质心；#11 比清晰度——ASR 回转写 CER
-./.venv/bin/python <本仓>/$R/tts_bench.py \
-    --ref <本仓>/$V/me-bright.wav \
+./.venv/bin/python $T/pipeline/scripts/tts_bench.py \
+    --ref $V/me-bright.wav \
     --texts <混合句集.txt> --ab-param duration_factor --ab-values 0.95,1.05 \
     --num-beams 3 --cooldown 60 --json .temp/ab-df.json
 
 # 2) 主观面：小样 A/B + 人耳（客观指标只能排除明显更差的，选不出「更好听」）
-uv run --no-project --with mutagen $R/tts_sample.py \
+uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py \
     --ref $V/me-bright.wav --style sunny-pure --seed 4242 --play
 ```
 
@@ -678,15 +678,15 @@ release 比自行复现 GRPO 经济得多**——同时也在等 Zipformer 版 s
 | 迁 CUDA + 开 `--accel`  | `model_v2_5.py:761-772` 的 accel 旁路**只认 `temperature`**，其余采样参数全部静默失效 | 「参数明明传了却毫无效果」                                                                                                  |
 | 迁小显存 CUDA（<10 GB） | `low_vram` 触发，`:509` 把 >40 字符的行按标点**硬切并插 200 ms 静音**                 | 旁白行中间莫名多出停顿                                                                                                      |
 | 迁 Linux                | 中文归一化引擎从 wetext 换成 `tn.chinese.normalizer`（`front.py:130-142`）            | 读法行为可能变化——**必须在 Linux 上重跑空格矩阵**（§2.2）                                                                   |
-| 换 MLX 栈               | 主动放弃 `emo_vector`/`emo_audio_prompt`/`emo_text` 与束搜索                          | 本仓风格体系、alpha 标定、`sunny`/`sunny-steady` 双档全部失效                                                          |
+| 换 MLX 栈               | 主动放弃 `emo_vector`/`emo_audio_prompt`/`emo_text` 与束搜索                          | 本管线风格体系、alpha 标定、`sunny`/`sunny-steady` 双档全部失效                                                      |
 | 原地覆盖参考样本        | 上游按路径缓存条件张量                                                                | 「sha1 是新的、音色是旧的」（§5 末）                                                                                        |
 | 合并多句成单请求        | 118 字段预算与 1815 mel token 同时变成活约束                                          | 单请求上限约 36 s 语音；溢出表现为**文本尾部未被念出**                                                                      |
-| 想调 S2M 扩散步数 / CFG | 二者是 `infer()` 体内的**局部字面量**（`:829-830`），不在签名里、也不是模块常量       | 无法从外部传入或 monkeypatch；只能改上游源码，而那份改动不受本仓版本控制、换机即静默失效（同 `glossary.yaml` 被否决的理由） |
+| 想调 S2M 扩散步数 / CFG | 二者是 `infer()` 体内的**局部字面量**（`:829-830`），不在签名里、也不是模块常量       | 无法从外部传入或 monkeypatch；只能改上游源码，而那份改动不受本 skill 版本控制、换机即静默失效（同 `glossary.yaml` 被否决的理由） |
 
 ## 九、上游追踪与参考文献
 
 **值得订阅而非自研的两件事**：Zipformer 版 s2mel 权重（S2M 0.081 → 0.017，§6.1）、
-IndexTTS2.5-RL 权重（§七 #16）。二者都无需本仓做任何工程。
+IndexTTS2.5-RL 权重（§七 #16）。二者都无需本 skill 做任何工程。
 
 本机 `~/tools/index-tts` 是 **depth-1 浅克隆**（`git log` 只有 1 条，不代表上游历史）。
 升级上游后须复核本文全部 `file:line` 锚点。
