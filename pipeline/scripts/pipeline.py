@@ -11,14 +11,14 @@
     就是第二事实源，必然漂移。`status` 实时派生新鲜度，零存储。
   - 不假装能跑写作阶段（①②④⑤中的人/代理部分）——只跑工具与其质量门。
 
-用法（$R/$P 的定义见 ../README.md 路径变量约定——那里是唯一定义处，此处不复制
+用法（$T/$P 的定义见 ../README.md 路径变量约定——那里是唯一定义处，此处不复制
 位置字面量，否则搬迁时又多两处要改）：
-  uv run --no-project $R/pipeline.py --project $P <cmd>
+  uv run --no-project $T/pipeline/scripts/pipeline.py --project $P <cmd>
 子命令：status / doctor / build / check / tts / captions / render / qa / all / clean-samples / stages
-（本行与 pipeline/README.md、子项目 README 的三份抄件由 tests/test_stages.py 对齐 argparse
+（本行与 pipeline/README.md、各集 README 的三份抄件由 tests/test_stages.py 对齐 argparse
 真实注册表——`stages` 上线时三处全漏，抄件无执法必漂。）
 系列扇出（--series <id>，与 --project 互斥）：
-  uv run --no-project $R/pipeline.py --series <series-id> <cmd> [<cmd 自己的 flag>…]
+  uv run --no-project $T/pipeline/scripts/pipeline.py --series <series-id> <cmd> [<cmd 自己的 flag>…]
 按 series.json 把该系列各集逐集执行（仅白名单命令，见 FANOUT_OK）；子命令后的
 flag 原样转发给每集（见 sub_argv——不转发就是静默缩小检查面）。
 """
@@ -175,9 +175,7 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
             print(f"  ❌ IndexTTS 服务不可达: {e}（启动命令见 {MANUAL} §二）")
             ok = False
     if not (root / "video" / "node_modules").is_dir():
-        print(
-            "  ⚠️  video/node_modules 未安装（渲染前: cd video && pnpm install --ignore-workspace）"
-        )
+        print("  ⚠️  video/node_modules 未安装（渲染前: cd video && pnpm install）")
     print(
         "  ℹ️  渲染主机约束：macOS + PingFang SC/Songti SC 系统字体（Linux/CI 渲染不在支持范围）"
     )
@@ -230,17 +228,22 @@ def cmd_tts(
             )
             return rc
     tts = cfg.get("tts", {})
+    engine = tts.get("engine", config.default("tts.engine"))
     cmd = [
         "uv",
         "run",
         "--no-project",
+        # 双依赖并注：edge 引擎需要 edge-tts（在线预置音色），indextts 只需 mutagen。
+        # 此前只注 mutagen，engine=edge 时薄包装内 ModuleNotFoundError 退出 1——
+        # 单入口对引擎的选择必须连同运行期依赖一起切换。
+        *(["--with", "edge-tts"] if engine == "edge" else []),
         "--with",
         "mutagen",
         str(root / "scripts" / "tts.py"),  # 工程内薄包装（注入 --project）
         "--engine",
-        tts.get("engine", config.default("tts.engine")),
+        engine,
     ]
-    if tts.get("engine", config.default("tts.engine")) == "indextts":
+    if engine == "indextts":
         cmd += ["--ref", str(paths.WORKSPACE / tts["ref"])]
         if tts.get("ref_sha1"):
             cmd += ["--expect-ref-sha1", tts["ref_sha1"]]
@@ -274,8 +277,12 @@ def cmd_captions(root: Path, _cfg: dict) -> int:
 def cmd_render(root: Path, cfg: dict, final: bool) -> int:
     video = root / "video"
     if not (video / "node_modules").is_dir():
-        print("先安装依赖（--ignore-workspace 隔离根 workspace）…")
-        rc = run(["pnpm", "install", "--ignore-workspace"], cwd=video)
+        print("先安装依赖（嵌套 workspace 自锚隔离）…")
+        # 裸 install：pnpm ≥12 加 --ignore-workspace 会把工程自身 pnpm-workspace.yaml
+        # 的 allowBuilds 一并忽略 ⇒ ERR_PNPM_IGNORED_BUILDS 非零退出、node_modules
+        # 半残；对根 workspace 的隔离由 video/pnpm-workspace.yaml（packages:[] 自锚）
+        # 真正兜住——「能装」≠「装全」，见源仓 ISSUE-175 的结论反转。
+        rc = run(["pnpm", "install"], cwd=video)
         if rc:
             return rc
     r = cfg.get("render", {})
@@ -441,9 +448,9 @@ def fanout(series_id: str, cmd: str, extra: list[str]) -> int:
             f"   tts/render/qa/all/clean-samples 刻意不可扇出——4 集扇出 tts 即一条"
             f" 8 小时不可逆无人值守命令（mp3 单槽位覆盖），昂贵/破坏性操作必须显式逐集执行。"
         )
-    series_list = json.loads((paths.WORKSPACE / "series.json").read_text(encoding="utf-8"))[
-        "seriesList"
-    ]
+    series_list = json.loads(
+        (paths.WORKSPACE / "series.json").read_text(encoding="utf-8")
+    )["seriesList"]
     hit = next((s for s in series_list if s["id"] == series_id), None)
     if hit is None:
         ids = [s["id"] for s in series_list]

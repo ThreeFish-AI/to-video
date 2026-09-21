@@ -15,7 +15,7 @@
    随 prompt 时长上升后在 ~10 秒饱和（Voicebox / E2 TTS）。
 2. **「保留原始采样率」对模型无影响**：`infer_v2_5.py:398` 的 `librosa.load` 不传 `sr`，
    即**无条件重采样到 22050 Hz 单声道**；再降到 16 kHz 喂 CAMPPlus / w2v-BERT
-   （Nyquist 8 kHz）。写入的采样率只影响本仓文件的 sha1 与体积。录 96 kHz 无收益，
+   （Nyquist 8 kHz）。写入的采样率只影响产物文件的 sha1 与体积。录 96 kHz 无收益，
    但低码率 mp3（64 kbps 在 ~11 kHz 滚降）会在模型可见频带边缘留下人工痕迹。
 
 样本时长的真实代价也不在「条件提取」——那一步按路径缓存、每个样本只算一次
@@ -24,7 +24,7 @@
 本机实测（同文本同种子、交错 3 组）把参考从 12 秒换到 6 秒，`s2mel_time` 中位数
 21.81s → 10.02s（−54%）——但音色与语速也随之改变，**不可为提速缩短参考**。
 
-用法：uv run --no-project --with soundfile $R/prepare_ref.py \
+用法：uv run --no-project --with soundfile $T/pipeline/scripts/prepare_ref.py \
           <源音频> [--start 10] [--duration 15] [--out $V/me.wav]
 """
 
@@ -37,7 +37,13 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-VOICES_DIR = Path(__file__).resolve().parents[1] / "voices"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from paths import WORKSPACE  # noqa: E402 - 惰性锚；voices 属工作区内容
+
+#: 缺省输出锚**工作区** voices/：旧实现按脚本位置推 parents[1]/voices，抽取后
+#: 会解析进 skill 安装目录——生物特征样本落错位置且不受工作区 .gitignore 覆盖。
+#: 不带 --out 即写此处；显式 --out 恒优先。
+VOICES_DIR = WORKSPACE / "voices"
 
 
 def main() -> int:
@@ -60,7 +66,7 @@ def main() -> int:
     parser.add_argument(
         "--out",
         default=None,
-        help="输出路径（默认写入子项目 pipeline/voices/<源文件名>.wav）",
+        help="输出路径（默认写入脚本侧 pipeline/voices/<源文件名>.wav；工作区用法请显式给 --out $V/<名>.wav）",
     )
     args = parser.parse_args()
 

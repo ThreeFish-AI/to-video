@@ -22,7 +22,7 @@ pre-commit 门整体失效、试听小样写错位置且 git status 不可见）
 
   - 新哨兵 `.to-video-root`；**兼容识别**旧哨兵 `.influence-root`（negentropy
     工作区继续用旧名，零改动迁移）。
-  - 为什么不用 `.git` 当工作区哨兵：本仓系的 `.git` 可能是**文件**（git worktree），
+  - 为什么不用 `.git` 当工作区哨兵：相关仓的 `.git` 可能是**文件**（git worktree），
     `(p / ".git").is_dir()` 当场失效；测试 fixture 无 `.git`；`~/tools/index-tts`
     是真 `.git` 目录会误锚。`.git` 只用于 `project_root`（且文件/目录皆认）。
   - 找不到即**大声退出**，绝不回退猜测：报错须写明找什么标记、从哪开始、走到
@@ -47,8 +47,8 @@ pre-commit 门整体失效、试听小样写错位置且 git status 不可见）
 ## 导入边界（承重，勿破）
 
 `pipeline.py` / `check_series.py` / `scaffold.py` / `verify_skeleton.py` /
-`tts_sample.py` / `refs.py` / `record_archify.py` / `record_archify_all.py`
-可以 `import paths`。**`tts.py` 与 `tts_server.py` 绝不可以** —— 它们会被拷到
+`tts_sample.py` / `refs.py` / `prepare_ref.py` / `record_archify.py` /
+`record_archify_all.py` 可以 `import paths`。**`tts.py` 与 `tts_server.py` 绝不可以** —— 它们会被拷到
 `~/tools/index-tts` 的 venv 里运行并 `from tts import ...`，给它们增加任何同目录
 依赖都会断掉那条拷出路径。`tts.py` 全靠入参与环境变量，本就不需要任何根。
 """
