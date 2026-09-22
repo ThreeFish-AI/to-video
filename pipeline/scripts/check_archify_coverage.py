@@ -649,6 +649,23 @@ def main() -> None:
             f"{'/'.join(untyped[:6])}{'…' if len(untyped) > 6 else ''}"
             "——用 scripts/archify_types.py 回填"
         )
+    # lead_sec 全 0 拦截：录制器恒写 0.0，漏跑 archify_lead.py 会把场记板白闪
+    # 播进成片且此前**无门可拦**（ISSUE-193 审计补门）。有 cue 引用任何章时才执法
+    # ——纯 sidecar 遗迹（无 cue）不触发。
+    if have_cues and sidecars:
+        leads = []
+        for f in sidecars:
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            leads += [c.get("lead_sec") for c in d.get("chapters", [])]
+        leads = [x for x in leads if x is not None]
+        if leads and all(x == 0 for x in leads):
+            warns.append(
+                "全部章节 lead_sec == 0——几乎必是漏跑 archify_lead.py（场记板白闪"
+                "将播进成片；录制器恒写 0.0，只有白闪实测能回填真值）"
+            )
     total_ch = 0
     if manifest is not None:
         total_ch = sum(len(d.get("chapters", [])) for d in manifest.values())

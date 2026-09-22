@@ -179,6 +179,14 @@ def frame_diff(a: Path, b: Path) -> dict:
 def extract_frame(
     ffmpeg: list[str], video: Path, cwd: Path, ts: float, dst: Path
 ) -> None:
+    """单帧抽取。两个非显然的怪癖都刻在参数上（remotion 内置 ffmpeg 的编译裁剪所致）：
+
+    - `video` 由调用方 ``.resolve()`` 成绝对路径再进来：内置 ffmpeg 对相对路径的
+      解析随 cwd 漂移，同一条命令换个目录就抽不到帧；
+    - ``-update 1`` 必带：单帧输出时 ffmpeg 默认沿用首个输出文件名且**跳过已
+      存在目标的写入**——不加它，反复抽同一名目标会静默返回旧图（对拍/复检直接
+      失真）。
+    """
     try:
         subprocess.run(
             [

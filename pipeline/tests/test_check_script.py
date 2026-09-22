@@ -375,3 +375,27 @@ def test_check_motion_unknown_verb_and_missing_layer(project):
     shutil.rmtree(project / "video" / "src" / "motion")
     rc, out = run_check(project, "--check-motion")
     assert rc == 0 and "未调用" not in out, out
+
+
+def test_scene_anchor_unknown_id_fails(project):
+    """ISSUE-190 防 5：场景代码 at()/dur() 引用不存在的句 id → FAIL（渲染期才抛的跳号句前移拦截）。"""
+    board = "| 镜 | 句区间 | 画面 | 动效 |\n|---|---|---|---|\n| 0-A | p0-01..02 | 卡 | ；`@stagger` |\n"
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    write_narration(project, [BENIGN, BENIGN, BENIGN, BENIGN])
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const t1 = at('p0-01');\nconst d9 = dur('p0-99');\n",
+    )
+    rc, out = run_check(project, "--check-scenes")
+    assert rc == 1 and "p0-99" in out and "at()/dur()" in out, out
+
+    # 合法锚（两句都存在）不报
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const t1 = at('p0-01');\nconst d2 = dur('p0-02');\n",
+    )
+    rc, out = run_check(project, "--check-scenes")
+    assert "at()/dur()" not in out, out

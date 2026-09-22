@@ -181,6 +181,23 @@ def main() -> None:
 
     done, skipped, failed = [], [], []
     types_before = diagram_types(archify_dir, [s for s, _h, _o in plan])
+    # 帧率基线（录前快照 = 检出版本的 committed sidecar）：录后逐章比对，
+    # 退化超 10% 点名补录——screencast 帧率受前台聚焦/负载影响，静默退化会让
+    # trimBefore 掐点整体漂移，而既有 --min-fps 18 只拦「绝对低」不拦「相对掉」。
+    fps_baseline: dict[str, dict[str, float]] = {}
+    for slug, _h, _o in plan:
+        sc = archify_dir / f"{slug}.json"
+        if sc.is_file():
+            try:
+                fps_baseline[slug] = {
+                    c["id"]: c["measured_fps"]
+                    for c in json.loads(sc.read_text(encoding="utf-8")).get(
+                        "chapters", []
+                    )
+                    if c.get("measured_fps")
+                }
+            except (json.JSONDecodeError, KeyError):
+                pass
     print(f"计划重录 {len(plan)} 图（串行）；源图目录 {html_dir}")
     for i, (slug, html, overridden) in enumerate(plan, 1):
         sidecar = archify_dir / f"{slug}.json"
@@ -251,10 +268,38 @@ def main() -> None:
                 f"  FAIL 图型在重录中丢失：{sorted(lost)}"
                 f"——覆盖门的 min_diagram_types 可能恰好放行这次退化，勿忽略"
             )
+        # 帧率相对退化点名（对录前基线 = committed sidecar 的 measured_fps）：
+        # 绝对门 --min-fps 18 只拦「低」，拦不住「从 25 掉到 19」这类相对退化。
+        degraded: list[str] = []
+        for slug in done:
+            base = fps_baseline.get(slug)
+            if not base:
+                continue
+            sc = archify_dir / f"{slug}.json"
+            try:
+                now = {
+                    c["id"]: c["measured_fps"]
+                    for c in json.loads(sc.read_text(encoding="utf-8")).get(
+                        "chapters", []
+                    )
+                    if c.get("measured_fps")
+                }
+            except (json.JSONDecodeError, KeyError):
+                continue
+            for cid, fps in now.items():
+                b = base.get(cid)
+                if b and fps < b * 0.9:
+                    degraded.append(f"{slug}/{cid} {b:.1f}→{fps:.1f}fps")
+        if degraded:
+            print(
+                "  WARN 帧率相对退化超 10%（对录前基线，建议逐章补录）：\n    "
+                + "\n    ".join(degraded)
+            )
     if not a.dry_run and done:
         print(
-            "  下一步：scripts/archify_lead.py 测定 lead_sec（录制器恒写 0.0，"
-            "漏跑则每章片头把场记板白闪播进成片）→ scripts/archify_manifest.py"
+            "  下一步：$T/pipeline/scripts/archify_lead.py --project $P 测定 lead_sec"
+            "（录制器恒写 0.0，漏跑则每章片头把场记板白闪播进成片）"
+            "→ $T/pipeline/scripts/archify_manifest.py --project $P"
         )
     if failed or lost:
         sys.exit(1)

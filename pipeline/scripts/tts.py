@@ -179,7 +179,7 @@ STYLE_PRESETS: dict[str, dict] = {
         "beams": 3,
     },
     # ── 以下两档是**候选**，尚未定档：新增而非改动生产档，故对三集缓存零影响。
-    #    定档前必须按 INDEXTTS-2.5-ADVANCED.md §6.5 的测量协议做 A/B + 人耳确认。
+    #    定档前必须按 INDEXTTS-2.5-ADVANCED.md §6.5 的测量协议做 A/B + 人工试听定档。
     "sunny-pure": {
         "label": "明快纯载",
         # 候选（路线图 #10）：砍掉 sunny 里的配料维度，使 Σvec=1.0 与「happy 单载」
@@ -660,6 +660,11 @@ def digest_indextts(
 # 条目按内容寻址（<slug>/<sid>.<digest12>.mp3），库根迁移零失效：默认目录
 # 自 negentropy-influence 改名后，旧目录存在即回退使用（存量缓存原地命中），
 # skill README 提供可选的一次性合并命令。
+#
+# ⚠️ 继承是中性的：坏 take 同样按 digest 逐代继承（187/187 句恢复零重合成 =
+# 缺陷一并回来；换 worktree 重建继续继承，ISSUE-192）。撤销发音标注会使 digest
+# 回退旧值、静默复活历史坏 take——死 digest 下的已知坏 take 一律改名隔离
+# （<sid>.<digest12>.mp3 → *.bad-<tag>，.sha 邻档同步），留档不删，恢复后抽检。
 
 DEFAULT_STORE = "~/Library/Application Support/to-video/tts-store"
 LEGACY_STORE = "~/Library/Application Support/negentropy-influence/tts-store"

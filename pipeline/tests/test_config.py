@@ -415,3 +415,16 @@ def test_archify_defaults_are_loose_floors():
         "archify.exempt_scenes": [],
     }.items():
         assert config.default(dotted) == want, dotted
+
+
+def test_archify_check_thresholds_defaults():
+    """check_archify 三阈值（rate_min/rate_max/min_fps）默认值层 + 覆写路径。"""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import config  # noqa: E402
+
+    assert config.default("archify.rate_min") == 0.7
+    assert config.default("archify.rate_max") == 1.35
+    assert config.default("archify.min_fps") == 18.0
