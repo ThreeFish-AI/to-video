@@ -20,7 +20,7 @@ uv run --no-project $T/pipeline/scripts/verify_skeleton.py --strict  # 有未登
 
 要点（详见 skeleton.toml 内注）：
 
-- **A 档 · frozen 逐字节保留**（清单见 skeleton.toml，含 `src/timing.ts` 的 computeTimeline + beatWindow + SCENE_FADE_FRAMES、`@remotion/media` 的 NarrationAudio、fitText 的 Subtitle、幕间呼吸淡入淡出的 SceneFade、cards、`src/motion/` 运动层（见下节）、三份薄包装与全部工程配置）。改任何一处 = 改模板 + 改各集，`--strict` 会盯住。
+- **A 档 · frozen 逐字节保留**（清单见 skeleton.toml，含 `src/timing.ts` 的 computeTimeline + beatWindow + SCENE_FADE_FRAMES、`@remotion/media` 的 NarrationAudio、fitText 的 Subtitle、顶部分段章节进度条的 ChapterProgress（标题数据面 `src/chapters.json` 由 build 派生，见下「顶部章节条」）、幕间呼吸淡入淡出的 SceneFade、cards、`src/motion/` 运动层（见下节）、三份薄包装与全部工程配置）。改任何一处 = 改模板 + 改各集，`--strict` 会盯住。
 - **B 档 · overridable**：`src/timing.json`（时序常数 SSOT——timing.ts 与 Python 侧共读同一文件，**改常量只改此处**）。覆写许可存在但四集从未行使过。
 - **regioned**：`src/Main.tsx` 区外冻结（每集内容只有场景 import 与 SCENE_COMPONENTS 注册表）；**structured**：`package.json` 门住依赖零漂移、忽略 name/description。
 - **每集改写**：`src/design/theme.ts`（本集色板）、`src/scenes/*`（全部重写；骨架样例见模板里的 scenes-EXAMPLE.tsx.txt）。
@@ -176,6 +176,24 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 - `Sequence name` 与 storyboard 镜号一一对应（QA 时可对照）；
 - beat 内动画优先走 `src/motion/` 运动模型（见上节铁律）；裸 `interpolate`/`spring` 是逃生舱而非默认。一律帧驱动，禁 `Date.now()`/随机数——渲染必须确定。
 
+## 顶部章节进度条（frozen chrome · ChapterProgress）
+
+全片 overlay，`Main.tsx` 挂 `<Subtitle>` 之后（最顶层），向观众标示各幕篇幅占比与播放进度。
+规格 SSOT 在模板 [ChapterProgress.tsx](../templates/video-skeleton/video/src/components/ChapterProgress.tsx)，
+此处只锚定不可漂移的设计事实：
+
+- **数据面**：段边界/占比来自 `computeTimeline` 的 `scenes`（manifest 实测时长驱动，TTS 重跑自动重定时）；
+  段下标签的**标题文字**来自 `video/src/chapters.json`——build_narration 从 narration.md `## Pn 幕标题`
+  派生（见 skills/03「幕标题即章节标签」）。chapters 为空（首次 build 前）组件自渲染 null。
+- **几何**：x72..1848（左锚与 SceneTag 对齐）；轨道 y14–22（高 8 胶囊）、段间隙 8、段宽∝幕时长
+  （含幕间 gap）；标签行 y28–54，格式 `PART n : 标题`（mono 14 前缀 + sans 20 标题，P0→PART 1，
+  段左对齐）；播放头 Ø12 亮点在填充前沿。**整带收在 y<56**——各幕内容 y≥56 起（上方红线 2b）。
+- **状态机**：已播部分 `text@0.9` 填充；当前章标签 `text`、其余 `dim`；段填充线性无缓动（进度是测量
+  不是动效）；开场 12 帧淡入、片尾 tail 窗口 ≤30 帧淡出（均从 props 推导，零写死帧数）；零 spring。
+- **降级阶梯**：段宽 <120 只显 `P{n}`、<64 不显标签；标题缺失只显 `PART n`。
+- **HarnessBadge 共存**（claude-code 系列）：原「顶边横条 y 12–48」现与章节条同带——EP2–5 同步
+  窗口内定案 Badge 下移或并入章节条带（届时修订本节与 harness-stack.tsx 文件头，EP1 已发布不动）。
+
 ## theme.ts 色彩契约设计规则
 
 1. 底座恒定：bg `#0E1116` / panel / panelBorder / text / dim / danger `#FF5C5C`（恒配 ✗，仅失败态）/ 字体三族。
@@ -190,6 +208,8 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 
 1. **百分比定位量纲**：`left/top` 混用 `%` 与 px 时计算基准不同——居中场景统一用 px（`width/2 - w/2`）推导，避免「看着居中、渲染偏移」。
 2. **底部角标避让字幕条**：字幕条占底部 ~54+44px；角标/公式/说明文字 `bottom ≥ 150`。
+2b. **顶部安全带 y<56 归章节条**：顶部章节进度条占 y14–54（条 14–22 + 标签 28–54，
+   见「顶部章节条」节）——各幕画面内容 `y ≥ 56` 起；SceneTag 维持 top:64。
 3. **SVG 描边动画**：`pathLength={1}` 会归一化路径长度，与像素级 `strokeDasharray` 互斥——二选一；描边生长用 `pathLength + strokeDashoffset` 归一化方案。
 4. **片尾渐黑窗口**：不写死帧数，从**末 beat 总时长**（`beatDurationInFrames` 传入收尾组件）实时推导淡出区间——勿用末句时长（第三集上线教训：末句短于 beat 时渐黑提前收尾，导致收尾长黑屏）。
 5. **首帧内容必须可渲染**：`calculateMetadata` 依赖 manifest；缺 manifest 时 Root 已有中文报错引导先跑 tts.py。
@@ -245,7 +265,9 @@ QA 验收：逐幕抽帧目检色契约遵守、beat 窗口不越界、角标不
   **本集层高亮脉冲**（主色描边 + 辉光呼吸两次），其余层压暗至 55% 亮度；随后栈整体缩小淡出，与常驻条
   交叉淡入衔接。**常驻形式 = 顶边横条**（y 12–48，本集层高亮）：EP1 评审实测纵向左上角标（300×194）
   与既有各幕左上内容五处碰撞（各幕内容最早 y=56 起），顶边横条是唯一零碰撞常驻区——形式适配的
-  实测依据见 harness-stack.tsx 文件头，不占字幕安全区。
+  实测依据见 harness-stack.tsx 文件头，不占字幕安全区。⚠️ 2026-09-22 起该带由 frozen
+  ChapterProgress 章节条接管（见「顶部章节进度条」节）：EP1 已发布保持原样；EP2–5 同步时
+  Badge 须定案下移或并入章节条带（x 跨度向 72..1848 对齐收敛）。
 - **P6 收尾用法**：栈重新放大居中；已发布层保持点亮，**下期层呼吸预告**（画面卡显示下集标题——
   派生自 series.json，口播只说「下期 + 话题描述」）；系列标语压在栈底。
 - **动画时点**一律由句边界推导（`rel(beat, '句id')`），禁写死帧数。

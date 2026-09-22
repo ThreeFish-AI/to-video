@@ -62,6 +62,7 @@ $P/
 
 **格式契约**（`build_narration.py` 的解析规则）：
 - narration.md：`## P0 标题` 分幕 + `- [p0-01] 文本` 一句一行；句 id 必须以幕名小写为前缀、全片唯一。
+  幕标题另派生 `video/src/chapters.json`（顶部分段章节进度条的标签数据面）。
 - `>` 引用块为画面备注，不进配音；英文方法名做角标不口播。
 
 ## 三、公共脚本（单一事实源）与编排入口
@@ -78,7 +79,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 
 | Stage | 命令             | 输入 → 产出                                         | 幂等/续跑               |
 | ----- | ---------------- | --------------------------------------------------- | ----------------------- |
-| ③     | `build`          | narration.md → narration.json                       | 纯函数                  |
+| ③     | `build`          | narration.md → narration.json + video/src/chapters.json | 纯函数               |
 | ④⑤    | `check`          | narration.json + storyboard.md + pipeline.toml → 门 | —                       |
 | ⑥     | `tts [--plan]`   | narration.json + 参考样本 → 逐句 mp3 + manifest     | sidecar 摘要 / 逐句续跑 |
 | ⑥+    | `captions`       | manifest + timing.json → out/captions.{srt,vtt}     | 纯函数                  |
@@ -89,7 +90,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 
 | 脚本 | 用途 | 工程内等价调用 |
 | ---- | ---- | -------------- |
-| [scripts/build_narration.py](./scripts/build_narration.py) | narration.md → narration.json + 时长估算 | `uv run --no-project scripts/build_narration.py` |
+| [scripts/build_narration.py](./scripts/build_narration.py) | narration.md → narration.json + chapters.json（章节条标签）+ 时长估算 | `uv run --no-project scripts/build_narration.py` |
 | [scripts/tts.py](./scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 预置音色 / indextts 声音克隆；风格推荐位 sunny 明快阳光，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
 | [scripts/tts_server.py](./scripts/tts_server.py) | IndexTTS 推理服务（声音克隆后端，**运行于 index-tts 环境**，非本仓） | 在 `~/tools/index-tts` 内启动，见 [VOICE-CLONING.md §二](./VOICE-CLONING.md) |
 | [scripts/tts_sample.py](./scripts/tts_sample.py) | 单句声音小样试听（直调 IndexTTS 服务合成一句话 + 全风格 A/B，定稿风格前的必经关口） | 无工程薄包装，从 $T 调用：`uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py --ref <样本.wav> --all-styles --play`，见 [VOICE-CLONING.md §5.1](./VOICE-CLONING.md) |
