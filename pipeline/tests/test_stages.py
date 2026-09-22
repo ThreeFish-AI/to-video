@@ -241,6 +241,49 @@ def test_pipeline_cli_registers_forwarded_flags():
         assert flag in result.stdout
 
 
+# ---------------- deliver（⑨ 交付归档） ----------------
+
+
+def test_deliver_stays_outside_fanout_whitelist():
+    """deliver 写 $P 之外的用户目录且累积版本文件：必须显式逐集执行，
+    不得被收编进扇出白名单（complement 测试只钉五个既有破坏性命令，
+    新增子命令的误收编由此条拦住）。"""
+    assert "deliver" in registered_subcommands() - fanout_ok()
+
+
+def test_final_render_stage_declares_deliver():
+    """⑨ 命令声明完整性：test_commands_are_registered_subcommands 只查 ⊆ 注册表，
+    反向缺口（⑨ 删漏 deliver）由此条拦住。"""
+    by_id = {st["id"]: st for st in stages()}
+    assert "deliver" in by_id["final-render"]["commands"]
+
+
+def test_deliver_forwards_root_and_dry_run_flags(monkeypatch, tmp_path):
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    assert pipeline.cmd_deliver(tmp_path, {}, out_root="/tmp/dv", dry_run=True) == 0
+    cmd = commands[0]
+    # --root 等号单 token 转发：'-' 开头的取值经分离 token 会被子进程 argparse 拒收
+    assert "--root=/tmp/dv" in cmd
+    assert "--dry-run" in cmd
+    assert cmd[cmd.index("--project") + 1] == str(tmp_path)
+
+
+def test_deliver_cli_registers_forwarded_flags():
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "deliver", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--root" in result.stdout and "--dry-run" in result.stdout
+
+
 def test_fanout_complement_is_nonempty_and_keeps_destructive_out():
     """反向：**未列入白名单**的子命令必须非空，且 tts/render/qa/all/clean-samples
     恰在其中——这是白名单（而非黑名单）的意义：未来新增子命令默认不可扇出，
@@ -355,3 +398,31 @@ def test_router_declares_subproject_ssot_paths():
     for rel in ("pipeline/skills/", "pipeline/scripts/"):
         assert rel in text, f"路由壳未声明 SSOT 路径 {rel}"
         assert (SKILL_ROOT / rel).is_dir(), f"SSOT 路径不存在：{rel}"
+
+
+def test_render_and_all_never_chain_deliver(monkeypatch, tmp_path):
+    """「刻意不串联」是有测试钉住的设计决策——完成行 `>> render 完成` 是 skills/09
+    钉死的判完成信号，串联外部写操作会在失败时产生混合信号（见 cmd_deliver 注释）。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    pipeline.cmd_render(tmp_path, {}, final=True)
+    # engine=edge：cmd_tts 的 indextts 分支会触 paths.WORKSPACE（pytest CWD 无
+    # 哨兵即大声退出），本测试只关心链条里有没有 deliver，不锚工作区。
+    pipeline.cmd_all(tmp_path, {"tts": {"engine": "edge"}})
+    assert not any("deliver.py" in " ".join(c) for c in commands)
+
+
+def test_doctor_reports_deliver_root_presence(monkeypatch, tmp_path, capsys):
+    """doctor 的 deliver root ℹ️ 行两分支：已配置显示生效值，未配置显示两渠道提示。"""
+    import pipeline
+
+    monkeypatch.setenv("TO_VIDEO_DELIVER_ROOT", "/tmp/some-dv")
+    pipeline.cmd_doctor(tmp_path, {}, None)
+    assert "交付归档根: /tmp/some-dv" in capsys.readouterr().out
+    monkeypatch.delenv("TO_VIDEO_DELIVER_ROOT")
+    pipeline.cmd_doctor(tmp_path, {}, None)
+    assert "交付归档未配置" in capsys.readouterr().out

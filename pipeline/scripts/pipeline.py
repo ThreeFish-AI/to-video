@@ -14,7 +14,7 @@
 用法（$T/$P 的定义见 ../README.md 路径变量约定——那里是唯一定义处，此处不复制
 位置字面量，否则搬迁时又多两处要改）：
   uv run --no-project $T/pipeline/scripts/pipeline.py --project $P <cmd>
-子命令：status / doctor / build / check / tts / captions / render / qa / all / clean-samples / stages
+子命令：status / doctor / build / check / tts / captions / deliver / render / qa / all / clean-samples / stages
 （本行与 pipeline/README.md、各集 README 的三份抄件由 tests/test_stages.py 对齐 argparse
 真实注册表——`stages` 上线时三处全漏，抄件无执法必漂。）
 系列扇出（--series <id>，与 --project 互斥）：
@@ -176,6 +176,18 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
             ok = False
     if not (root / "video" / "node_modules").is_dir():
         print("  ⚠️  video/node_modules 未安装（渲染前: cd video && pnpm install）")
+    # 交付归档根是工作区级机器属性（不在 pipeline.toml SCHEMA 内），doctor 只报
+    # env 渠道存在性——解析序 SSOT 在 deliver.py，此处不复制。
+    if env_root := os.environ.get("TO_VIDEO_DELIVER_ROOT", "").strip():
+        print(
+            f"  ℹ️  交付归档根: {Path(env_root).expanduser()}"
+            "（env:TO_VIDEO_DELIVER_ROOT；deliver 子命令消费）"
+        )
+    else:
+        print(
+            "  ℹ️  交付归档未配置（deliver 子命令；渠道 --root 一次性 或 env"
+            " TO_VIDEO_DELIVER_ROOT 持久）"
+        )
     print(
         "  ℹ️  渲染主机约束：macOS + PingFang SC/Songti SC 系统字体（Linux/CI 渲染不在支持范围）"
     )
@@ -272,6 +284,20 @@ def cmd_tts(
 
 def cmd_captions(root: Path, _cfg: dict) -> int:
     return run(uv_no_project("captions.py", [], project=root))
+
+
+def cmd_deliver(root: Path, _cfg: dict, out_root: str | None, dry_run: bool) -> int:
+    """⑨ 交付归档。显式子命令，刻意不串联进 render --final——完成行
+    `>> render 完成` 是 skills/09 钉死的判完成信号，串联外部写操作会在失败时
+    产生「标记已打 + rc 非零」的混合信号（触发契约见该文档 §终渲）。"""
+    extra: list[str] = []
+    if out_root:
+        # 等号单 token：分离 token 下传时取值以 '-' 开头会被子进程 argparse 拒收，
+        # 且用户侧唯一可用的 `--root=-x` 写法经重组也会失效——两级行为必须一致。
+        extra.append(f"--root={out_root}")
+    if dry_run:
+        extra.append("--dry-run")
+    return run(uv_no_project("deliver.py", [], *extra, project=root))
 
 
 def cmd_render(root: Path, cfg: dict, final: bool) -> int:
@@ -521,6 +547,15 @@ def main() -> None:
         help="附:分镜动效标注↔场景运动模型互比（WARN-only）",
     )
     sub.add_parser("captions", help="⑥+ 导出 srt/vtt")
+    p = sub.add_parser("deliver", help="⑨ 交付归档：成片按系列/标题 vN 落统一根")
+    p.add_argument(
+        "--root",
+        help="交付归档根路径（一次性/prompt 指定；持久统一配置用 env"
+        " TO_VIDEO_DELIVER_ROOT）",
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="只打印目的地与下一版本号，不写入"
+    )
     sub.add_parser("clean-samples", help="清理 .temp/voice-samples（生物特征）")
     p = sub.add_parser("tts", help="⑥ 配音合成（参数来自 pipeline.toml）")
     p.add_argument("--plan", action="store_true", help="只看排期不实跑")
@@ -623,6 +658,7 @@ def main() -> None:
             args.no_store,
         ),
         "captions": lambda: cmd_captions(root, cfg),
+        "deliver": lambda: cmd_deliver(root, cfg, args.root, args.dry_run),
         "render": lambda: cmd_render(root, cfg, args.final),
         "qa": lambda: cmd_qa(
             root,

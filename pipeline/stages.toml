@@ -106,5 +106,5 @@ ordinal = "⑨"
 name = "终渲与交付"
 skill = "pipeline/skills/09-final-render.md"
 kind = "tooled"
-commands = ["render", "captions"]
+commands = ["render", "captions", "deliver"]
 gate = "实测时长落在 pipeline.toml 的预算窗内"

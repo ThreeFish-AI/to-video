@@ -69,7 +69,7 @@ $P/
 **单入口 `pipeline.py`**（参数读各集 `pipeline.toml`；阶段契约见下表）：
 
 ```
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doctor|build|check|tts|captions|render|qa|all|clean-samples|stages}
+uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doctor|build|check|tts|captions|deliver|render|qa|all|clean-samples|stages}
 ```
 
 > `clean-samples` 与 `stages` 与具体工程无关，不读 `pipeline.toml`（`--project` 可省）。
@@ -83,7 +83,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 | ⑥     | `tts [--plan]`   | narration.json + 参考样本 → 逐句 mp3 + manifest     | sidecar 摘要 / 逐句续跑 |
 | ⑥+    | `captions`       | manifest + timing.json → out/captions.{srt,vtt}     | 纯函数                  |
 | ⑧     | `render` + `qa`  | src + audio → draft.mp4 + 抽帧体检                  | 渲染否 / 抽帧是         |
-| ⑨     | `render --final` | 同上 → final.mp4（前置：⑧ 零 FAIL）                 | 否                      |
+| ⑨     | `render --final` + `deliver` | 同上 → final.mp4 + 归档副本（前置：⑧ 零 FAIL）  | 否                      |
 
 `status` 为派生式新鲜度表（无状态文件——幂等已由内容摘要提供，再存阶段状态即第二事实源）；`doctor` 自检配置/时序 SSOT/样本指纹/IndexTTS 服务。
 
@@ -101,6 +101,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 | [scripts/check_archify_coverage.py](./scripts/check_archify_coverage.py) | archify 覆盖门（`check` 子命令在内容门后**自动串联**，无 flag）：图例对逐字稿的句级锚定率（整幕零锚 FAIL）/ 图与 cue 丰富度地板 / 分镜声明↔cue 双向对账 + 章节播放单调性；无资产集干净跳过，旧形态（仅 sidecar）点名 WARN 跳过 | `uv run --no-project $T/pipeline/scripts/check_archify_coverage.py --project $P` |
 | [scripts/check_series.py](./scripts/check_series.py) | 系列一致性规则（口播反串线 / 多标题顺序 / 序号绑定 / 清单完整性 / 死链 / 可渲染性 / 去站点化 / 下期卡同步），执法 `$W/series.json`；**工程级受检面（project_globs）与课程/下期卡系列 id 集由工作区 to-video.toml 声明** | 工作区内任意目录：`uv run --no-project $T/pipeline/scripts/check_series.py`（工作区侧可挂 pre-commit） |
 | [scripts/captions.py](./scripts/captions.py) | 导出 srt/vtt（cue 终点不含句间停顿——外挂字幕静默期不留字） | `uv run --no-project scripts/captions.py` |
+| [scripts/deliver.py](./scripts/deliver.py) | ⑨ 交付归档：out/final.mp4 → `<根>/<系列id>/<集标题> vN.mp4`（版本扫目录自增、同字节跳过；根路径两渠道见下方「交付归档」节） | `uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver` |
 | [scripts/qa_frames.py](./scripts/qa_frames.py) | 抽帧 QA（幕/句/`--last-n` 末 N 句）+ `--check` 四项自动体检 + `--check-theme` WCAG 对比度 | `uv run --no-project --with pillow --with numpy scripts/qa_frames.py out/draft.mp4 --last-n 6 --check`（工程根；视频路径按 CWD 解析，$T 直调须写全 `$P/out/draft.mp4`） |
 | [scripts/paper_extract.py](./scripts/paper_extract.py) | Stage ① 取证工具箱（§→页映射 / 分栏取文 / caption 收割 / 定点 find / 页面光栅化） | `uv run --no-project --with pymupdf $T/pipeline/scripts/paper_extract.py "<PDF>" find "原文措辞"` |
 | [scripts/refs.py](./scripts/refs.py) | 参考样本可复现清单（verify/rebuild；指纹在 `$W/voices/refs.toml`——工作区内容，只存哈希不存音频） | `uv run --no-project $T/pipeline/scripts/refs.py verify` |
@@ -139,6 +140,18 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](./scripts/c
 
 **默认值只许有一份**：消费者脚本需要兜底时一律写 `config.default("<节>.<键>")`，不得内联字面量。`config.load(required=False)` 在缺 `pipeline.toml` 时直接返回 `{}`（不走 `resolve()`），所以内联的 `.get(k, 280)` 是**可达**的第二事实源——改 SCHEMA 时那条路径会静默沿用旧口径。该纪律由 [tests/test_config.py](./tests/test_config.py) 执法。
 
+### 交付归档（deliver 子命令）
+
+终渲产物 `out/final.mp4` 是 gitignored 的**新鲜渲槽位**（每次重渲直接覆盖）；`deliver` 把成片复制进跨集统一归档根，按 `<根>/<系列 id>/<集标题> v<N>.mp4` 管理——系列 id 与集标题的唯一事实源是 `$W/series.json`（发布顺序 SSOT，此处不新增配置副本），版本号 N 实时扫描目标目录取既有最大号 +1（零状态文件，目录内容即事实源；不回填洞）。同字节重投自动跳过不升版；`.part` 原子落位；绝不覆写既有版本（大小写不敏感文件系统兜底，判据见脚本头）。
+
+```bash
+uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver [--root ~/Documents/video] [--dry-run]
+```
+
+- **根路径两渠道**（解析序：`--root` 一次性/prompt 指定 > env `TO_VIDEO_DELIVER_ROOT` 持久统一配置）：机器属性，**永不写进受版本控制的 toml**——同 `tts.server` / tts-store 立场（执法：[tests/test_config.py](./tests/test_config.py) 的 machine-property 用例）。相对路径锚 `$W`（绝不锚 CWD）；两渠道皆无则大声退出并列出用法。
+- **触发形态**：显式子命令，**刻意不串联进 `render --final`**——编排层完成行 `>> render 完成` 是 [skills/09](./skills/09-final-render.md) 钉死的判完成信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号；与 `captions` 同为 ⑨ 的显式交付命令。用户在 prompt 给出目标路径时，agent 在终渲成功后显式执行 `deliver --root <路径>`（契约见 skills/09 §交付归档）。
+- **扇出**：deliver 不在 `--series` 白名单——写用户目录且累积版本文件的交付操作须显式逐集执行。
+
 ## 四、复用边界（显式权衡）
 
 - **Python 脚本：集中共享（SSOT）**——共享载体是 skill 仓（`$T/pipeline/scripts/`），机制工具跨集零差异，中心化防 split-brain；工作区与分集工程只持薄包装（复制「转发」而非「实现」）。
@@ -158,7 +171,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](./scripts/c
    ```bash
    uv run --no-project $T/pipeline/scripts/scaffold.py --init-workspace <dir>
    ```
-   落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装；既有工作区（旧哨兵 `.influence-root`）兼容识别、零改动可用。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
+   落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装；既有工作区（旧哨兵 `.influence-root`）兼容识别、零改动可用。（可选）`export TO_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
 1. 实例化骨架（替代旧的「`cp -r` 任一既有集」——那句话给 391 行冻结基建留了 4 个同权真理声明者；建集模式自 CWD 锚定 `$W/episodes/`，须在工作区内执行）：
    ```bash
    uv run --no-project $T/pipeline/scripts/scaffold.py <slug>-video --title "本集标题" \
