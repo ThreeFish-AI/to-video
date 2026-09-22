@@ -659,7 +659,7 @@ def digest_indextts(
 #
 # 条目按内容寻址（<slug>/<sid>.<digest12>.mp3），库根迁移零失效：默认目录
 # 自 negentropy-influence 改名后，旧目录存在即回退使用（存量缓存原地命中），
-# skill README 提供可选的一次性合并命令。
+# CHANGELOG 1.0.0 条目提供可选的一次性合并命令。
 
 DEFAULT_STORE = "~/Library/Application Support/to-video/tts-store"
 LEGACY_STORE = "~/Library/Application Support/negentropy-influence/tts-store"
