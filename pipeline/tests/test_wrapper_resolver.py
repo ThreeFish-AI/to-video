@@ -155,9 +155,11 @@ def test_workspace_wrapper_anchors_env_from_own_location(tmp_path, name):
     assert data["workspace_env"] == str(ws.resolve())
 
 
-def test_workspace_wrapper_keeps_caller_explicit_env(tmp_path):
-    """setdefault 语义：调用方已显式指派 TO_VIDEO_WORKSPACE 时不越权覆写
-    （脚本被借去操作另一个工作区是合法通道，预设值须原样透传）。"""
+def test_workspace_wrapper_overrides_caller_explicit_env(tmp_path):
+    """硬性覆写语义：调用方 env 里的 TO_VIDEO_WORKSPACE 不被承袭——环境残留
+    指向另一工作区时，包装器（含挂 pre-commit 的系列一致性门）会静默去检查
+    那个工作区，属被禁止的静默失效。借道操作其他工作区走显式通道：目标
+    工作区自身的包装器，或 pipeline.py 的 --workspace flag。"""
     home = fake_skill(tmp_path)
     ws = tmp_path / "ws"
     (ws / "scripts").mkdir(parents=True)
@@ -166,7 +168,7 @@ def test_workspace_wrapper_keeps_caller_explicit_env(tmp_path):
         (WS_TMPL / "pipeline.py.tmpl").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    preset = tmp_path / "another-ws"  # setdefault 不校验存在性，无需真建
+    preset = tmp_path / "another-ws"  # 覆写发生在 exec 前，无需真建
     r = run_wrapper(
         wrapper,
         env=child_env(
@@ -178,7 +180,9 @@ def test_workspace_wrapper_keeps_caller_explicit_env(tmp_path):
     )
     assert r.returncode == 0, r.stdout + r.stderr
     probe = json.loads((tmp_path / "probe-preset.json").read_text(encoding="utf-8"))
-    assert probe["workspace_env"] == str(preset)
+    assert probe["workspace_env"] != str(preset)
+    # 覆写值 = 包装器自身 parent.parent（与无预设时的自证锚一致）
+    assert probe["workspace_env"] == str(ws.resolve())
 
 
 # ── 解析未命中：大声退出，候选与出路全给 ──────────────────────────────────

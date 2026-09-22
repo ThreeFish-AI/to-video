@@ -38,7 +38,7 @@ $W/
 ├── source-map/        # 多集系列的章节→集归属信源地图
 ├── voices/            # 参考音色样本（gitignored 生物特征；refs.toml 只存指纹）= $V
 ├── to-video.toml      # 工作区机制配置（check_series 工程级受检面与系列 id 集）
-├── scripts/*.py       # 工作区级薄包装 → skill（自证工作区锚并写回 TO_VIDEO_WORKSPACE）
+├── scripts/*.py       # 工作区级薄包装 → skill（自证工作区锚并硬性覆写 TO_VIDEO_WORKSPACE）
 └── episodes/          # 每集一个 <slug>-video 工程（下）
 ```
 
@@ -74,7 +74,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 
 > `clean-samples` 与 `stages` 与具体工程无关，不读 `pipeline.toml`（`--project` 可省）。
 > 本清单与 `pipeline.py` 文件头的抄件由 [tests/test_stages.py](./tests/test_stages.py) 对齐 argparse 真实注册表。
-> 工作区内亦可走薄包装：`uv run --no-project $W/scripts/pipeline.py --project $P …`（包装器自证工作区锚并写回 `TO_VIDEO_WORKSPACE`，从任意 CWD 调用都锚定本工作区）。
+> 工作区内亦可走薄包装：`uv run --no-project $W/scripts/pipeline.py --project $P …`（包装器自证工作区锚并硬性覆写 `TO_VIDEO_WORKSPACE`，从任意 CWD 调用都锚定本工作区）。
 
 | Stage | 命令             | 输入 → 产出                                         | 幂等/续跑               |
 | ----- | ---------------- | --------------------------------------------------- | ----------------------- |
