@@ -41,6 +41,8 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P qa --video out/
 # ⑤ 交付
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render --final
+# 交付归档（可选；根 = --root 一次性 或 env TO_VIDEO_DELIVER_ROOT 持久，机器属性不进 toml）
+uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver
 ```
 
 ## 内容修改守则
