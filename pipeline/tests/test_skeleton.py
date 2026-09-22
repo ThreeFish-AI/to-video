@@ -740,3 +740,25 @@ def test_motion_test_lives_outside_tsc_include():
     include = tsconfig.get("include", [])
     assert "src" in include and "video/scripts/motion.test.ts" not in include
     assert not (TEMPLATE / "video/src/motion/motion.test.ts").exists()
+
+
+def test_chapter_progress_frozen_and_placeholder_classified():
+    """顶部分段进度条：组件归 frozen（全片机械 chrome，同 Subtitle 性质——跨集
+    一致即产品意图）；chapters.json 归 seeded（build_narration 每次 build 全量重写
+    的派生数据）。占位必须是合法空数组——占位损坏 = 新集首次 tsc 当场红。"""
+    skel = skeleton()
+    assert "video/src/components/ChapterProgress.tsx" in skel["classes"]["frozen"]
+    assert "video/src/chapters.json" in skel["classes"]["seeded"]
+    assert (
+        json.loads((TEMPLATE / "video/src/chapters.json").read_text(encoding="utf-8"))
+        == []
+    )
+
+
+def test_chapter_progress_mount_is_load_bearing():
+    """挂载行必须落在 regioned 归一化的保留区（不被 SCENE_IMPORT_RE/REGISTRY 剥
+    掉）——否则某集删除挂载行后漂移门会静默放行，「统一配备」失去执法。"""
+    import verify_skeleton as vs
+
+    text = (TEMPLATE / "video/src/Main.tsx").read_text(encoding="utf-8")
+    assert "ChapterProgress" in vs.normalize_main(text)

@@ -20,6 +20,8 @@
 - 句 id 区间必须**覆盖该幕全部句子、无交叠无遗漏**（组件内以 `beatWindow(sentences, sceneFrom, from, to)` 取窗口）。
 - 每镜「画面」写清：主体元素、布局、色彩（用契约色名）、出现的角标；「动效」写清：入场方式、随句节奏的推进（生长/高亮/计数）。
 - 风险/反转段显式标注色调切换（如「画面转红调」）。
+- **顶部安全带 y<56 由章节条占用**（见 [06-remotion-implementation.md](./06-remotion-implementation.md)「顶部章节进度条」）：
+  各幕画面内容 y≥56 起；SceneTag 维持 top:64 不变。
 
 ## 验收
 

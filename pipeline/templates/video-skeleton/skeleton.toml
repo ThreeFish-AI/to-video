@@ -69,6 +69,9 @@ frozen = [
   "video/src/components/NarrationAudio.tsx",
   "video/src/components/Subtitle.tsx",
   "video/src/components/SceneFade.tsx",
+  # 顶部分段章节进度条：全片 overlay 纯机械 chrome（同 Subtitle 性质），跨集一致
+  # 即产品意图（「本 skill 制的视频统一配备」）；停用/魔改走 [[drift]] 逃逸口。
+  "video/src/components/ChapterProgress.tsx",
   "video/src/components/cards.tsx",
   "scripts/build_narration.py",
   "scripts/tts.py",
@@ -98,6 +101,9 @@ seeded = [
   "video/pnpm-lock.yaml",
   "video/src/design/theme.ts",
   "video/src/components/motifs.tsx",
+  # 顶部分段进度条的数据面：build_narration 每次 build 从幕标题全量重写——
+  # 每集必然不同的机器生成物（同 pnpm-lock 先例），归 overridable 会打永久 INFO 噪音
+  "video/src/chapters.json",
   "pipeline.toml",
   "README.md",
 ]
@@ -189,6 +195,132 @@ episode = "claude-code-multiagent-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
 reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+
+# 顶部进度条分代（2026-09-22）：模板 Main.tsx 归一化指纹 179be60ed605 为分代前
+# 模板值（10 个既有集此前已收敛对齐、零历史登记——9 已发布 + context-layer-video
+# 待审），与上方 Subtitle 分代同构；新 frozen 的 ChapterProgress.tsx 既有集尚无此
+# 文件（旧脚手架期产物，Main 未挂载不影响渲染），按 cards.tsx 先例钉「缺失」哨兵。
+# 两批撤销条件同一：本集下次重渲时同步模板 Main + ChapterProgress.tsx 并重跑 build
+# 派生 chapters.json（只同步 Main 会因组件 import 缺失而 tsc 红），同步后本批整体撤销。
+[[drift]]
+episode = "experience-era-agents-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "self-improving-agents-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "self-evolving-coding-agents-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "horizon-context-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "context-layer-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集 v2 终渲待审（draft-review），按发布态处理不动源码。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-explained-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-planning-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-memory-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-concurrency-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-multiagent-video"
+path = "video/src/Main.tsx"
+fingerprint = "179be60ed605"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "experience-era-agents-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "self-improving-agents-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "self-evolving-coding-agents-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "horizon-context-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "context-layer-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-explained-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-planning-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-memory-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-concurrency-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+
+[[drift]]
+episode = "claude-code-multiagent-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "缺失"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
 
 # 已撤销（2026-08）：`Main.tsx` 的两条登记。建门时那两集的 SceneFade 块落后于模板
 # 一处注释扩写与换行调整，当时刻意只登记不收敛（收敛要动两个**已发布**集，属独立

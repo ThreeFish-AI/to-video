@@ -114,3 +114,37 @@ def test_series_layer_published_requires_ready_and_online_marker(tmp_path):
         (root / "video" / "src" / "series-layers.json").read_text(encoding="utf-8")
     )["layers"]
     assert [layer["published"] for layer in layers] == [False, True]
+
+
+def test_chapters_json_emitted_from_scene_titles(tmp_path):
+    """`## Pn 标题` 的标题文字此前被 SCENE_RE 丢弃；现须落盘 chapters.json（顶部
+    进度条数据面），按 narration.md 出现序；重跑 build 字节不变（纯派生幂等）。"""
+    root = make_project(
+        tmp_path, "## P0 冷开场\n- [p0-01] 甲。\n\n## P1 展开\n- [p1-01] 乙。\n"
+    )
+    r = run_build(root)
+    assert r.returncode == 0, r.stderr
+    path = root / "video" / "src" / "chapters.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == [
+        {"scene": "P0", "title": "冷开场"},
+        {"scene": "P1", "title": "展开"},
+    ]
+    first = path.read_text(encoding="utf-8")
+    assert run_build(root).returncode == 0
+    assert path.read_text(encoding="utf-8") == first
+
+
+def test_chapters_title_fallback_and_separator_forms(tmp_path):
+    """无标题幕写空串（组件回退只显 PART n）；全角冒号分隔合法；非 Pn 标题不入。"""
+    root = make_project(
+        tmp_path,
+        "## P0\n- [p0-01] 甲。\n\n## P1：冒号标题\n- [p1-01] 乙。\n\n## 不相关标题\n",
+    )
+    r = run_build(root)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(
+        (root / "video" / "src" / "chapters.json").read_text(encoding="utf-8")
+    ) == [
+        {"scene": "P0", "title": ""},
+        {"scene": "P1", "title": "冒号标题"},
+    ]
