@@ -38,7 +38,7 @@
 | ⑥ TTS 配音 | 逐句 mp3 + 时长 manifest（`tts`，幂等续跑），`captions` 导出 srt/vtt |
 | ⑦ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 |
 | ⑧ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`）零 FAIL，含尾幕渐黑必查 |
-| ⑨ 终渲与交付 | 1080p30 final.mp4（`render --final`），实测时长落在预算窗内 |
+| ⑨ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径，实测时长落在预算窗内 |
 
 九阶段的唯一声明源是 [`pipeline/stages.toml`](pipeline/stages.toml)，本表是它的人读视图；每阶段的代理规格见 [`pipeline/skills/`](pipeline/skills/)。
 
@@ -138,7 +138,7 @@ uv run --no-project $W/scripts/pipeline.py --project $P render
 uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4 --last-n 2 --check
 ```
 
-全绿后交付：`captions` 导出 srt/vtt，`render --final` 出 `out/final.mp4`（本文首屏 Demo 即由本流程产出）。随时可用 `status`（阶段新鲜度）与 `doctor`（环境自检）定位问题。真实制作的完整清单（信源取证、series.json 登记、概念色设计）见 [pipeline/README.md](pipeline/README.md)。
+全绿后交付：`captions` 导出 srt/vtt，`render --final` 出 `out/final.mp4`（本文首屏 Demo 即由本流程产出）；`deliver`（`--root` 一次性或 env `TO_VIDEO_DELIVER_ROOT` 持久指定归档根）把成片按 `<根>/<系列id>/<标题> vN.mp4` 归档。随时可用 `status`（阶段新鲜度）与 `doctor`（环境自检）定位问题。真实制作的完整清单（信源取证、series.json 登记、概念色设计）见 [pipeline/README.md](pipeline/README.md)。
 
 ## 五、文档地图
 

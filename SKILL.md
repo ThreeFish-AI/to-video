@@ -1,6 +1,6 @@
 ---
 name: to-video
-description: 论文/文档/代码信源 → 动效图解科普视频全流程：信源精读取证（A 型论文并行分章 / B 型文档代码固定提交 + 证据三级）、策划、逐字稿 SSOT、真实性 + 易懂性双重校验、分镜、IndexTTS 声音克隆配音、Remotion 代码动画场景、草渲抽帧 QA、终渲 1080p30 交付（srt/vtt 字幕）；含内容工作区初始化与分集脚手架。Use when 用户要制作/迭代科普视频、初始化视频工作区、scaffold 新集、写 narration.md/storyboard.md、跑 TTS/渲染/抽帧 QA，或问及这套流水线的用法。信源精读方法论可配合 /guided-learn，图示制作可配合 /archify。
+description: 论文/文档/代码信源 → 动效图解科普视频全流程：信源精读取证（A 型论文并行分章 / B 型文档代码固定提交 + 证据三级）、策划、逐字稿 SSOT、真实性 + 易懂性双重校验、分镜、IndexTTS 声音克隆配音、Remotion 代码动画场景、草渲抽帧 QA、终渲 1080p30 交付（srt/vtt 字幕）与交付归档（根路径可配：--root 或 TO_VIDEO_DELIVER_ROOT，按系列子目录与集标题 vN 自动版本）；含内容工作区初始化与分集脚手架。Use when 用户要制作/迭代科普视频、初始化视频工作区、scaffold 新集、写 narration.md/storyboard.md、跑 TTS/渲染/抽帧 QA、归档交付成片到指定目录，或问及这套流水线的用法。信源精读方法论可配合 /guided-learn，图示制作可配合 /archify。
 license: MIT
 metadata: {version: "1.0.0", author: ThreeFish-AI, source: "extracted from ThreeFish-AI/negentropy apps/negentropy-influence"}
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
@@ -42,6 +42,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render   # → 
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P qa       # 零 FAIL 才放行终渲
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render --final
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions # → $P/out/captions.{srt,vtt}
+uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → 归档 <根>/<系列id>/<标题> vN.mp4（根 = --root 或 env TO_VIDEO_DELIVER_ROOT）
 ```
 
 ## 九阶段速查
@@ -58,7 +59,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions # → 
 | ⑥ TTS 配音 | 声音克隆（IndexTTS-2.5；备选 edge 预置音色，manifest 契约一致） | [07](pipeline/skills/07-tts-voice.md) | `tts --plan` / `captions` | refs 指纹门 + 试听定档 + ETA |
 | ⑦ Remotion 场景 | 代码动画实现；动效走 `src/motion/` 运动模型 | [06](pipeline/skills/06-remotion-implementation.md) | 工程内直调 `tsc --noEmit` 与 motion 测试 | 七条渲染红线 + 运动层铁律 |
 | ⑧ 草渲 + 抽帧 QA | 半分辨率快速迭代（`--beat-heads` 补入场瞬态盲区） | [08](pipeline/skills/08-render-qa.md) | `render` + `qa` | 自动体检零 FAIL（尾幕渐黑必查） |
-| ⑨ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 | [09](pipeline/skills/09-final-render.md) | `render --final` + `captions` | 实测时长落在预算窗内 |
+| ⑨ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 + 按系列/标题 vN 归档 | [09](pipeline/skills/09-final-render.md) | `render --final` + `captions` + `deliver` | 实测时长落在预算窗内 |
 
 ⚠️ **序号与文件号刻意错位**：Stage ⑥ ↔ `07-tts-voice`、Stage ⑦ ↔ `06-remotion-implementation`（入链 ≥5 处，重命名代价大于收益），由 [tests/test_stages.py](pipeline/tests/test_stages.py) 执法——勿据序号猜文件名，更勿「顺手对齐」。
 
@@ -86,6 +87,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions # → 
 | `TO_VIDEO_WORKSPACE` | 工作区根显式指派（目录须含哨兵，防拼错静默锚错） | 自 CWD 向上搜索哨兵 |
 | `TO_VIDEO_TTS_STORE` | TTS 音频版本库根（兼容读旧名 `NE_TTS_STORE`） | `~/Library/Application Support/to-video/tts-store`（旧默认目录存在则回退） |
 | `TO_VIDEO_INDEX_TTS_ROOT` | IndexTTS 服务仓（`tts_server` / `tts_bench` 的运行环境） | `~/tools/index-tts` |
+| `TO_VIDEO_DELIVER_ROOT` | 交付归档根路径（`deliver` 子命令；`--root` 一次性优先于此） | 无（未配置时 deliver 大声退出并列两渠道） |
 | `TO_VIDEO_TEST_WORKSPACE` | 测试集成模式：指向真实内容工作区做真树回归 | 无（单测用 fixture） |
 
 ## 相邻技能协作

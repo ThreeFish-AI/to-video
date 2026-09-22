@@ -37,6 +37,9 @@ cd $P/video
 ```bash
 # 字幕（B 站/YouTube 上传件；cue 终点不含句间停顿——外挂字幕静默期不留字）
 uv run --no-project $T/pipeline/scripts/captions.py --project $P
+
+# 交付归档（根路径 = --root 一次性 或 env TO_VIDEO_DELIVER_ROOT 持久；机器属性不进 toml）
+uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver
 ```
 
 - [ ] `out/final.mp4`（1080p30，h264/aac192K；`remotion ffmpeg -i` 核流摘要）
@@ -44,6 +47,15 @@ uv run --no-project $T/pipeline/scripts/captions.py --project $P
 - [ ] 封面帧（可从 `qa_frames.py` 挑一张标题卡帧，或 `remotion still` 单渲）
 - [ ] 全片逐幕抽帧复检 + `--last-n 6 --check`（时长在 B 遍后又位移过，勿复用 A 遍结论）
 - [ ] `pipeline.py check` 实测口径在预算窗内
+- [ ] deliver 归档副本（根路径已配置时）：`<根>/<系列id>/<集标题> vN.mp4`
+
+## 交付归档（deliver）
+
+`out/final.mp4` 是**新鲜渲槽位**（重渲即覆盖、gitignored）；`deliver` 把成片复制进统一归档根 `<根>/<系列id>/<集标题> v<N>.mp4`——系列子目录与集标题取自 `$W/series.json`（发布顺序 SSOT），版本号扫目录自增：首投 v1，**内容变化才升版**，同字节重投打印跳过不产生重复副本；改题后新题另起 v1、旧版本原样保留。
+
+- **配置渠道**：`--root ~/Documents/video`（一次性 / prompt 指定）或 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video`（持久统一配置，可写 shell profile / Claude Code settings env）。根路径是机器属性，不写进受版本控制的 toml（同 tts.server / tts-store 立场）；两渠道皆无时 deliver 大声退出并列出用法。
+- **agent 契约**：用户在 prompt 中给出目标路径时，`render --final` 成功后**显式**执行 `pipeline.py --project $P deliver --root <路径>`，并建议用户以 env 固化。`render --final` 刻意不自动串联 deliver——本规格把编排层 `>> render 完成` 标记钉为判完成唯一信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号。
+- 先 `deliver --dry-run` 预览目的地与下一版本号，确认后再实投。
 
 ## 平台合规（发布前自查）
 
