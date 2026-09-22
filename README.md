@@ -7,7 +7,7 @@
 **to-video** 是一个可安装的 agent Skill（Claude Code 等）加 Python / Remotion 工具链：把「信源精读 → 逐字稿 → 配音 → 代码动画 → 终渲」固化为九个带通过门的阶段。内容层四个写作阶段产出**可回溯的逐字稿**（每句口播都能落到信源证据），生产层五个工具阶段完成声音克隆配音、React 场景动画、抽帧质检与终渲交付。全片派生自文本单一事实源——改稿后 `build → tts → render` 一条链重跑，全程不打开任何剪辑软件。
 
 <p align="center">
-  <img src="docs/assets/demo/hello-video.gif" width="88%" alt="Demo：标题 spring 入场、能力标签错峰弹入、字幕逐句同步配音——全部由代码生成">
+  <img src="docs/assets/demo/hello-video.gif" width="88%" alt="Demo：顶部分段章节进度条段宽随时长、播放头跨段推进，标题 spring 入场、能力标签错峰弹入——画面、配音、字幕全部由代码生成">
 </p>
 
 ## 一、核心能力
@@ -87,7 +87,7 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 
 ## 四、快速上手（Quickstart）
 
-变量约定（完整定义见 [pipeline/README.md](pipeline/README.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下用 edge 预置音色跑一支两句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆见 [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md)。
+变量约定（完整定义见 [pipeline/README.md](pipeline/README.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下用 edge 预置音色跑一支两幕三句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆见 [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md)。
 
 ```bash
 T=~/.claude/skills/to-video
@@ -101,16 +101,21 @@ uv run --no-project $T/pipeline/scripts/scaffold.py --init-workspace $W
 cd $W
 uv run --no-project $T/pipeline/scripts/scaffold.py hello-video --title "你好 to-video"
 
-# 3) mini 篇幅调整：改用 edge 预置音色 + 把时长预算窗缩到两句话的量级
+# 3) mini 篇幅调整：改用 edge 预置音色 + 把时长预算窗缩到三句话的量级
 sed -i '' -e 's/^engine = "indextts"/engine = "edge"/' \
           -e 's/^target_minutes = .*/target_minutes = [0.1, 2.0]/' "$P/pipeline.toml"
 
-# 4) 写 mini 逐字稿（narration.md 是全片单一事实源；`## P0 幕名` + 一句一行）
+# 4) 写 mini 逐字稿（narration.md 是全片单一事实源；`## Pn 幕名` + 一句一行，
+#    幕标题还会派生为顶部分段章节进度条的段内文字）
 cat > "$P/script/narration.md" <<'EOF'
 ## P0 开场
 
 - [p0-01] 你好，这是用 to-video 流水线做出的第一支视频。
 - [p0-02] 画面、配音、字幕，全部由代码生成。
+
+## P1 收束
+
+- [p1-01] 顶部进度条，就是章节在走的证明。
 EOF
 
 # 5) 写 mini 分镜表（check 门要求每个 beat 的句区间覆盖本幕全部句子）
@@ -118,17 +123,20 @@ cat > "$P/script/storyboard.md" <<'EOF'
 | 镜号 | 句区间 | 画面 | 动效 |
 | --- | --- | --- | --- |
 | 0-A | p0-01..p0-02 | 居中标题卡 | FadeUp |
+| 1-A | p1-01 | 章节进度条放大解剖图（与顶部条逐帧同步） | FadeUp |
 EOF
 
-# 6) 放入最小场景组件，并在 $P/video/src/Main.tsx 注册（加 import {P0}；给
-#    刻意留空的 SCENE_COMPONENTS 表填 `P0: P0,`，键 = 幕名；规格见 pipeline/skills/06）
-cp $T/docs/quickstart/P0.tsx "$P/video/src/scenes/P0.tsx"
+# 6) 放入两幕场景组件，并在 $P/video/src/Main.tsx 注册（加 import {P0} 与 {P1}；
+#    给刻意留空的 SCENE_COMPONENTS 表各填一行 `P0: P0,` / `P1: P1,`，键 = 幕名
+#    ——每幕必须注册，漏一幕渲染即报错；规格见 pipeline/skills/06）
+cp $T/docs/quickstart/P0.tsx $T/docs/quickstart/P1.tsx "$P/video/src/scenes/"
 
-# 7) ③④⑤ 内容流水线：逐字稿派生 + 内容门（时长预算 / 分镜覆盖 / 读法陷阱）
+# 7) ③④⑤ 内容流水线：逐字稿派生（narration.json + 章节标签 chapters.json）
+#    + 内容门（时长预算 / 分镜覆盖 / 读法陷阱）
 uv run --no-project $W/scripts/pipeline.py --project $P build
 uv run --no-project $W/scripts/pipeline.py --project $P check
 
-# 8) ⑥ 配音（edge 引擎按分集包装器契约直调，两句秒级；克隆模式见 tts --plan）
+# 8) ⑥ 配音（edge 引擎按分集包装器契约直调，三句秒级；克隆模式见 tts --plan）
 cd "$P" && uv run --no-project --with edge-tts --with mutagen scripts/tts.py
 
 # 9) ⑧ 草渲 + 抽帧体检（先装分集依赖；产物 $P/out/draft.mp4）
