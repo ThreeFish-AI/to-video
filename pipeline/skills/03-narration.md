@@ -58,9 +58,10 @@
   已成 ERROR 门；请改写为「小于」。
 - 英文专名**默认仍走「进角标不口播」**（下方写作纪律第 3 条）——这是内容层的选择，与
   技术可行性无关。若确需口播某个英文专名，CMU 音素通道（`<Claude|K L AO1 D>`，左侧纯
-  ASCII、右侧 ARPAbet 大写）**已于 2026-08-20 用 ASR 回转写证实生效**；但它产出的是
-  **带中文口音**的英文（对照实验里 ASR 把标注档转成汉字、把直写英文档转成原词），
-  故成片前须人耳确认。
+  ASCII、右侧 ARPAbet 大写）已实战定稿（2026-09-21）：按 [PRON-GLOSSARY.md](../PRON-GLOSSARY.md)
+  与 [ADVANCED §2.3 定稿配方](../INDEXTTS-2.5-ADVANCED.md)处理（标注 + 重掷 + 无偏验证）；
+  **句尾英文词读法一律标注兜底、不赌采样**（take 验收与重掷协议见
+  [VOICE-CLONING.md §5.4](../VOICE-CLONING.md)）。
 - 发现的读错字请沉淀到 [PRON-GLOSSARY.md](../PRON-GLOSSARY.md) 供跨集复用。
 
 ## 写作纪律

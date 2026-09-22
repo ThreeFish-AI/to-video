@@ -196,11 +196,20 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 6. **JSX 文本中的弯引号/特殊 Unicode**：直接放 JSX 文本里的 `“…”` 可能触发解析器歧义——字符串字面量一律用 `{'...'}` 包裹。
 7. **对象字面量重复属性**：`width` 等属性写两次 tsc 才报（TS1117）——review diff 时留意复制粘贴残留。
 
+**素材接缝与画面覆盖（ISSUE-188 实证，与上七条同为每集实现与 QA 必查）**：
+
+- **冻结或补位素材必须与它接续的运动素材同构同框**（同分辨率、同取景、同来源）——archify 末帧
+  一律截**整视口 1920×1080**：元素局部截图的长宽比随图而异，与整视口 webm 进同一个定比画框后，
+  `objectFit: contain` 的缩放差就是 hold 接缝突跳的根因（判据：两段素材进同一容器时，接缝两侧
+  任取一帧，主体的位置与尺度须逐像素可对齐）。
+- **画面覆盖自检第一问按句统计而非按镜**：「本镜每一句是否都有至少一个非字幕、非幕标题的可见
+  元素」——「镜里挂了 archify」不构成回答（空镜 = 镜有画但句无锚，四镜共 ~68s 近乎空屏曾全绿漏网）。
+
 ## 命令闭环（工具一律 `./node_modules/.bin/` 直调，防 workspace 污染）
 
 ```bash
 cd video
-pnpm install --ignore-workspace          # 首次；根 lockfile 必须零变更
+pnpm install                              # 首次（裸 install；根 lockfile 必须零变更）
 ./node_modules/.bin/tsc --noEmit         # 类型零错误
 ./node_modules/.bin/remotion render Main ../out/draft.mp4 --scale=0.5 --jpeg-quality=60  # 草渲
 cd .. && uv run --no-project scripts/qa_frames.py out/draft.mp4 --scene P2   # 抽帧 QA（--scene 或句 id）
@@ -221,6 +230,26 @@ QA 验收：逐幕抽帧目检色契约遵守、beat 窗口不越界、角标不
 ② **动效由 `components/` 承担的镜（ArchifyClip 画框弹入 / devices.tsx / CodeWalk）只写散文点名承担者、
 不写 `@token`**——门不扫 `components/`，写了门也证实不了（同幕他处恰有同 verb 时还会幕级假通过），
 删了又会删掉真话，散文是唯一正确的落点。
+
+门的已知局限三条（ISSUE-191 后续归档；动效 WARN 归因先过这里，别急着改）：
+
+- **不认纯函数实现的动效**：按运动层铁律①在 map / 条件分支内改用纯函数 `progress`/`spring`
+  实现的动效，门只认 `useXxx(` 调用形态、正则看不见 ⇒ 假 WARN——动效真实存在、只是换了实现
+  形态，归因时先查这条，别当真退役回收。
+- **修门禁用 import 闭包**：不能靠让门多 import 文件（一跳进 `components/`、两跳经
+  `ArchifyRecap` 进 `ArchifyClip`）来「看见」更多调用——那是把检查面问题变成依赖问题。实测
+  一跳闭包 WARN 30→13，被洗绿的 17 条里 8 条是真退役（`devices.tsx` 里零引用的组件会让别的
+  镜白拿动词）；两跳更糟，42/45 镜挂 `ArchifyRecap` 后 `@spring`/`@progress` 全片不可证伪。
+- **WARN 归因纪律 = git show 重放 + 三类分拣，不逐条手改**：用 `git show <提交>:<文件>` 重放
+  改动前后的分镜与场景逐条比对，按「真退役 / 陈年假标注 / 门误报」分拣（ISSUE-191 实测
+  30 条 = 19 + 9 + 2）——真退役按铁律①回收动效列、门误报按铁律②改散文点名承担者、陈年
+  假标注照删，但别把陈年债记到最近一次提交头上。
+
+**提取式门的噪声用命名约定归零，不写「WARN ≤ N」验收基线**——基线会随规模漂移，且恒定噪声会
+淹没真漂移（ISSUE-188：`w('句id')` 字面量让某门恒报 28 条 WARN，分镜前言据此写「WARN ≤ 30」
+基线＝每次人工核对 28 行；cue 改用与 `at('句id')` 对称的取长形态后 WARN 归零，唯一那条真 WARN
+才浮出来）。「人工确认 N 行 WARN 都属某类」永远不如「WARN 必须为 0」。
+
 入场瞬态另走 `qa_frames.py --beat-heads N`
 （每 beat 头部连抽 N 帧，ISSUE-170 补盲）；重制/重构回归用 `--compare A B`同帧号对拍。
 
