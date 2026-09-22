@@ -11,12 +11,16 @@ const CHAPTERS = chaptersJson as Chapter[];
 
 /* ── 几何带 SSOT：整带收在 y<56 ─────────────────────────────────────────────
  * 依据 skills/06 顶部横条实测：各幕内容最早 y=56 起、SceneTag 在 top:64——
- * y<56 是本设计系统已验证的零碰撞常驻带（底部字幕安全带的顶部对偶）。 */
+ *  y<56 是本设计系统已验证的零碰撞常驻带（底部字幕安全带的顶部对偶）。 */
 const MARGIN_X = 72; // 与 SceneTag/Footnote 左锚对齐
 const STRIP_W = 1920 - MARGIN_X * 2;
 const BAR_Y = 14;
-const BAR_H = 8;
+const BAR_H = 36; // 章节名内嵌段内 ⇒ 加高胶囊；底缘 50 仍收在 y<56
 const SEG_GAP = 8;
+const TITLE_SIZE = 18; // sans 章节名；标题缺失回退 mono 幕码（15）
+const CODE_SIZE = 15;
+const TITLE_PAD_X = 14;
+const MIN_SEG_FOR_TEXT = 64; // 窄于此宽度的段不显文字（mono 幕码也放不下）
 const FADE_IN_FRAMES = 12; // 开场淡入（帧驱动常量，同 Subtitle 先例）
 const FADE_OUT_MAX = 30; // 片尾淡出上限 1s，实际取 min(tail, 30)——从 props 推导不写死
 
@@ -33,9 +37,42 @@ const segSpans = (scenes: SceneRange[], total: number) =>
 const titleOf = (scene: string) =>
   CHAPTERS.find((c) => c.scene === scene)?.title ?? '';
 
-/** 顶部分段章节进度条：段宽∝幕时长、已播填充亮色、播放头随帧推进、段下
- *  `PART n : 幕标题` 标签（当前章亮、其余灰）。全片 overlay，与 Subtitle 同范式
- *  （帧驱动 + 只读底座 token，不 import 运动层、零 spring）。 */
+/** 段内居中文字层。宽度用**显式 px**（段宽 − 左右 padding）——左右两层共用同值，
+ *  才能保证 ellipsis 截断逐像素一致，双色裁切不错位。 */
+const SegLabel: React.FC<{label: string; mono: boolean; color: string; width: number}> = ({
+  label,
+  mono,
+  color,
+  width,
+}) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: TITLE_PAD_X,
+      top: 0,
+      width,
+      height: BAR_H,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: mono ? theme.mono : theme.sans,
+      fontSize: mono ? CODE_SIZE : TITLE_SIZE,
+      fontWeight: 500,
+      letterSpacing: 1,
+      color,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    }}
+  >
+    {label}
+  </div>
+);
+
+/** 顶部分段章节进度条：段宽∝幕时长、已播填充亮色、播放头随帧推进、章节名
+ *  内嵌段内居中。文字跨亮填充/深轨两区，用**双色裁切**保对比度：已填侧深字
+ *  （bg 压亮填充）、未填侧亮字（当前章 text / 未播章 dim），色随播放头揭示。
+ *  全片 overlay，与 Subtitle 同范式（帧驱动 + 只读底座 token、零 spring）。 */
 export const ChapterProgress: React.FC<{
   scenes: SceneRange[];
   totalDurationInFrames: number;
@@ -77,57 +114,46 @@ export const ChapterProgress: React.FC<{
       {segs.map((s, i) => {
         const {x: segX, w} = layout[i];
         const fill = clamp01((frame - s.from) / (s.to - s.from));
+        const title = titleOf(s.scene);
+        const label = title || s.scene; // 标题缺失回退 mono 幕码
+        const mono = !title;
+        const textW = w - TITLE_PAD_X * 2;
         return (
-          <div key={s.scene} style={{position: 'absolute', left: segX, width: w}}>
-            {/* 轨道 + 左缘填充（text@0.9：比字幕白稍收，压顶部重量） */}
-            <div
-              style={{
-                height: BAR_H,
-                borderRadius: BAR_H / 2,
-                background: theme.panelBorder,
-                overflow: 'hidden',
-              }}
-            >
-              <div style={{height: '100%', width: `${fill * 100}%`, background: theme.text, opacity: 0.9}} />
-            </div>
-            {w >= 64 && (
-              <div
-                style={{
-                  marginTop: 6,
-                  fontFamily: theme.mono,
-                  fontSize: 14,
-                  fontWeight: 500,
-                  letterSpacing: 1,
-                  color: i === currentIdx ? theme.text : theme.dim,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {/* 降级阶梯：w<120 只显序号；标题缺失只显 PART n */}
-                {w < 120
-                  ? `P${i + 1}`
-                  : titleOf(s.scene)
-                    ? `PART ${i + 1} : `
-                    : `PART ${i + 1}`}
-                {w >= 120 && titleOf(s.scene) && (
-                  <span style={{fontFamily: theme.sans, fontSize: 20}}>{titleOf(s.scene)}</span>
-                )}
-              </div>
+          <div
+            key={s.scene}
+            style={{
+              position: 'absolute',
+              left: segX,
+              width: w,
+              height: BAR_H,
+              borderRadius: BAR_H / 2,
+              overflow: 'hidden',
+            }}
+          >
+            {/* 轨道 + 未填侧文字（当前章 text、未播章 dim；被填充盖住左区） */}
+            <div style={{position: 'absolute', left: 0, top: 0, width: w, height: BAR_H, background: theme.panelBorder}} />
+            {w >= MIN_SEG_FOR_TEXT && (
+              <SegLabel label={label} mono={mono} color={i === currentIdx ? theme.text : theme.dim} width={textW} />
             )}
+            {/* 已填区裁切层：亮填充（text@0.9 压顶部重量）+ 深色同位文字 */}
+            <div style={{position: 'absolute', left: 0, top: 0, width: w * fill, height: BAR_H, overflow: 'hidden'}}>
+              <div style={{position: 'absolute', left: 0, top: 0, width: w, height: BAR_H, background: theme.text, opacity: 0.9}} />
+              {w >= MIN_SEG_FOR_TEXT && <SegLabel label={label} mono={mono} color={theme.bg} width={textW} />}
+            </div>
           </div>
         );
       })}
-      {/* 播放头：与轨同带的亮圆点 + 辉光（rgba 字面值 = theme.text 底座 #F2F5FA） */}
+      {/* 播放头：亮圆点 + bg 描边（亮填充上保轮廓）+ 辉光（rgba = theme.text 底座 #F2F5FA） */}
       <div
         style={{
           position: 'absolute',
-          left: headX - 6,
-          top: BAR_H / 2 - 6,
-          width: 12,
-          height: 12,
-          borderRadius: 6,
+          left: headX - 7,
+          top: BAR_H / 2 - 7,
+          width: 14,
+          height: 14,
+          borderRadius: 7,
           background: theme.text,
+          border: `3px solid ${theme.bg}`,
           boxShadow: '0 0 10px rgba(242,245,250,0.5)',
         }}
       />
