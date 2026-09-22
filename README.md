@@ -82,7 +82,7 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 ### 更新与卸载
 
 - 更新：clone 目录内 `git pull`（软链自动生效），或 `npx skills update`。
-- 卸载：`rm ~/.claude/skills/to-video`（只删软链，clone 保留），可选清理 `~/Library/Application Support/to-video/tts-store` 缓存。
+- 卸载：`rm -r ~/.claude/skills/to-video`（软链形态只删软链、clone 保留；--copy 形态删的是副本目录），可选清理 `~/Library/Application Support/to-video/tts-store` 缓存。
 - 自 negentropy-influence 迁移：旧 tts-store 目录自动回退兼容、零配置；彻底搬走旧缓存的一次性命令见 [CHANGELOG.md](CHANGELOG.md) 1.0.0 条目。
 
 ## 四、快速上手（Quickstart）
@@ -155,7 +155,6 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 ## 六、相邻 Skill
 
 同一作者的配套技能：[guided-learn](https://github.com/ThreeFish-AI/guided-learn)（信源精读方法论，阶段 ① 的上游能力）、[archify](https://github.com/tt-a1i/archify)（架构图绘制与动效录制，阶段 ⑦ 的图例资产来源、覆盖门的消费对象）。
-- [archify](https://github.com/tt-a1i/archify) —— 架构 / 流程图绘制与动效录制（阶段 ⑦ 的图例资产来源，覆盖门的消费对象）
 
 ## 七、致谢
 
