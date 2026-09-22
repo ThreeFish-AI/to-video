@@ -4,6 +4,9 @@
 narration.md 是单一事实源；本脚本是纯派生转换，不做任何内容改写。
 适用于任何 `episodes/*-video/` 科普视频工程（目录约定见 pipeline/README.md）。
 
+派生产物两件：narration.json（逐句）与 video/src/chapters.json（逐幕标题——
+`## Pn 标题` 的标题文字此前被丢弃，现为顶部分段进度条的数据面）。
+
 **发音标注的正交拆分**：逐字稿里可内联 `<原文|读音>` 标注（多音字/英文专名，语法见
 [pron_marks.py](./pron_marks.py)）。本脚本据此派生两个字段：
 
@@ -33,7 +36,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pron_marks import has_marks, load_vocab, strip_marks, validate
 
 LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$")
-SCENE_RE = re.compile(r"^## (?P<scene>P\d+)\b")
+#: 幕标题文字此前被丢弃；现为顶部分段进度条（ChapterProgress）的数据面，
+#: 经 emit_chapters 落盘 video/src/chapters.json。分隔符类兼容 `## P2 标题` /
+#: `## P2：标题` / `## P2`（空标题）三种写法。
+SCENE_RE = re.compile(r"^## (?P<scene>P\d+)\b[\s:：—\-·]*(?P<title>.*)$")
 FORMAT_DOC = "pipeline/README.md 第二节格式契约"
 
 #: pinyin.vocab 在 index-tts checkout 内（不在 skill）。根目录可经
@@ -61,6 +67,7 @@ def main() -> None:
 
     vocab = load_vocab(PINYIN_VOCAB)
     scene = ""
+    scene_titles: dict[str, str] = {}
     items: list[dict[str, str]] = []
     seen: set[str] = set()
     mark_errors: list[str] = []
@@ -69,6 +76,8 @@ def main() -> None:
     for lineno, raw in enumerate(src.read_text(encoding="utf-8").splitlines(), 1):
         if m := SCENE_RE.match(raw):
             scene = m.group("scene")
+            # 插入序即章节序；重号幕保留首个（与句子归属的首次生效口径一致）
+            scene_titles.setdefault(scene, m.group("title").strip())
             continue
         if m := LINE_RE.match(raw):
             sid, text = m.group("id"), m.group("text").strip()
@@ -127,7 +136,29 @@ def main() -> None:
             f"发音标注: {marked} 句带 ttsText（字数与字幕仍取剥离后的 text）"
             + ("" if vocab else "；未找到 pinyin.vocab，已跳过「音节是否在表内」告警")
         )
+    print(f"章节标签: {len(scene_titles)} 幕 → video/src/chapters.json（顶部进度条）")
+    emit_chapters(root, scene_titles)
     emit_series_layers(root)
+
+
+def emit_chapters(root: Path, scene_titles: dict[str, str]) -> None:
+    """幕标题 → video/src/chapters.json（顶部分段进度条 ChapterProgress 的数据面）。
+
+    与 emit_series_layers 同一派生模式：Remotion 打包根是 video/，读不到工程外
+    文件。无条件写（series-layers 依赖 series.json，本文件只依赖 narration.md
+    本身）；标题缺失写空串，组件侧回退只显 PART n。空集也照写（脚手架期形态）。
+    """
+    out = root / "video" / "src" / "chapters.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            [{"scene": s, "title": t} for s, t in scene_titles.items()],
+            ensure_ascii=False,
+            indent=1,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def emit_series_layers(root: Path) -> None:
