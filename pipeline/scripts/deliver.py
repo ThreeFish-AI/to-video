@@ -141,6 +141,13 @@ def load_series(ws: Path) -> list[dict]:
         sys.exit(f"series.json 的 seriesList 应为对象数组: {sj}")
     if not series_list:
         sys.exit(f"series.json 无 seriesList: {sj}")
+    for s in series_list:
+        # episodes 非列表（字符串/dict/null）会让下游迭代出非 dict 元素——同门把关
+        eps = s.get("episodes", [])
+        if not isinstance(eps, list) or not all(isinstance(e, dict) for e in eps):
+            sys.exit(
+                f"series.json：系列 {s.get('id')!r} 的 episodes 应为对象数组: {sj}"
+            )
     return series_list
 
 
@@ -231,12 +238,14 @@ def main() -> int:
     dest_dir = root / sid
     warn_if_inside_workspace(root)
 
-    # 只收普通文件：同名目录不抬号也不进 sha1（占名冲突由 dest.exists() 复查兜底）
-    names = (
-        sorted(p.name for p in dest_dir.iterdir() if p.is_file())
-        if dest_dir.is_dir()
-        else []
-    )
+    # 只收普通文件：同名目录不抬号也不进 sha1（占名冲突由 dest.exists() 复查兜底）。
+    # 列举与下方 sha1 读同环境条件（无读权限/并发删除）——同样大声退出，不裸栈。
+    names: list[str] = []
+    if dest_dir.is_dir():
+        try:
+            names = sorted(p.name for p in dest_dir.iterdir() if p.is_file())
+        except OSError as e:
+            sys.exit(f"版本目录列举失败: {e}")
     versions = scan_versions(names, title)
     try:
         if versions and sha1_of(dest_dir / versions[-1][1]) == sha1_of(src_mp4):
@@ -257,6 +266,8 @@ def main() -> int:
         )
     if root.exists() and not root.is_dir():
         sys.exit(f"交付根是文件而非目录: {root}")
+    if dest_dir.exists() and not dest_dir.is_dir():
+        sys.exit(f"系列子目录被文件占名: {dest_dir}")
     if dest.exists():
         sys.exit(
             f"目的地已存在，拒绝覆写: {dest}\n"

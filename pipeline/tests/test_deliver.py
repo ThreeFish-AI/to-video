@@ -592,3 +592,53 @@ def test_toml_deliver_root_is_not_a_channel(tmp_path: Path):
     r = run_deliver(ws)
     assert r.returncode != 0
     assert "未配置" in out_text(r)
+
+
+# ---------------- 评审补钉二轮（3 项确认发现） ----------------
+
+
+@pytest.mark.parametrize("raw", ['"oops"', '{"a": 1}', "null", "3"])
+def test_episodes_not_a_list_exits_clean(tmp_path: Path, raw: str):
+    """episodes 键非列表（字符串/dict/null/int）：结构门大声退出，不裸 traceback
+    （load_series 原只把关 seriesList 形态，episodes 是同族剩下的缺口）。"""
+    ws = build_ws(tmp_path)
+    (ws / "series.json").write_text(
+        f'{{"seriesList": [{{"id": "{SID}", "title": "s", "episodes": {raw}}}]}}',
+        encoding="utf-8",
+    )
+    r = run_deliver(ws, "--root", str(tmp_path / "dv"))
+    assert r.returncode != 0
+    assert "episodes 应为对象数组" in out_text(r)
+    assert "Traceback" not in out_text(r)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root 不受读权限位约束")
+def test_series_dir_without_read_permission_exits(tmp_path: Path):
+    """系列子目录可写不可读（drop-box 型 0300）：版本扫描的 iterdir 即失败——
+    与 sha1 读同一环境条件，同样大声退出不裸栈。"""
+    ws = build_ws(tmp_path)
+    sdir = tmp_path / "dv" / SID
+    sdir.mkdir(parents=True)
+    sdir.chmod(0o300)
+    try:
+        r = run_deliver(ws, "--root", str(tmp_path / "dv"))
+        assert r.returncode != 0
+        assert "列举失败" in out_text(r)
+        assert "Traceback" not in out_text(r)
+    finally:
+        sdir.chmod(0o755)
+
+
+def test_series_subdir_is_file_exits_including_dry_run(tmp_path: Path):
+    """<root>/<系列id> 被文件占名：dry-run 即退出——计划必须真实可落地
+    （root-是-文件已有同款守卫，此相邻形态原漏网：dry-run rc=0、实投才炸）。"""
+    ws = build_ws(tmp_path)
+    root = tmp_path / "dv"
+    root.mkdir()
+    (root / SID).write_text("x", encoding="utf-8")
+    r = run_deliver(ws, "--root", str(root), "--dry-run")
+    assert r.returncode != 0
+    assert "被文件占名" in out_text(r)
+    r = run_deliver(ws, "--root", str(root))
+    assert r.returncode != 0
+    assert "被文件占名" in out_text(r)
