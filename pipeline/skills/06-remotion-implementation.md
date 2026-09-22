@@ -185,7 +185,7 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 - **数据面**：段边界/占比来自 `computeTimeline` 的 `scenes`（manifest 实测时长驱动，TTS 重跑自动重定时）；
   段内**标题文字**来自 `video/src/chapters.json`——build_narration 从 narration.md `## Pn 幕标题`
   派生（见 skills/03「幕标题即章节标签」）。chapters 为空（首次 build 前）组件自渲染 null。
-- **几何**：x72..1848（左锚与 SceneTag 对齐）；胶囊段高 36（y14–50）、段间隙 8、段宽∝幕时长（含幕间
+- **几何**：x72..1848（左锚与 SceneTag 对齐）；段高 36（y14–50，圆角 4——勿胶囊化，播放头圆点是段上唯一圆形元素）、段间隙 8、段宽∝幕时长（含幕间
   gap）；**章节名内嵌段内居中**（sans 18，标题缺失回退 mono 幕码 15）；播放头 Ø14 亮点带 `bg` 描边
   在填充前沿。**整带收在 y<56**——各幕内容 y≥56 起（上方红线 2b）。
 - **状态机 / 双色裁切**：已播部分 `text@0.9` 填充；段内文字跨亮填充与深轨两区，左右两层同位裁切——
@@ -210,7 +210,7 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 
 1. **百分比定位量纲**：`left/top` 混用 `%` 与 px 时计算基准不同——居中场景统一用 px（`width/2 - w/2`）推导，避免「看着居中、渲染偏移」。
 2. **底部角标避让字幕条**：字幕条占底部 ~54+44px；角标/公式/说明文字 `bottom ≥ 150`。
-2b. **顶部安全带 y<56 归章节条**：顶部章节进度条占 y14–50（胶囊段 h36，章节名内嵌段内，
+2b. **顶部安全带 y<56 归章节条**：顶部章节进度条占 y14–50（段 h36 · 圆角 4，章节名内嵌段内，
    见「顶部章节进度条」节）——各幕画面内容 `y ≥ 56` 起；SceneTag 维持 top:64。
 3. **SVG 描边动画**：`pathLength={1}` 会归一化路径长度，与像素级 `strokeDasharray` 互斥——二选一；描边生长用 `pathLength + strokeDashoffset` 归一化方案。
 4. **片尾渐黑窗口**：不写死帧数，从**末 beat 总时长**（`beatDurationInFrames` 传入收尾组件）实时推导淡出区间——勿用末句时长（第三集上线教训：末句短于 beat 时渐黑提前收尾，导致收尾长黑屏）。

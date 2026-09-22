@@ -15,7 +15,8 @@ const CHAPTERS = chaptersJson as Chapter[];
 const MARGIN_X = 72; // 与 SceneTag/Footnote 左锚对齐
 const STRIP_W = 1920 - MARGIN_X * 2;
 const BAR_Y = 14;
-const BAR_H = 36; // 章节名内嵌段内 ⇒ 加高胶囊；底缘 50 仍收在 y<56
+const BAR_H = 36; // 章节名内嵌段内 ⇒ 加高；底缘 50 仍收在 y<56
+const SEG_RADIUS = 4; // 微圆角（勿回胶囊——播放头圆点应是段上唯一圆形元素）
 const SEG_GAP = 8;
 const TITLE_SIZE = 18; // sans 章节名；标题缺失回退 mono 幕码（15）
 const CODE_SIZE = 15;
@@ -126,7 +127,7 @@ export const ChapterProgress: React.FC<{
               left: segX,
               width: w,
               height: BAR_H,
-              borderRadius: BAR_H / 2,
+              borderRadius: SEG_RADIUS,
               overflow: 'hidden',
             }}
           >
