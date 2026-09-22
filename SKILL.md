@@ -77,7 +77,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions # → 
 
 - **安装**：`git clone https://github.com/ThreeFish-AI/to-video <目录>` 后 `ln -s <目录> ~/.claude/skills/to-video`，或设 `TO_VIDEO_HOME=<目录>`；分集与工作区内的薄包装器据此自动定位机制代码。
 - **工作区哨兵**：`.to-video-root`（兼容识别旧名 `.influence-root`，既有工作区零改动迁移）；找不到哨兵即**大声退出**并提示 `--init-workspace`，绝不静默猜根。
-- **包装器解析顺序**（未命中即退出并打印安装指令，静默跳过被禁止）：`TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video`；工作区级包装器同时把自身位置写回 `TO_VIDEO_WORKSPACE`，故从任意 CWD 调用都锚定本工作区。
+- **包装器解析顺序**（未命中即退出并打印安装指令，静默跳过被禁止）：`TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video`；工作区级包装器同时把自身位置硬性覆写进 `TO_VIDEO_WORKSPACE`（不承袭外部值），故从任意 CWD 调用都锚定本工作区。
 - **env 清单**：
 
 | env | 作用 | 缺省 |
