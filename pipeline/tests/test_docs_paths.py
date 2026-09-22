@@ -20,7 +20,9 @@
      可跳转链接；把链接变量化会一次性造出十几条死链。
 
 受检面：pipeline/README.md + pipeline/skills/*.md + SKILL.md。pipeline/ 下
-两本手册（VOICE-CLONING.md 等）暂不在面内。
+两本手册（VOICE-CLONING.md 等）与根 README（门面）暂不在面内——根 README
+快速上手中的 T=/W=/P= 赋值块是 quickstart 实例化而非第二定义处；若未来
+扩面把它纳入，须先为该块设豁免。
 """
 
 from __future__ import annotations
