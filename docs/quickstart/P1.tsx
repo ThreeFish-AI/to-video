@@ -1,19 +1,27 @@
 // Quickstart 第二幕场景组件（根 README「快速上手」的 cp 源，与 P0.tsx 配套）。
 // 画面与口播互补：口播说「顶部进度条」，画面把它放大解剖——中央大条与顶部
-// ChapterProgress 逐帧同步（段界/填充/播放头全部由真实时间轴派生，零演示常数）。
+// ChapterProgress 逐帧同步（段界/填充/播放头全部由真实时间轴派生，零演示常数；
+// 全片总长按两幕 quickstart 的末幕恒等式推导，见组件体注释）。
 // 动效仍来自 frozen cards 原语（FadeUp 错峰）；单句幕用 w('p1-01')——解析器
 // 契约见 P0.tsx 头注（check_script.py 的 SCENE_CALL_RE 第二参可选）。内容垂直
 // 居中 y≥56 起（顶部 y<56 安全带归章节进度条，skills/06 红线 2b）。
 import React from 'react';
-import {AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Sequence, useCurrentFrame} from 'remotion';
 import {FadeUp, Pill} from '../components/cards';
 import {theme} from '../design/theme';
 import {beatWindow} from '../timing';
 import type {SceneRange} from '../types';
 import chaptersJson from '../chapters.json';
+import timingJson from '../timing.json';
 
 type Chapter = {scene: string; title: string};
 const CHAPTERS = chaptersJson as Chapter[];
+
+/** timing.ts 的 LEAD_IN/ TAIL_SEC 属 A 档 frozen 未导出，就地读同一 timing.json
+ *  SSOT 同式派生——改时序常量只改 json，此处自动跟随。 */
+const FPS = timingJson.fps;
+const LEAD_IN_FRAMES = Math.round(timingJson.leadInSec * FPS); // = scenes[0].from
+const TAIL_FRAMES = Math.round(timingJson.tailSec * FPS); // 片尾静默（不在任何幕内）
 
 // 放大档几何：顶部章节条（components/ChapterProgress.tsx，frozen）的讲解版——
 // 同一设计语言（panelBorder 轨道 / text@0.9 填充 / 双层同位文字裁切 / bg 描边
@@ -77,15 +85,18 @@ const Seg: React.FC<{w: number; fill: number; label: string}> = ({w, fill, label
 
 export const P1: React.FC<{scene: SceneRange}> = ({scene}) => {
   const w = (fromId: string, toId?: string) => beatWindow(scene.sentences, scene.from, fromId, toId);
-  // 全片进度：Sequence 内 useCurrentFrame 是本幕局部帧，+scene.from 还原全局帧；
-  // durationInFrames 是全片总帧数（Root calculateMetadata 事实源）。段界 = 本幕
-  // 起点（顶部条 segSpans 的段 1 恰收在 [P0.from, P1.from)、末段吞到 total），
-  // 故大条几何完全派生——段宽∝幕时长，与顶部条逐帧同构、零演示常数。
+  // 全片进度：Sequence 内 useCurrentFrame 是本幕局部帧，+scene.from 还原全局帧。
+  // 全片总长走末幕恒等式（勿用 useVideoConfig().durationInFrames——Sequence
+  // 内被覆盖为本幕局部时长，取到 118 而非 522，段宽会溢出画布）。段界 = 本幕
+  // 起点（顶部条 segSpans 段 1 恰收 [P0.from, P1.from)、末段吞到 total）；段宽
+  // 比与顶部条逐帧同构——顶部条以 scenes 时间轴为基（[P0.from, total)，片头
+  // 静默不在 strip 内），分子分母同剔 leadIn。零演示常数。
   const frame = useCurrentFrame();
-  const {durationInFrames: total} = useVideoConfig();
   const f = scene.from + frame;
   const usable = BAR_W - SEG_GAP;
-  const seg1W = (usable * scene.from) / total;
+  const total = scene.from + scene.durationInFrames + TAIL_FRAMES; // 末幕恒等式
+  const stripTotal = total - LEAD_IN_FRAMES; // 顶部条归一化基：scenes 时间轴全长
+  const seg1W = (usable * (scene.from - LEAD_IN_FRAMES)) / stripTotal;
   const seg2W = usable - seg1W;
   const seg2Fill = clamp01((f - scene.from) / (total - scene.from));
   const headX = seg1W + SEG_GAP + seg2W * seg2Fill; // 播放头贴段 2 填充前沿
