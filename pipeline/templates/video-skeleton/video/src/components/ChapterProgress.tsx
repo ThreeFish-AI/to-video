@@ -53,9 +53,10 @@ const SegLabel: React.FC<{label: string; mono: boolean; color: string; width: nu
       top: 0,
       width,
       height: BAR_H,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      // 块级居中（lineHeight + textAlign）：text-overflow 只作用 block 容器，
+      // flex 容器上「…」不渲染（超宽标题会两侧硬切）
+      lineHeight: `${BAR_H}px`,
+      textAlign: 'center',
       fontFamily: mono ? theme.mono : theme.sans,
       fontSize: mono ? CODE_SIZE : TITLE_SIZE,
       fontWeight: 500,
