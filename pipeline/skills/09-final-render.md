@@ -48,6 +48,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver
 - [ ] 全片逐幕抽帧复检 + `--last-n 6 --check`（时长在 B 遍后又位移过，勿复用 A 遍结论）
 - [ ] `pipeline.py check` 实测口径在预算窗内
 - [ ] deliver 归档副本（根路径已配置时）：`<根>/<系列id>/<集标题> vN.mp4`
+- [ ] RSI 台账复查（非阻断）：制作中发现的 Skill 缺陷/改进已按 [RSI.md](../../RSI.md) 登记台账（无则跳过）
 
 ## 交付归档（deliver）
 

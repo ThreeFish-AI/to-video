@@ -73,6 +73,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → �
 - 声音样本是生物特征：不入库（`voices/refs.toml` 只存指纹），试听后即删。
 - **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头是 `pipeline/templates/video-skeleton/`，由 `scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，各居任意目录互不牵连。
+- **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 只读，禁止顺手改机制文件。
 
 ## 双锚点与安装
 
@@ -95,7 +96,12 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → �
 - **Stage ① 深读信源**：建议先调 `/guided-learn`——其「全貌解剖（先梳理后总结）+ 底层规律与争议提炼」方法论可直接复用为分章子代理的输出结构约束。
 - **Stage ⑤/⑦ 图示资产**：需要架构/流程类图解时调 `/archify` 出图，HTML 落 `$W` 下，再由 `record_archify_all.py` 逐章录制为动效素材；句级锚定覆盖门（`check_archify_coverage.py`）已自动串联进 `check`。
 
+## 自改进回路（RSI）
+
+制片过程中（Agent 或用户）发现**本 Skill 自身**的缺陷或流程/制度/方法改进项——脚本误报漏报、文档命令复制即跑失败、规格与实现漂移等——走 RSI：发现即登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容质量问题不在此列（走 Stage ④/⑧ 既有 QA 回路）。四道门（问题属实 / 方案比选正确 / 正向收益 / 无损历史）全过后自动向本仓发起改进 PR 并回报链接。协议全文：[RSI.md](RSI.md)。
+
 ## 尾部指针
 
 - [pipeline/README.md](pipeline/README.md) —— 机制全量契约：路径变量 SSOT、`pipeline.toml` 字段表、复用边界、脚手架清单、许可注意。
+- [RSI.md](RSI.md) —— RSI 自改进回路：触发分流、台账、子代理协议、四道门与 PR 规范。
 - [README.md](README.md) —— 安装与 quickstart。
