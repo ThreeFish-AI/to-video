@@ -158,6 +158,7 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 | [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md) | 声音克隆操作与参数：部署、样本、风格档、合成、缓存、排障 |
 | [pipeline/INDEXTTS-2.5-ADVANCED.md](pipeline/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
 | [pipeline/PRON-GLOSSARY.md](pipeline/PRON-GLOSSARY.md) | 易错字台账：发音标注（`<原文\|读音>`）跨集复用表 |
+| [RSI.md](RSI.md) | RSI 自改进回路：Skill 缺陷/改进的台账登记、子代理协议、四道门核验与 PR 回流 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本史与迁移记录 |
 
 ## 六、相邻 Skill
@@ -166,7 +167,7 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 
 ## 七、致谢
 
-本仓自 [ThreeFish-AI/negentropy](https://github.com/ThreeFish-AI/negentropy)（Apache-2.0）的 `apps/negentropy-influence/pipeline/` 抽取为独立技能，并沿用其 2026-08–2026-09 的流水线演化成果：单文件 Canvas 制作包 → Remotion 工程模式 → 九阶段门禁化 → 双锚点独立技能。反馈欢迎在仓库开 Issue。
+本仓自 [ThreeFish-AI/negentropy](https://github.com/ThreeFish-AI/negentropy)（Apache-2.0）的 `apps/negentropy-influence/pipeline/` 抽取为独立技能，并沿用其 2026-08–2026-09 的流水线演化成果：单文件 Canvas 制作包 → Remotion 工程模式 → 九阶段门禁化 → 双锚点独立技能。反馈欢迎在仓库开 Issue，或按 [RSI.md](RSI.md) 回路直接发起改进 PR。
 
 ## 八、许可与合规
 
