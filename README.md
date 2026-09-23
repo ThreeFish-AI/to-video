@@ -159,6 +159,8 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 | [pipeline/INDEXTTS-2.5-ADVANCED.md](pipeline/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
 | [pipeline/PRON-GLOSSARY.md](pipeline/PRON-GLOSSARY.md) | 易错字台账：发音标注（`<原文\|读音>`）跨集复用表 |
 | [RSI.md](RSI.md) | RSI 自改进回路：Skill 缺陷/改进的台账登记、子代理协议、四道门核验与 PR 回流 |
+| [pipeline/MODELING-PLAYBOOK.md](pipeline/MODELING-PLAYBOOK.md) | 动效画面建模手册：跨集复用的建模方法与反模式（字数有界，上限见 `check_playbook.py`；超限按压缩阶梯回收） |
+| [docs/research/modeling-experience-distillation.md](docs/research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本史与迁移记录 |
 
 ## 六、相邻 Skill
