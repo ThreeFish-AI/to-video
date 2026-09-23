@@ -16,7 +16,7 @@
 
 ## 二、登记（台账是回路的入口）
 
-发现即登记 [docs/.agents/issue.md](docs/.agents/issue.md)，纪律：
+发现即登记 [docs/.agents/issue.md](docs/.agents/issue.md)（`$T` 非 git 仓时不落本地，登记改走第八节 GitHub Issue 草稿路径），纪律：
 
 - 编号 `RSI-001` 起三位递增；**刻意不用 `ISSUE-` 前缀**（上游 negentropy 的 ISSUE-xxx 已占用本仓正文外链，复用必混淆；引用上游教训一律写全 URL）。
 - 新条目追加文件末尾，同一问题只维护一处；复发不新开编号，在原条目追加带日期的复盘点。
@@ -24,7 +24,7 @@
 
 ## 三、子代理协议（fresh context）
 
-主代理只做三件事：**登记台账 → 另起子代理 → 不顺手改**（制作过程中 `$T` 对主代理只读——机制热修也走子代理，不在制片上下文里顺手落笔）。
+主代理只做三件事：**登记台账 → 另起子代理 → 不顺手改**（制作过程中 `$T` 机制文件对主代理只读，唯一例外是登记台账——机制热修也走子代理，不在制片上下文里顺手落笔）。
 
 输入契约（主代理必须交给子代理）：
 
@@ -52,7 +52,7 @@
 | G4 | 无损历史 | 第九节清单逐项三档核对：未触碰（过）/ 触碰但有显式权衡与同步方案（过，PR 描述须点名）/ 破坏且无论证（**阻断**） | 清单各条目自带的执法测试 |
 
 ```bash
-# G2/G3 机器执法统一入口（依赖集与 pyproject 的 testpaths 一致）
+# G2/G3 机器执法统一入口（命令 SSOT = pyproject.toml 顶部注释；依赖漂移在 pytest 收集阶段即大声报错）
 uv run --no-project --with pytest --with numpy --with pillow --with mutagen --with soundfile python -m pytest pipeline/tests -q
 ```
 

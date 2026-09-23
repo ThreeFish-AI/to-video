@@ -73,7 +73,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → �
 - 声音样本是生物特征：不入库（`voices/refs.toml` 只存指纹），试听后即删。
 - **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头是 `pipeline/templates/video-skeleton/`，由 `scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，各居任意目录互不牵连。
-- **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 只读，禁止顺手改机制文件。
+- **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 机制文件只读（唯一例外：登记台账），禁止顺手改。
 
 ## 双锚点与安装
 
