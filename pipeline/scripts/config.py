@@ -153,6 +153,21 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         "匹配度：同锚句双 cue FAIL（全屏独占下一句一图；异句窗含 gap 按构造铺满不重叠）",
     ),
     (
+        "archify.rate_min",
+        float,
+        0.7,
+        False,
+        "check_archify rate 预演下界（与 ArchifyRecap.pickFit 同构的组件侧契约）",
+    ),
+    ("archify.rate_max", float, 1.35, False, "rate 预演上界；同上"),
+    (
+        "archify.min_fps",
+        float,
+        18.0,
+        False,
+        "素材完整门：录制均帧率低于此值建议重录",
+    ),
+    (
         "archify.html_dir",
         str,
         "archify-html",

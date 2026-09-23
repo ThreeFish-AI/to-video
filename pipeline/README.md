@@ -99,6 +99,9 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 | [scripts/pipeline.py](./scripts/pipeline.py) | **单入口编排**（上表） | `uv run --no-project $T/pipeline/scripts/pipeline.py --project $P tts --plan` |
 | [scripts/timeline.py](./scripts/timeline.py) | 时间轴 Python 侧实现（与 timing.ts 同构，直读 timing.json） | 被 qa_frames/captions/check_script 复用 |
 | [scripts/check_script.py](./scripts/check_script.py) | ④⑤ 内容门：beat 覆盖性 / 时长预算双口径 / SceneFade 不变式 / `--check-scenes` 分镜↔代码互比 | `uv run --no-project scripts/check_script.py --check-scenes` |
+| [scripts/archify_lead.py](./scripts/archify_lead.py) | 场记板白闪**实测**回写各章真实 `lead_sec`（录制器恒写 0.0，漏跑＝白闪帧播进成片——全 0 由覆盖门点名 WARN）；webm 前段含页面加载非故事起点、墙钟估算带 ±0.3s，故只在像素上找白闪末帧 | `uv run --no-project --with pillow $T/pipeline/scripts/archify_lead.py --project $P` |
+| [scripts/archify_manifest.py](./scripts/archify_manifest.py) | sidecar JSON → `video/src/archify.manifest.ts`（静态导入让章节 id 拼错在 `tsc` 就红，不等渲染才发现）；录制或重测 lead 后重跑 | `uv run --no-project $T/pipeline/scripts/archify_manifest.py --project $P` |
+| [scripts/check_archify.py](./scripts/check_archify.py) | archify 回放**结构**门（只查结构不查画面语义——图层遮挡/时序错位须 `remotion still` 逐帧目视）：manifest × views 一致 / rate 预演边界 `[0.7, 1.35]`（阈值走 config）/ 素材完整（逐章有效采集帧率 ≥18，`capture_fps` 优先）/ 白录检测（manifest 有图却零 cue 引用）；`--stills` 打印每个 cue 的 K1/K4 边界帧抽帧命令 | `uv run --no-project $T/pipeline/scripts/check_archify.py --project $P` |
 | [scripts/check_archify_coverage.py](./scripts/check_archify_coverage.py) | archify 覆盖门（`check` 子命令在内容门后**自动串联**，无 flag）：图例对逐字稿的句级锚定率（整幕零锚 FAIL）/ 图与 cue 丰富度地板 / 分镜声明↔cue 双向对账 + 章节播放单调性；无资产集干净跳过，旧形态（仅 sidecar）点名 WARN 跳过 | `uv run --no-project $T/pipeline/scripts/check_archify_coverage.py --project $P` |
 | [scripts/check_series.py](./scripts/check_series.py) | 系列一致性规则（口播反串线 / 多标题顺序 / 序号绑定 / 清单完整性 / 死链 / 可渲染性 / 去站点化 / 下期卡同步），执法 `$W/series.json`；**工程级受检面（project_globs）与课程/下期卡系列 id 集由工作区 to-video.toml 声明** | 工作区内任意目录：`uv run --no-project $T/pipeline/scripts/check_series.py`（工作区侧可挂 pre-commit） |
 | [scripts/captions.py](./scripts/captions.py) | 导出 srt/vtt（cue 终点不含句间停顿——外挂字幕静默期不留字） | `uv run --no-project scripts/captions.py` |
@@ -108,6 +111,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P     {status|doc
 | [scripts/refs.py](./scripts/refs.py) | 参考样本可复现清单（verify/rebuild；指纹在 `$W/voices/refs.toml`——工作区内容，只存哈希不存音频） | `uv run --no-project $T/pipeline/scripts/refs.py verify` |
 | [scripts/source_ledger.py](./scripts/source_ledger.py) | Stage ① **B 型信源**可复现清单（fetch/list/verify + sync/audit——后两者消费系列级 `$W/source-map/` 地图，幂等批量建台账 + 离线三断言；`repo` 类固定提交 raw 指纹漂移即 FAIL，`site` 类只比归一正文、漂移报 WARN） | `uv run --no-project $T/pipeline/scripts/source_ledger.py --project $P verify`；`sync --map <map.toml> --episode N` / `audit --map <map.toml> --episode N` |
 | [scripts/pron_marks.py](./scripts/pron_marks.py) | 发音标注 `<原文\|读音>` 的解析与校验（纯函数库，无 IO）：多音字/英文专名的精确读音控制；被 `build_narration.py` 用于硬失败拦非法标注 | 库，不直接调用；语法与规则见其模块文档，台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md) |
+| [scripts/tts_progress.py](./scripts/tts_progress.py) | IndexTTS 长跑**旁路**监视：按逐句 mp3 的 mtime 序列重建墙钟进度 + 滚动秒/字 vs 基线（与合成进程零耦合、退出码恒 0——监视器不打断长跑；越阈先分因：负载竞争可继续只重排期，热节流才须中止验证环境） | 长跑期间另开终端：`uv run --no-project $T/pipeline/scripts/tts_progress.py --project $P` |
 | [scripts/tts_bench.py](./scripts/tts_bench.py) | 合成耗时基准与**测量环境体检**（**运行于 index-tts 环境**，同 tts_server.py）：A/A 复现性判定 + 分段计时 + 换页/分配器诊断。本机漂移已定因为热节流，做任何耗时 A/B 前先用它确认环境合格 | 在 `~/tools/index-tts` 内：`./.venv/bin/python $T/pipeline/scripts/tts_bench.py --check-only`；A/A 见 [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) |
 
 中心脚本以 `--project <工程根>` 参数化；工程内 `scripts/*.py` 与工作区 `scripts/*.py` 为薄包装（透传参数、保持原 CLI）。改造/迭代只改 `$T/pipeline/scripts/`，验证门 = 受影响工程的 `narration.json` / `manifest.json` 字节级不变。
@@ -135,6 +139,9 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](./scripts/c
 | `archify.min_chapter_ratio`     |                 | `0.30`                  | 被 cue 引用章 / 总章 下限                                                                                                      |
 | `archify.per_scene_min_anchors` |                 | `1`                     | 每幕最少锚句数（整幕零锚 FAIL）                                                                                                |
 | `archify.exempt_scenes`         |                 | `[]`                    | 豁免零锚判定的幕名（如 `["P6"]`）；豁免在覆盖门输出里点名                                                                      |
+| `archify.rate_min`              |                 | `0.7`                   | 机制常数（check_archify rate 预演带下界，与 Remotion 侧 `pickFit` 自动降档契约同构）                                            |
+| `archify.rate_max`              |                 | `1.35`                  | 机制常数（rate 预演带上界；同上）                                                                                               |
+| `archify.min_fps`               |                 | `18.0`                  | 机制常数（素材完整门：录制均帧率低于此值 WARN 建议重录）                                                                        |
 | `archify.html_dir`              |                 | `archify-html`          | 重录源图目录（**PROJECT 根相对** = 工作区所在 git 仓库根；`/archify` 等出图工具的产物落点，`record_archify_all.py` 的 slug→源图映射基准） |
 
 未知键报 WARN 并给最近邻建议（保留前向兼容）；类型/取值域/必填/slug 不符报 FAIL。`status` 与 `doctor` 只报不退——诊断工具因被诊断对象有病而拒绝运行是荒谬的；其余子命令 FAIL 即退出。
@@ -156,7 +163,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver [--root
 ## 四、复用边界（显式权衡）
 
 - **Python 脚本：集中共享（SSOT）**——共享载体是 skill 仓（`$T/pipeline/scripts/`），机制工具跨集零差异，中心化防 split-brain；工作区与分集工程只持薄包装（复制「转发」而非「实现」）。
-- **Remotion 工程原语：复制适配，不做共享包**——`timing.ts` / `Subtitle` / `cards.tsx` / `theme.ts` 等每集复制后按本集视觉契约修改。理由：每集工程须保持 pnpm `--ignore-workspace` 独立可渲染（嵌套 workspace 隔离 + Remotion 版本自由），共享 TS 包会把「一集的视觉改动」泄漏进其他集。**复制源头是 [templates/video-skeleton/](./templates/video-skeleton/)**（随 skill 分发于 $T，不随内容工作区；frozen 文件清单以 skeleton.toml 为准，勿在文档里维护数字），新集用 `scaffold.py` 实例化、「改任何一处须同步」由 `verify_skeleton.py` 机器执法——此前「以任一既有集为模板」的说法等于给 391 行冻结基建 4 个同权真理声明者，且纸面义务从未被执行过（详见 skeleton.toml 内注）。同类做法：`go mod vendor` + `go mod verify`（物理副本 + 校验门）、Copier（模板 + 应答记录）。
+- **Remotion 工程原语：复制适配，不做共享包**——`timing.ts` / `Subtitle` / `cards.tsx` / `theme.ts` 等每集复制后按本集视觉契约修改。理由：每集工程须保持 pnpm **独立可渲染**（嵌套 workspace 自锚隔离 + Remotion 版本自由），共享 TS 包会把「一集的视觉改动」泄漏进其他集。**复制源头是 [templates/video-skeleton/](./templates/video-skeleton/)**（随 skill 分发于 $T，不随内容工作区；frozen 文件清单以 skeleton.toml 为准，勿在文档里维护数字），新集用 `scaffold.py` 实例化、「改任何一处须同步」由 `verify_skeleton.py` 机器执法——此前「以任一既有集为模板」的说法等于给 391 行冻结基建 4 个同权真理声明者，且纸面义务从未被执行过（详见 skeleton.toml 内注）。同类做法：`go mod vendor` + `go mod verify`（物理副本 + 校验门）、Copier（模板 + 应答记录）。
 - **每集视觉契约独立设计**（色彩语义映射到本集核心概念），但底层规范复用：深色底 `#0E1116` 系、警示红 `#FF5C5C`、确认绿 `#7ED321`、金句卡衬线体、公式只作角标彩蛋。
 - **运动层（`video/src/motion/`，frozen）：共享的是「怎么动」，不是「画什么」**——时长/缓动/弹簧/错峰/巡游等时序语汇跨集一致（同一只手感），theme/motifs/场景构图仍各集自由。2026-09 重制 EP1 时引入：令牌（Carbon 六档时长 + M3 缓动 + 实测弹簧手感）+ 窗口/编排纯函数 + 12 个运动模型 hooks + MotionGallery 评审面，规格与铁律见 [skills/06 运动层](./skills/06-remotion-implementation.md)。不读 theme token（两系列概念色名已分叉）是其可 frozen 的前提，由 tests/test_skeleton.py 执法。
 
@@ -180,10 +187,12 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver [--root
    ```
    scaffold 按 skeleton.toml 复制 frozen 文件 + 渲染 4 个模板（package.json / theme.ts / pipeline.toml / README），**刻意不生成 scenes/**（样例留在模板里）、不改 .gitignore（ignore 规则随工作区模板落盘、已通配到分集级）、不写 series.json。跑完立刻 `uv run --no-project $T/pipeline/scripts/verify_skeleton.py` 确认新集与模板零漂移。
 2. `theme.ts` 换本集概念色；`video/src/scenes/*` 与 `Main.tsx` 注册表全部新写。
-3. `cd video && pnpm install --ignore-workspace`（必须显式忽略根 workspace；构建脚本许可已在 `video/pnpm-workspace.yaml` 的 `allowBuilds.esbuild` 配置）；装完检查根 lockfile 零变更。
-   > pnpm 12 起只声明 `--ignore-workspace` 不够：pnpm 仍会沿 `packageManager` 向上锚定到仓库根，
-   > **覆写根 `pnpm-lock.yaml`** 且当场不报错。隔离由 `video/pnpm-workspace.yaml` 真正兜住
-   > （[ISSUE-175](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md)）。
+3. `cd video && pnpm install`（**裸 install，勿加 `--ignore-workspace`**）；装完检查宿主仓库根 lockfile 零变更。
+   > pnpm ≥12 加 `--ignore-workspace` 会把工程自身 `video/pnpm-workspace.yaml`（`packages: []`
+   > 自锚 + `allowBuilds.esbuild`）一并忽略 ⇒ `ERR_PNPM_IGNORED_BUILDS` 非零退出、`node_modules`
+   > 半残（「能录」≠「装全」，remotion 内置 ffmpeg 半残下仍可跑）。对宿主仓库根 workspace 的
+   > 隔离由该自锚文件真正兜住——pnpm 12 沿 `packageManager` 向上锚定也只锚到它为止
+   > （[ISSUE-175](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md) 结论反转）。
    > pnpm ≥ 11 已不再读取 `package.json` 的 `pnpm.onlyBuiltDependencies`；构建脚本许可统一放在
    > `pnpm-workspace.yaml` 的 `allowBuilds`（[ISSUE-076](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md)）。骨架已显式允许
    > `esbuild`，勿改回旧字段；缺失该许可会以 `ERR_PNPM_IGNORED_BUILDS` 中断安装并留下半残

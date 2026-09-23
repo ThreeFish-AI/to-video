@@ -31,6 +31,10 @@ uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py 
 # advisory（有匹配帧时退出码 0；零匹配硬失败）——「意图变更之外的一切差异」都须归因后才能接受
 uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py \
     --project $P --compare $P/out/baseline-draft.mp4 $P/out/draft.mp4 --scene P4
+# ⚠️ 对拍低差异 ≠ 无回归（ISSUE-177 实证）：低 meanΔ（0.8–1.0%）与 --check FAIL 0 曾双双
+#    放过仅占画面 ~2% 的塌陷常驻 badge——数值门只能缩小目检范围、不能替代目检；
+#    改动触及跨幕常驻元素（顶栏徽标/角标/水印）时，抽帧必须额外覆盖一个「非改动幕」作对照
+#    （该轮改的是 P0/P6 的层板，坏的却是 P1–P6 的常驻条——只看改动幕会全过）
 ```
 
 ## 自动体检判据与处置
@@ -43,7 +47,23 @@ uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py 
 | 字幕缺失（字幕带无文字亮度像素） | WARN | 查该句 Subtitle 是否被遮挡或文本为空 |
 | 主题对比度 <4.5:1 | FAIL | 换色或加深；概念色清单见 skills/06 视觉契约 |
 
-**注意**：`--offset` 仅在草渲与终渲时间基准不一致时使用；每次重合成后**所有** beat 时间轴位移，抽帧样点必须从新 manifest 重推（工具自动做，但不要复用旧帧目录的旧结论）。**对拍基线**：重制动手前先渲一版 `baseline-draft.mp4` 存档（后续工作区没有旧产物可回取）；A/B 共用同一份音频与 manifest 时，总帧数恒等、同帧号对拍才有意义。
+**FAIL 0 的边界（ISSUE-187 泛化）**：`--check` 只覆盖黑帧/冻帧/字幕带侵入/对比度——对文字朝向、
+几何锚点、图层遮挡**全盲**（四类画面缺陷曾在 FAIL 0 · WARN 0 下全部漏网），FAIL 0 不是视觉正确性的
+证据，2D 同样必须按分幕复检抽帧目视（3D 侧同款要求见 [06 §3D 验收](./06-remotion-implementation.md)）。
+**判据上架纪律（ISSUE-167）**：新增/修改判据必须先在一帧**已知干净**的画面上验证零报警——半透明
+字幕底曾让「亮列连通段」判据把每个汉字当侵入物，全片 500+ 假 WARN 让这行输出彻底失去信噪比、
+等于关掉检查；判据优先用几何量（尺寸/边距来自代码常量、零自由度）而非亮度阈值（随配色/透明度/
+抗锯齿漂移）。
+
+**注意**：`--offset` 有两个触发场景——草渲与终渲时间基准不一致，或对 `remotion render --frames=<区间>`
+渲出的**区间产物**抽帧（其时间轴局部归零：区间首帧即第 0 帧，须以区间起点补偿）；每次重合成后
+**所有** beat 时间轴位移，抽帧样点必须从新 manifest 重推（工具自动做，但不要复用旧帧目录的旧结论）。
+**对拍基线**：重制动手前先渲一版 `baseline-draft.mp4` 存档（后续工作区没有旧产物可回取）；A/B 共用
+同一份音频与 manifest 时，总帧数恒等、同帧号对拍才有意义。**接缝成对抽帧（ISSUE-188）**：凡
+「A 素材播完接 B 素材」的结构（archify hold 冻结补足 / 跨镜同装置 / 换章），必须抽 `videoFrames-1`
+与 `videoFrames` **成对**的帧——接缝类缺陷只存在于两段素材的交界，单点抽帧结构性失明。
+**批量抽帧先 render 再抽**：成批量的抽帧先渲出 mp4 再按句 id 抽，勿反复 `remotion still` 逐帧渲
+（分幕复检用 still 是因为彼时 draft.mp4 尚不存在；视频可渲之后 still 就不是批量通道）。
 
 ## 人工目检清单（自动体检之外的残余）
 
@@ -68,6 +88,9 @@ uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py 
 3. `remotion still Main out.png --frame=N --scale=0.4` 逐帧渲（**首帧含打包约 100 秒，
    之后走缓存仅 4–5 秒**，全片 39 镜可负担）；
 4. 灰度均值扫一遍查黑帧/重复帧，再人眼看构图与语义。
+
+步骤 1–3 已机械化：`uv run --no-project $T/pipeline/scripts/qa_frames.py --project $P --stills-plan
+[--chars-per-sec 5]`（零依赖、不需视频）按混合时间轴逐镜打印 `remotion still` 命令，复制即可执行。
 
 **为什么必须用真实时长**（本集实测，等长外推下三处全部漏检）：
 

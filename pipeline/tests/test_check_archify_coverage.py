@@ -533,3 +533,50 @@ def test_mismatched_at_dur_sentence_fails(tmp_path):
     rc, out = run_gate(root)
     assert rc != 0
     assert "不一致" in out
+
+
+def test_all_zero_lead_sec_warns(tmp_path):
+    """漏跑 archify_lead 的拦截门：有 cue 引用且全部章节 lead_sec==0 → 点名 WARN。
+
+    录制器恒写 0.0，此前白闪播进成片无门可拦（ISSUE-193 审计补门）；
+    有真实 lead 的同构 fixture 不触发。
+    """
+    root = build(tmp_path, sidecar=True)
+    sidecar = root / "video" / "public" / "archify" / "demo.json"
+    d = json.loads(sidecar.read_text(encoding="utf-8"))
+    d["chapters"] = [{"id": "c1", "lead_sec": 0}, {"id": "c2", "lead_sec": 0}]
+    sidecar.write_text(json.dumps(d), encoding="utf-8")
+    rc, out = run_gate(root)
+    assert "lead_sec == 0" in out and "archify_lead" in out, out
+
+    # 任一章有真实 lead 即不触发
+    d["chapters"][0]["lead_sec"] = 2.1
+    sidecar.write_text(json.dumps(d), encoding="utf-8")
+    rc2, out2 = run_gate(root)
+    assert "lead_sec == 0" not in out2, out2
+
+
+def test_zero_lead_sec_warns_per_diagram(tmp_path):
+    """增量重录的漏跑形态：重录图 lead 被归零、其余图保留实测值——须按图点名。
+
+    全局「全部章节为 0」判据会被其他图的实测值稀释而漏报；未被 cue 引用的
+    sidecar 遗迹即使全 0 也不点名。
+    """
+    root = build(tmp_path, sidecar=True)
+    arch = root / "video" / "public" / "archify"
+
+    def put(slug: str, leads: list[float]) -> None:
+        chapters = [{"id": f"c{i}", "lead_sec": x} for i, x in enumerate(leads)]
+        (arch / f"{slug}.json").write_text(
+            json.dumps({"slug": slug, "chapters": chapters}), encoding="utf-8"
+        )
+
+    put("demo", [0, 0])  # 被 cue 引用、刚重录未测 lead
+    put("legacy", [2.4])  # 未被 cue 引用、保留实测值
+    rc, out = run_gate(root)
+    assert "lead_sec == 0：demo" in out, out
+
+    put("demo", [2.1, 1.9])
+    put("legacy", [0])  # 遗迹全 0 但无 cue 引用 → 不点名
+    rc2, out2 = run_gate(root)
+    assert "lead_sec == 0" not in out2, out2

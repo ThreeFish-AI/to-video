@@ -147,7 +147,6 @@ path = "video/remotion.config.ts"
 fingerprint = "a37fa7bc90c3"
 reason = "A 轨 @remotion/three 无头渲染强制要求 Chromium OpenGL 后端 = angle（一行新增 setChromiumOpenGlRenderer）。其余集跟进该行回模板收敛后撤销本条"
 
-
 [[drift]]
 episode = "experience-era-agents-video"
 path = "video/src/components/Subtitle.tsx"
@@ -227,12 +226,6 @@ fingerprint = "179be60ed605"
 reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
 
 [[drift]]
-episode = "context-layer-video"
-path = "video/src/Main.tsx"
-fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集 v2 终渲待审（draft-review），按发布态处理不动源码。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
-
-[[drift]]
 episode = "claude-code-explained-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
@@ -282,12 +275,6 @@ reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无�
 
 [[drift]]
 episode = "horizon-context-video"
-path = "video/src/components/ChapterProgress.tsx"
-fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
-
-[[drift]]
-episode = "context-layer-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
 reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"

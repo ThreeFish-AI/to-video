@@ -415,3 +415,20 @@ def test_archify_defaults_are_loose_floors():
         "archify.exempt_scenes": [],
     }.items():
         assert config.default(dotted) == want, dotted
+
+
+def test_archify_check_thresholds_defaults_and_override(tmp_path):
+    """check_archify 三阈值（rate_min/rate_max/min_fps）默认值层 + toml 覆写路径。"""
+    assert config.default("archify.rate_min") == 0.7
+    assert config.default("archify.rate_max") == 1.35
+    assert config.default("archify.min_fps") == 18.0
+
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\ntarget_minutes = [1.0, 2.0]\n'
+        '[tts]\nengine = "edge"\n[archify]\nrate_min = 0.6\nmin_fps = 20.0\n',
+    )
+    cfg, _o, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert not any("archify." in w for w in warns), warns
+    assert cfg["archify"]["rate_min"] == 0.6 and cfg["archify"]["min_fps"] == 20.0

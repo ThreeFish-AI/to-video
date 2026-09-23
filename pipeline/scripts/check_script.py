@@ -56,6 +56,11 @@ SPAN_RE = re.compile(r"^\s*(p\d+-[0-9a-z-]+(?:\.\.[0-9a-z-]+)?)\s*([^|]*)$")
 #: `const w = (fromId, toId?) => beatWindow(scene.sentences, scene.from, …)` 再使用），
 #: 故匹配任意 `\w(...)` 调用并要求参数为 1–2 个单引号句 id。
 SCENE_CALL_RE = re.compile(r"\bw\(\s*'([a-z0-9-]+)'(?:\s*,\s*'([a-z0-9-]+)')?\s*\)")
+#: 场景代码里的时点/时长锚：`at('id')` / `dur('id')`（archify cue 与杂项引用）。
+#: ISSUE-190 病理：分镜 beat 句 id 有存在性检查，但 scene 代码里**非 beat 的**
+#: at()/dur() 引用不在任何形态断言内——p1-23 跳号句嵌套窗 tsc 与覆盖门全放行、
+#: 渲染期才抛。此正则把那类引用拉进同一存在性门。
+SCENE_ANCHOR_RE = re.compile(r"\b(?:at|dur)\(\s*'([a-z0-9-]+)'\s*\)")
 #: 幕名（P0/P1/…）从句 id 前缀还原
 SCENE_OF_RE = re.compile(r"^(p\d+)-")
 
@@ -289,16 +294,31 @@ def check_fade_invariant(root: Path, msgs: list[str]) -> None:
 
 
 def check_scenes(
-    root: Path, beats: list[tuple[str, str, str, str]], msgs: list[str]
+    root: Path,
+    beats: list[tuple[str, str, str, str]],
+    msgs: list[str],
+    known_ids: set[str] | None = None,
 ) -> None:
     scenes_dir = root / "video" / "src" / "scenes"
     if not scenes_dir.is_dir():
         return
     code_pairs: set[tuple[str, str]] = set()
+    anchor_ids: set[str] = set()
     for tsx in sorted(scenes_dir.glob("*.tsx")):
-        for m in SCENE_CALL_RE.finditer(tsx.read_text(encoding="utf-8")):
+        src = tsx.read_text(encoding="utf-8")
+        for m in SCENE_CALL_RE.finditer(src):
             left, right = m.group(1), m.group(2) or m.group(1)
             code_pairs.add((left, right))
+        anchor_ids.update(m.group(1) for m in SCENE_ANCHOR_RE.finditer(src))
+    # ISSUE-190 防 5：at()/dur() 引用的句 id 必须真实存在（known_ids 来自
+    # narration.json；缺 narration 时跳过——build 先于场景撰写是常态时序）。
+    if known_ids:
+        for sid in sorted(anchor_ids - known_ids):
+            fail(
+                msgs,
+                f"场景代码 at()/dur() 引用了不存在的句 id {sid}"
+                "（跳号/改名残留，渲染期才抛——ISSUE-190）",
+            )
     board_pairs = {(left, right) for _, left, right, _ in beats}
     for pair in sorted(board_pairs - code_pairs):
         warn(
@@ -445,7 +465,7 @@ def main() -> None:
         check_reading_traps(items, msgs)
         check_fade_invariant(root, msgs)
         if args.check_scenes:
-            check_scenes(root, beats, msgs)
+            check_scenes(root, beats, msgs, known_ids={i["id"] for i in items})
         if args.check_motion:
             check_motion(root, msgs)
 

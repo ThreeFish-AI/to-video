@@ -443,6 +443,17 @@ async def health():
     }
 
 
+def _mps_empty_cache() -> None:
+    """MPS 缓存归还（非 MPS 平台静默跳过——torch.cuda/empty_cache 语义对偶）。"""
+    try:
+        import torch
+
+        if hasattr(torch, "mps") and torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+    except Exception:  # noqa: BLE001 - 清缓存失败不影响合成结果
+        pass
+
+
 @app.post("/synthesize")
 async def synthesize(req: SynthesizeRequest):
     if not STATE:
@@ -498,19 +509,26 @@ async def synthesize(req: SynthesizeRequest):
 
     derived: list[float] | None = None
     async with STATE["infer_lock"]:
-        if (
-            req.emo_text
-        ):  # 先算向量（占 GPU，须在锁内），再走与显式向量完全相同的合成路径
-            derived = await asyncio.to_thread(
-                _qwen_vector_sync, STATE["tts"], req.emo_text, req.emo_alpha
-            )
-            req.emo_vector = derived
-        with tempfile.TemporaryDirectory(prefix="indextts_") as td:
-            wav_path = await asyncio.to_thread(
-                _infer_sync, STATE["tts"], ref, req, Path(td)
-            )
-            data, sr = await asyncio.to_thread(_read_audio, wav_path)
-            audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
+        try:
+            if (
+                req.emo_text
+            ):  # 先算向量（占 GPU，须在锁内），再走与显式向量完全相同的合成路径
+                derived = await asyncio.to_thread(
+                    _qwen_vector_sync, STATE["tts"], req.emo_text, req.emo_alpha
+                )
+                req.emo_vector = derived
+            with tempfile.TemporaryDirectory(prefix="indextts_") as td:
+                wav_path = await asyncio.to_thread(
+                    _infer_sync, STATE["tts"], ref, req, Path(td)
+                )
+                data, sr = await asyncio.to_thread(_read_audio, wav_path)
+                audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
+        finally:
+            # MPS 长跑泄漏对冲：每次合成后归还分配器缓存。实测（2026-09-23 本机）连续
+            # 合成约 40 分钟后 MPS 缓存累积击穿 30 GiB 上限，之后所有请求 500 且 health
+            # 假绿；empty_cache 每句 <100ms，换整集长跑稳定。放 finally：失败路径（NaN
+            # 500 / infer 抛错，含 OOM 本身）同样归还，否则一次击穿后缓存再无释放时机。
+            await asyncio.to_thread(_mps_empty_cache)
     headers = {"X-Audio-Format": fmt, "X-Duration-Sec": f"{len(data) / sr:.3f}"}
     if derived is not None:  # 回显 Qwen 推出的向量，便于事后用 --emo-vector 固化复现
         headers["X-Emo-Vector"] = ",".join(f"{x:g}" for x in derived)

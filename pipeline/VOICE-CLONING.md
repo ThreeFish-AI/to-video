@@ -204,7 +204,7 @@ uv run --no-project --with soundfile --with numpy \
 > “不划算”，是否保留须以 A/B 与试听为准）与 `sunny-clear`（= `sunny-steady`
 > 但 df 1.05，护术语密集句的清晰度——df 方向勘误见 §4.3）。二者是**新增**而非改动生产档，
 > 故对已上线三集的缓存零影响；定档前须按
-> [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) 的测量协议做 A/B + 人耳确认。
+> [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) 的测量协议做 A/B + 人工试听定档（风格听感是主观选择，与 §5.4 的读音客观裁决是两回事）。
 
 预设可自带**束宽**（`STYLE_PRESETS` 的可选键 `beams`，缺省 1）——束宽改变韵律稳定度，属风格的一部分；命令行 `--num-beams` 显式给值时优先（故其 argparse 默认值是 `None` 而非 `1`，否则无法区分"没给"与"给了 1"）。`--list-styles` 会打印**全部预设**的向量/alpha/有效注入/语速/束宽（档数以该输出为准——本文不复制一个会随代码漂移的数字）。
 
@@ -426,6 +426,20 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 
 引擎/风格/样本任一变化都会改写每句时长，合成后**必须重跑草渲**让 Remotion 时间轴重算。
 
+### 5.4 take 验收与重掷协议（句尾英文词 · 标注 + 重掷 + 无偏验证）
+
+**为什么需要**：IndexTTS 自回归采样在「中文句 + 句尾英文 token 收尾」（全角引号/句号收尾）的位置高频把尾音节拖成独立音节或复读尾簇——实测「这集拆一拆 Snowflake 的解法：「Horizon Context」。」句尾 *Context* 读成 "Context text"，**该位置缺陷率约 50%**；而坏 take 会被机器级 tts-store 按 digest 逐代继承（见下方 d），历轮 QA 全在视觉侧、成片音频无听审时缺陷直达成片（[ISSUE-192](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md)）。本节协议适用于全量合成（§5.2）之后、终渲交付之前，**至少覆盖所有句尾英文词收尾的句子**；机制循证见 [ADVANCED §2.3](./INDEXTTS-2.5-ADVANCED.md) 的 2026-09-21 定稿配方小节。
+
+**a) 标注兜底（治本）**：句尾英文词读法一律 CMU 音素标注，**不赌采样**——narration.md 写 `<Context|K AA1 N T EH2 K S T>`（英文专名走 pron_marks.py 的 ARPAbet 通道，拼写须过 `pron_marks.validate`）。锁音素的两处要点：**重音数字落在首音节元音**（`AA1`）、**辅音簇收尾不带元音**（`K S T`）——正是防「尾音节多读/复读」的两个自由度。`strip_marks` 后 `text`（字幕/字数）零变化、仅 `ttsText` 变 ⇒ digest 自然只重配该句，其余句子缓存零波及。
+
+**b) 重掷循环**：标注锁音素但**韵律仍随机**（`do_sample` 恒 True，同句同参数每次仍是不同 take——实测首轮标注 take 又踩同型缺陷），50% 缺陷率意味着盲掷不可收敛。`--seed` + `--seed-offset` 即**重掷原语**：固定种子后 take 可复现，偏移一位即换一条新 take（仍可复现）；循环掷至无偏验证（§c）通过，**定稿 take 回存标注版 canonical digest**。注意 seed 进缓存摘要（§六）：重掷只在带 seed 的隔离 digest 上做，定稿回存 canonical 后恢复正常无种子口径并 `--plan` 确认归零——**勿把整集留在 seeded 签名上**（ISSUE-174：显式 seed 使全部存量句摘要失配，单句补配变整集重录）。
+
+**c) 无偏 ASR 验证（本节最大教训）**：**凡 ASR 验证一律禁传 `initial_prompt`——喂期望答案 = 判据自证**。实测：传 `initial_prompt="…Horizon Context。"` 时坏 take 被判「干净」，去掉 prompt 后同一 take 立即现形（转写 "Context Tabbed"）；prompt 只可用于格式引导，绝不可含被测内容。whisper small **不可用于裁决**（对 TTS 短音频尾 token 幻觉率高，只够 §2.3 那类方向性实验）；裁决组合 = whisper **medium zh+en 双档**转写与逐字稿 diff + **尾部能量/ZCR**（独立齿擦音簇 ZCR>0.25 即多余尾簇）+ **成片内嵌波形与源 take 包络互相关 ≥0.99**（证明成片用的就是该 take、无编码级新增）。判定标准：双档转写与逐字稿一致 + 尾部无多余有声单元。
+
+**d) tts-store 陷阱（继承是中性的）**：坏 take 同样按 digest 逐代继承——187/187 句恢复零重合成 = 缺陷一并继承；库按 digest 内容寻址、跨 worktree 共享，**换新 worktree 重建时继续继承任何既有缺陷 take**，修复须显式重掷或加标注换 digest。**撤销标注会使 digest 回退旧值、静默恢复历史坏 take**——死 digest 下的已知坏 take 应**改名隔离**（`<句id>.<digest12>.mp3` → `*.bad-<标签>` 留档，`.sha` 邻档同步改名，不删除）；恢复/重建后对该句抽检。
+
+**同型句排查**：本集所有「句尾英文词收尾」的句子（如 p1-16 / p1-24 / p6-23）逐一跑 §c 无偏转写抽检，干净的不扩改。
+
 
 ## 六、缓存与幂等
 
@@ -446,6 +460,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 | 症状 | 原因 | 处理 |
 |---|---|---|
 | 合成请求全部失败，报「服务不可用」 | 服务未启动/端口错 | `curl 127.0.0.1:8766/health`；按 §2.3 启动；`lsof -ti:8766` 查占用 |
+| 合成全 500 而 `/health` 假绿（长跑数十分钟后出现，外表像「毒句」） | MPS 分配器缓存累积击穿显存上限（实测约 40 分钟 / 30 GiB）；`/health` 不探显存，故照报 ok | 服务端已每句 `empty_cache` 对冲（含失败路径）；仍发生即重启服务端（§2.3），客户端按缓存续跑 |
 | 生成音频含 NaN（HTTP 500，detail 提示） | MPS 数值问题 | 客户端自动重试常可清；持续则服务加 `--device cpu` 重启（速度大幅下降，仅救急） |
 | 合成极慢 / 内存飙高 | fp32 + 长句 | 服务串行推理已是缓解；进一步可 `--device cpu` 换稳定；句长已由 max_text_tokens_per_segment=120 内部切分 |
 | 服务日志 `QwenEmotion not loaded` | 正常 | 仅向量模式，不加载 Qwen（省内存） |
