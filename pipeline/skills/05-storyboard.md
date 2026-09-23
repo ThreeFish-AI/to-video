@@ -47,6 +47,7 @@ slug 或该图任一章 label）与场景代码 cue 构成**双向对账**的两
 - 句 id 区间必须**覆盖该幕全部句子、无交叠无遗漏**（组件内以 `beatWindow(sentences, sceneFrom, from, to)` 取窗口）。
 - 每镜「画面」写清：主体元素、布局、色彩（用契约色名）、出现的角标；「动效」写清：入场方式、随句节奏的推进（生长/高亮/计数）。
 - 风险/反转段显式标注色调切换（如「画面转红调」）。
+- 采用 [建模手册](../MODELING-PLAYBOOK.md) 条目的镜，在「画面/动效」列标注〔M-xxx〕——策展复盘按此计数（至迭代：每次复用都是一次再验证）。
 - **顶部安全带 y<56 由章节条占用**（见 [06-remotion-implementation.md](./06-remotion-implementation.md)「顶部章节进度条」）：
   各幕画面内容 y≥56 起；SceneTag 维持 top:64 不变。
 

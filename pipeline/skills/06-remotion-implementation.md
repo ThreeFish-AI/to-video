@@ -54,17 +54,17 @@ uv run --no-project $T/pipeline/scripts/verify_skeleton.py --strict  # 有未登
 | 母题 | 出处 | 适用 |
 |---|---|---|
 | 终端窗口 + 打字机 | [claude-code-explained-video](https://github.com/ThreeFish-AI/negentropy/blob/master/apps/negentropy-influence/episodes/claude-code-explained-video/video/src/components/motifs.tsx) `Terminal` | 任何「人机对话/命令行」痛点开场 |
-| **恒定视觉锚**（环形循环） | 同上 `LoopRing` | 主题是「某个东西始终不变」时：锁死 `stroke` 与 `strokeWidth`（绝对像素、不随 size 缩放），让「不变」被**看见**而不是被听说 |
+| **恒定视觉锚**（环形循环） | 同上 `LoopRing` | 建模方法见 [手册 M-001](../MODELING-PLAYBOOK.md)（实现要点：`strokeWidth` 取绝对像素、不随 size 缩放） |
 | 字典分发表 | 同上 `DispatchTable` | 键值查表、注册表、路由表 |
 | 闸门路由 | 同上 `GateRouter` | 多级判定/准入/过滤管线 |
 | 插槽注册板 | 同上 `SlotRing` | 扩展点、生命周期钩子、插件位 |
 
 借用方式仍是**复制该文件后裁剪、追加进本集的 motifs.tsx**，不做跨集 import。
 「反枚举并列项」模式（N 个并列概念不给 N 色，panel 底 + 编号、激活时才染色）
-已随 chrome 层播种——用 `NumberedCard` 传本集概念色即可。两条经验：
-- 小尺寸下 SVG 环形节点的 0°/180° 标签会互相压字 —— 需要 `showLabels` 之类的显式开关
-  （本集实测：size < 260 必须关掉）。
-- 「用无动效表达无聊」是有效手法：金句期间让主体继续匀速运动、**不加任何强调动效**。
+已随 chrome 层播种——用 `NumberedCard` 传本集概念色即可。实现经验：小尺寸下 SVG 环形节点的
+0°/180° 标签会互相压字 —— 需要 `showLabels` 之类的显式开关（本集实测：size < 260 必须关掉）。
+**建模层经验**（画什么、怎么隐喻，如「以静写闷」）统一沉淀在有界的 [建模手册](../MODELING-PLAYBOOK.md)，
+经 [RSI.md](../../RSI.md) 第十节策展回流——不要把新的建模经验追加进本规格正文（转移熵而非减熵）。
 
 ## 运动层（video/src/motion/，frozen 跨集共享）
 

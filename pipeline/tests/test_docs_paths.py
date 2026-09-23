@@ -20,7 +20,8 @@
      可跳转链接；把链接变量化会一次性造出十几条死链。
 
 受检面：pipeline/README.md + pipeline/skills/*.md + SKILL.md + 根 RSI.md
-（自改进协议，散文链接最密集的文档，纳入即受围栏/链接/变量/混锚四类执法）。
+（自改进协议，散文链接最密集的文档，纳入即受围栏/链接/变量/混锚四类执法）
++ pipeline/MODELING-PLAYBOOK.md（RSI 建模经验沉淀面，条目指针须可跳转）。
 pipeline/ 下两本手册（VOICE-CLONING.md 等）与根 README（门面）暂不在面内
 ——根 README 快速上手中的 T=/W=/P= 赋值块是 quickstart 实例化而非第二
 定义处；若未来扩面把它纳入，须先为该块设豁免。
@@ -40,6 +41,7 @@ SKILLS = PIPELINE / "skills"
 README = PIPELINE / "README.md"
 SKILL_MD = skill_root() / "SKILL.md"
 RSI_MD = skill_root() / "RSI.md"
+PLAYBOOK_MD = PIPELINE / "MODELING-PLAYBOOK.md"
 
 FENCE_RE = re.compile(r"^```")
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
@@ -66,10 +68,10 @@ EXTERNAL_LINK_RE = re.compile(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|#)")
 
 
 def scanned_docs() -> list[Path]:
-    """受检面：README（变量 SSOT）+ 根 RSI.md + 全部 skill 阶段文档 + SKILL.md。"""
+    """受检面：README（变量 SSOT）+ 根 RSI.md + 建模手册 + 全部阶段文档 + SKILL.md。"""
     return [
         p
-        for p in (README, SKILL_MD, RSI_MD, *sorted(SKILLS.glob("*.md")))
+        for p in (README, SKILL_MD, RSI_MD, PLAYBOOK_MD, *sorted(SKILLS.glob("*.md")))
         if p.is_file()
     ]
 

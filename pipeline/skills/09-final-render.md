@@ -49,7 +49,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver
 - [ ] 交付时长以 `total_duration_in_frames`（timeline.py 纯函数）**现算**，登记时连复算式一起写（`= 23820 帧 @30fps = 794.00s` 形态）——勿抄上次输出/README/series.json 里的旧数字：四集曾统一短 2.19s（登记值取了音轨末点而非含 `tailSec` 的片尾），有复算式的那一集才对（ISSUE-171）
 - [ ] `pipeline.py check` 实测口径在预算窗内
 - [ ] deliver 归档副本（根路径已配置时）：`<根>/<系列id>/<集标题> vN.mp4`
-- [ ] RSI 台账复查（非阻断）：制作中发现的 Skill 缺陷/改进已按 [RSI.md](../../RSI.md) 登记台账（无则跳过）
+- [ ] RSI 台账复查（非阻断）：制作中发现的 Skill 缺陷/改进已按 [RSI.md](../../RSI.md) 登记台账；建模经验信号已追加 [建模手册](../MODELING-PLAYBOOK.md) 候选区、候选区非空则启动策展子代理（均无则跳过）
 
 ## 交付归档（deliver）
 
