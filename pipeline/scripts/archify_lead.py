@@ -8,10 +8,9 @@
 remotion 内置 ffmpeg 编译时 `--disable-filters`（signalstats/movie 均不可用），
 故走「抽帧 + PIL 测亮度」而非 lavfi 滤镜链。
 
-用法（工程根）：
+用法（任意目录）：
   uv run --no-project --with pillow $T/pipeline/scripts/archify_lead.py \
-      --project . [--window 6.0]
-（工程内薄包装等价：scripts/archify_lead.py [--window 6.0]）
+      --project $P [--window 6.0]
 """
 
 from __future__ import annotations

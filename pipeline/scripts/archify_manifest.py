@@ -3,8 +3,7 @@
 静态导入的好处：章节 id 拼错在 `tsc --noEmit` 就红，不用等渲染才发现。
 录制或重测 lead 之后重跑本脚本即可。
 
-用法（工程根）：uv run --no-project $T/pipeline/scripts/archify_manifest.py --project .
-（工程内薄包装等价：scripts/archify_manifest.py）
+用法（任意目录）：uv run --no-project $T/pipeline/scripts/archify_manifest.py --project $P
 """
 
 import argparse
@@ -47,9 +46,9 @@ def main() -> None:
 
     body = json.dumps(diagrams, ensure_ascii=False, indent=2)
     OUT.write_text(
-        "// 本文件由 scripts/archify_manifest.py 从 public/archify/*.json 生成——请勿手改。\n"
-        "// 数据来源：to-video skill 的 pipeline/scripts/record_archify.py --mode chapter（逐章录制）\n"
-        "//         + scripts/archify_lead.py（场记板白闪测定真实 leadSec）。\n"
+        "// 本文件由 to-video skill 的 pipeline/scripts/archify_manifest.py 从 public/archify/*.json 生成——请勿手改。\n"
+        "// 数据来源：pipeline/scripts/record_archify.py --mode chapter（逐章录制）\n"
+        "//         + pipeline/scripts/archify_lead.py（场记板白闪测定真实 leadSec）。\n"
         "\n"
         "export type ArchifyChapter = {\n"
         "  /** views JSON 里的章节 id */\n  id: string;\n"

@@ -8,11 +8,10 @@
   2. **rate 预演**：按 TTS 实测 manifest 算每个 cue 的真实 playbackRate，显式写死
      fit='stretch' 且越界 [0.7, 1.35] 即 FAIL 并给出建议，自动挡越界降档 hold/trim
      并列清单 —— 把编排失衡提前到渲染前最便宜的时刻；
-  3. 素材完整：webm / 末帧 PNG 存在且非空、measured_fps ≥ 18。
+  3. 素材完整：webm / 末帧 PNG 存在且非空、逐章有效采集帧率 ≥ 18。
 
-用法（工程根）：uv run --no-project $T/pipeline/scripts/check_archify.py --project .
-（工程内薄包装等价：scripts/check_archify.py）阈值 rate_min/rate_max/min_fps 走
-pipeline.toml [archify]（config.py SCHEMA 默认值层）。
+用法（任意目录）：uv run --no-project $T/pipeline/scripts/check_archify.py --project $P
+阈值 rate_min/rate_max/min_fps 走 pipeline.toml [archify]（config.py SCHEMA 默认值层）。
 """
 
 import argparse
@@ -34,7 +33,8 @@ def load_manifest(root: Path) -> dict:
     )
     if not m:
         raise SystemExit(
-            "FAIL: archify.manifest.ts 解析失败——先跑 scripts/archify_manifest.py"
+            "FAIL: archify.manifest.ts 解析失败——先跑 "
+            "$T/pipeline/scripts/archify_manifest.py --project $P"
         )
     return json.loads(m.group(1))
 
@@ -58,6 +58,8 @@ def emit_stills(root: Path, audio: Path, man: dict, cues: list) -> None:
     rows = {r["id"]: r for r in timeline.compute(items, c)}
     print("# archify 对位抽帧（工程根 video/ 下执行）")
     for slug, cid, sid, _fit in cues:
+        if slug not in man:
+            continue  # 未知 slug 已由主流程报 FAIL
         r = rows.get(sid)
         ch = next((x for x in man[slug]["chapters"] if x["id"] == cid), None)
         if r is None or ch is None:
@@ -113,12 +115,21 @@ def main() -> None:
                     fails.append(f"{slug}/{ch['id']}: 缺素材 {ch[key]}")
         sc = archify / f"{slug}.json"
         if sc.is_file():
-            fps = json.loads(sc.read_text("utf-8")).get("measured_fps")
-            if fps is not None and fps < min_fps:
-                warns.append(f"{slug}: 录制均帧率 {fps} < {min_fps}，建议重录")
+            # 逐章有效采集帧率，口径同 record_archify 的 `eff`（capture_fps 优先）：
+            # CDP 档产物是补帧合成的 CFR 25fps，顶层 measured_fps 恒≈25，按它判门即失明。
+            data = json.loads(sc.read_text("utf-8"))
+            fpss = [
+                f
+                for c in data.get("chapters", [])
+                if (f := c.get("capture_fps") or c.get("measured_fps"))
+            ] or [f for f in [data.get("measured_fps")] if f]
+            if fpss and (fps := min(fpss)) < min_fps:
+                warns.append(f"{slug}: 录制帧率 {fps} < {min_fps}，建议重录")
 
     # ② rate 预演（需 TTS manifest）
     cues = scene_cues(root)
+    for slug in sorted({s for s, _, _, _ in cues} - set(man)):
+        fails.append(f"{slug}: 场景 cue 引用了 manifest 里不存在的图")
 
     # ④ 录了但没落镜：manifest 里有图、却没有任何 cue 引用它 —— 2026-09-19 实测
     #    evolution-timeline / autopilot-loop 各 3 章白录，而文档仍写着 14 张进片。
@@ -146,6 +157,8 @@ def main() -> None:
         dur = {r["id"]: r["durationInFrames"] for r in timeline.compute(items, c)}
         fps = c["fps"]
         for slug, cid, sid, _fit in cues:
+            if slug not in man:
+                continue
             ch = next((x for x in man[slug]["chapters"] if x["id"] == cid), None)
             if ch is None:
                 fails.append(f"{slug}/{cid}: 场景引用了 manifest 里不存在的章节")

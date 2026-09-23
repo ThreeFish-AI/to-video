@@ -84,9 +84,11 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
    `TO_VIDEO_TTS_STORE` 指位），否则此步退化为 2 小时量级整集重合成。
 4. **archify 全量重录（~45 分钟）**：`uv run --with playwright python
    $T/pipeline/scripts/record_archify_all.py --project $P`（串行是刻意的：多实例互抢前台焦点会掉帧、
-   静默污染产物）。重录后**逐图对 HEAD sidecar 的 `capture_fps` 基线判定帧率**，退化即
-   `--only <slug> --force` 补录——`--min-fps` 只告警不失败，降质素材会绿着门进片。录完跑
-   `archify_lead.py`（漏跑 = 白闪进片且无门拦截）与 `archify_manifest.py`。
+   静默污染产物）。驱动录后自动对录前 sidecar 的 `capture_fps` 基线逐章比对，**退化超 10%
+   即 WARN 点名**，按点名 `--only <slug> --force` 补录——`--min-fps` 与该 WARN 都只告警不失败，
+   不处理的降质素材会绿着门进片。录完跑 `$T/pipeline/scripts/archify_lead.py --project $P`
+   （漏跑 = 白闪进片；覆盖门会按图点名 lead 全 0 的图，但只是 WARN）与
+   `$T/pipeline/scripts/archify_manifest.py --project $P`。
 5. **build / check**：`pipeline.py build` 重建 narration.json 派生物 → `pipeline.py check`
    （含 archify 覆盖门）→ `video/` 内 `tsc --noEmit`。
 6. **render**：草渲 + 抽帧 QA（[skills/08](./08-render-qa.md)）→ 终渲（本文件上文）。

@@ -650,20 +650,28 @@ def main() -> None:
             "——用 scripts/archify_types.py 回填"
         )
     # lead_sec 全 0 拦截：录制器恒写 0.0，漏跑 archify_lead.py 会把场记板白闪
-    # 播进成片且此前**无门可拦**（ISSUE-193 审计补门）。有 cue 引用任何章时才执法
-    # ——纯 sidecar 遗迹（无 cue）不触发。
+    # 播进成片且此前**无门可拦**（ISSUE-193 审计补门）。**按图**判：增量重录
+    # （--only <slug> --force）只把重录图的 lead 归零、其余图保留实测值，全局
+    # 「全部为 0」判据恰好漏掉这一最常见形态。只对被 cue 引用的图执法——纯
+    # sidecar 遗迹不触发。
     if have_cues and sidecars:
-        leads = []
+        cue_slugs = {c[1] for c in cues}
+        zero_lead: list[str] = []
         for f in sidecars:
             try:
                 d = json.loads(f.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 continue
-            leads += [c.get("lead_sec") for c in d.get("chapters", [])]
-        leads = [x for x in leads if x is not None]
-        if leads and all(x == 0 for x in leads):
+            slug = d.get("slug") or f.stem
+            leads = [
+                x for c in d.get("chapters", []) if (x := c.get("lead_sec")) is not None
+            ]
+            if slug in cue_slugs and leads and all(x == 0 for x in leads):
+                zero_lead.append(slug)
+        if zero_lead:
             warns.append(
-                "全部章节 lead_sec == 0——几乎必是漏跑 archify_lead.py（场记板白闪"
+                f"{len(zero_lead)} 张被 cue 引用的图全部章节 lead_sec == 0："
+                f"{'/'.join(zero_lead)}——几乎必是漏跑 archify_lead.py（场记板白闪"
                 "将播进成片；录制器恒写 0.0，只有白闪实测能回填真值）"
             )
     total_ch = 0
