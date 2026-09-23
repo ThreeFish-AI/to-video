@@ -26,6 +26,20 @@
 - 直接薄包装（工程内）：`uv run --no-project --with mutagen scripts/tts.py --engine indextts …`（须带 `--expect-ref-sha1`，编排入口会自动带上）
 - 服务端启动命令由 `tts.py`/`tts_sample.py` 在不可达时自动打印（可直接粘贴），手册见 [VOICE-CLONING.md §二](../VOICE-CLONING.md)
 
+## 服务生命周期：按需启停，用完即关
+
+IndexTTS 服务端（8766）是**按需工具，不是常驻设施**：模型加载后常驻 10 GiB 量级 MPS 显存，长跑还会累积服务态（即使有每句 `empty_cache` 对冲，重启也总是最干净的状态复位），而冷启动仅 ~1–2 分钟。**Agent 在一次制片的全部合成需求结束后**（终渲交付完成，或本会话确认不再有 A/B 遍 / 试听 / 补句），必须执行：
+
+1. **判在用**（多 Agent 同机互斥，两者皆空才可关）：
+   ```bash
+   lsof -nP -iTCP:8766 -sTCP:ESTABLISHED                          # 有非自己的连接 → 有人在用
+   pgrep -fl "pipeline/scripts/tts.py|tts_sample.py|tts_bench.py" # 有他人的合成进程 → 有人在用
+   ```
+2. **关闭**：`pkill -f tts_server.py`。服务是幂等拉起的——下次任何 tts 调用不可达时会自动打印启动命令，无需记忆。
+3. **不预启动**：不要为「可能要用」提前拉服务；`tts --plan`、`doctor` 等不触发合成的检查不要求服务在线。
+
+先完成者**不得**关闭他人正用的实例（以第 1 步判据为准）；适当重启本身即运维收益——清空累积态、归还显存。完整部署/启停命令见 [VOICE-CLONING.md §二](../VOICE-CLONING.md)。
+
 ## 完成门（交给 Stage ⑧ 前）
 
 - manifest 句数 = narration 句数；`pipeline.py check` 的实测时长口径落在预算窗内；

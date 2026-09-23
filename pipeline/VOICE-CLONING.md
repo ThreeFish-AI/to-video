@@ -84,6 +84,18 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 | 下载中途「假死」（进程在但字节零增长，连接 CLOSE_WAIT） | 强杀进程重跑即可续传：`pkill -f "hf download"` 后重复 `uv run hf download ...`；可循环重试直至完成 |
 | 磁盘不足 | checkpoints 可与其它 index-tts 部署共享（启动时 `--model-dir` 指向同一目录） |
 
+### 2.5 服务生命周期：按需启停，用完即关
+
+服务端按需拉起、用完即关，**不要保持常驻**：常驻占用 10 GiB 量级 MPS 显存，且长跑累积服务态（健康端点不反映的劣化，见 §七「合成全 500 而 health 假绿」）；重启即最干净的状态复位，冷启动仅 ~1–2 分钟。制作 Agent 的执行纪律（含同机多 Agent 互斥判据）见 [skills/07-tts-voice.md](pipeline/skills/07-tts-voice.md)「服务生命周期」；要点：
+
+```bash
+# 判在用（两查皆空才可关）：他人连接 or 他人合成进程
+lsof -nP -iTCP:8766 -sTCP:ESTABLISHED
+pgrep -fl "pipeline/scripts/tts.py|tts_sample.py|tts_bench.py"
+# 关闭
+pkill -f tts_server.py
+```
+
 ## 三、参考音色样本
 
 ### 3.1 要求
