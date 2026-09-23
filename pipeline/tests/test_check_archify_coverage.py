@@ -533,3 +533,24 @@ def test_mismatched_at_dur_sentence_fails(tmp_path):
     rc, out = run_gate(root)
     assert rc != 0
     assert "不一致" in out
+
+
+def test_all_zero_lead_sec_warns(tmp_path):
+    """漏跑 archify_lead 的拦截门：有 cue 引用且全部章节 lead_sec==0 → 点名 WARN。
+
+    录制器恒写 0.0，此前白闪播进成片无门可拦（ISSUE-193 审计补门）；
+    有真实 lead 的同构 fixture 不触发。
+    """
+    root = build(tmp_path, sidecar=True)
+    sidecar = root / "video" / "public" / "archify" / "demo.json"
+    d = json.loads(sidecar.read_text(encoding="utf-8"))
+    d["chapters"] = [{"id": "c1", "lead_sec": 0}, {"id": "c2", "lead_sec": 0}]
+    sidecar.write_text(json.dumps(d), encoding="utf-8")
+    rc, out = run_gate(root)
+    assert "lead_sec == 0" in out and "archify_lead" in out, out
+
+    # 任一章有真实 lead 即不触发
+    d["chapters"][0]["lead_sec"] = 2.1
+    sidecar.write_text(json.dumps(d), encoding="utf-8")
+    rc2, out2 = run_gate(root)
+    assert "lead_sec == 0" not in out2, out2
