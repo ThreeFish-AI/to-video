@@ -172,8 +172,12 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
                 f"  ✅ IndexTTS 服务: v{h.get('version')} {h.get('device')}/{h.get('dtype')}"
             )
         except (urllib.error.URLError, OSError) as e:
-            print(f"  ❌ IndexTTS 服务不可达: {e}（启动命令见 {MANUAL} §二）")
-            ok = False
+            # 服务按需启停、用完即关（skills/07「服务生命周期」）：离线是常态而非故障，
+            # 不计入失败——计入则 doctor 在正常关停态恒红，反过来诱导预启动。
+            print(
+                f"  ⚠️  IndexTTS 服务未在线: {e}"
+                f"（按需拉起：合成前启动，命令见 {MANUAL} §二）"
+            )
     if not (root / "video" / "node_modules").is_dir():
         print("  ⚠️  video/node_modules 未安装（渲染前: cd video && pnpm install）")
     # 交付归档根是工作区级机器属性（不在 pipeline.toml SCHEMA 内），doctor 只报

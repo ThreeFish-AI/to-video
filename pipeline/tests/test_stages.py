@@ -426,3 +426,54 @@ def test_doctor_reports_deliver_root_presence(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("TO_VIDEO_DELIVER_ROOT")
     pipeline.cmd_doctor(tmp_path, {}, None)
     assert "交付归档未配置" in capsys.readouterr().out
+
+
+def test_doctor_offline_tts_server_is_warning_not_failure(
+    monkeypatch, tmp_path, capsys
+):
+    """服务按需启停（skills/07「服务生命周期」）：离线是常态，doctor 报 ⚠️ 不置失败。
+
+    其余检查全绿时退出码必须为 0——离线计入失败会让 doctor 在正常关停态恒红，
+    反过来诱导 Agent 预启动服务。
+    """
+    import hashlib
+    import json
+    import urllib.error
+
+    import pipeline
+
+    (tmp_path / "video" / "src").mkdir(parents=True)
+    (tmp_path / "video" / "src" / "timing.json").write_text(
+        json.dumps(
+            {
+                "fps": 30,
+                "sentenceGapSec": 0.32,
+                "sceneGapSec": 0.9,
+                "leadInSec": 0.6,
+                "tailSec": 2.0,
+                "sceneCrossFadeSec": 0.4,
+            }
+        ),
+        encoding="utf-8",
+    )
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"RIFF-fixture")
+    (tmp_path / ".to-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
+    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+
+    def offline(*_a, **_k):
+        raise urllib.error.URLError("Connection refused")
+
+    monkeypatch.setattr(pipeline.urllib.request, "urlopen", offline)
+    cfg = {
+        "tts": {
+            "engine": "indextts",
+            "ref": "ref.wav",
+            "ref_sha1": hashlib.sha1(ref.read_bytes()).hexdigest()[:12],
+        }
+    }
+    rc = pipeline.cmd_doctor(tmp_path, cfg, None)
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "⚠️  IndexTTS 服务未在线" in out and "按需拉起" in out, out
+    assert "❌" not in out, out
