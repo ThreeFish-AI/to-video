@@ -16,7 +16,7 @@ const MARGIN_X = 4; // 近贴屏幕左右边框，仅留一条竖线宽度的呼
 const STRIP_W = 1920 - MARGIN_X * 2;
 const BAR_Y = 14;
 const BAR_H = 28; // 章节名内嵌段内；原 36 的 4/5，底缘 42 仍收在 y<56
-const SEG_RADIUS = 4; // 微圆角（勿回胶囊——播放头圆点应是段上唯一圆形元素）
+const SEG_RADIUS = 4; // 微圆角
 const SEG_GAP = 8;
 const TITLE_SIZE = 18; // sans 章节名；标题缺失回退 mono 幕码（15）
 const CODE_SIZE = 15;
@@ -71,9 +71,10 @@ const SegLabel: React.FC<{label: string; mono: boolean; color: string; width: nu
   </div>
 );
 
-/** 顶部分段章节进度条：段宽∝幕时长、已播填充亮色、播放头随帧推进、章节名
- *  内嵌段内居中。文字跨亮填充/深轨两区，用**双色裁切**保对比度：已填侧深字
- *  （bg 压亮填充）、未填侧亮字（当前章 text / 未播章 dim），色随播放头揭示。
+/** 顶部分段章节进度条：段宽∝幕时长、已播填充亮色随帧推进（无播放头——进度
+ *  仅由填充深浅表达）、章节名内嵌段内居中。文字跨亮填充/深轨两区，用**双色裁切**
+ *  保对比度：已填侧深字（bg 压亮填充）、未填侧亮字（当前章 text / 未播章 dim），
+ *  色随填充前沿揭示。
  *  全片 overlay，与 Subtitle 同范式（帧驱动 + 只读底座 token、零 spring）。 */
 export const ChapterProgress: React.FC<{
   scenes: SceneRange[];
@@ -96,8 +97,6 @@ export const ChapterProgress: React.FC<{
   if (currentIdx === -1) {
     currentIdx = segs.length - 1; // tail：钳在末段
   }
-  const head = layout[currentIdx];
-  const headX = head.x + head.w * clamp01((frame - head.from) / (head.to - head.from));
 
   const lastSeg = segs[segs.length - 1];
   const fadeOutFrames = Math.max(
@@ -145,20 +144,6 @@ export const ChapterProgress: React.FC<{
           </div>
         );
       })}
-      {/* 播放头：亮圆点 + bg 描边（亮填充上保轮廓）+ 辉光（rgba = theme.text 底座 #F2F5FA） */}
-      <div
-        style={{
-          position: 'absolute',
-          left: headX - 7,
-          top: BAR_H / 2 - 7,
-          width: 14,
-          height: 14,
-          borderRadius: 7,
-          background: theme.text,
-          border: `3px solid ${theme.bg}`,
-          boxShadow: '0 0 10px rgba(242,245,250,0.5)',
-        }}
-      />
     </div>
   );
 };
