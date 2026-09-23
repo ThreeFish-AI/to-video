@@ -460,6 +460,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 | 症状 | 原因 | 处理 |
 |---|---|---|
 | 合成请求全部失败，报「服务不可用」 | 服务未启动/端口错 | `curl 127.0.0.1:8766/health`；按 §2.3 启动；`lsof -ti:8766` 查占用 |
+| 合成全 500 而 `/health` 假绿（长跑数十分钟后出现，外表像「毒句」） | MPS 分配器缓存累积击穿显存上限（实测约 40 分钟 / 30 GiB）；`/health` 不探显存，故照报 ok | 服务端已每句 `empty_cache` 对冲（含失败路径）；仍发生即重启服务端（§2.3），客户端按缓存续跑 |
 | 生成音频含 NaN（HTTP 500，detail 提示） | MPS 数值问题 | 客户端自动重试常可清；持续则服务加 `--device cpu` 重启（速度大幅下降，仅救急） |
 | 合成极慢 / 内存飙高 | fp32 + 长句 | 服务串行推理已是缓解；进一步可 `--device cpu` 换稳定；句长已由 max_text_tokens_per_segment=120 内部切分 |
 | 服务日志 `QwenEmotion not loaded` | 正常 | 仅向量模式，不加载 Qwen（省内存） |
