@@ -7,7 +7,7 @@
 **to-video** 是一个可安装的 agent Skill（Claude Code 等）加 Python / Remotion 工具链：把「信源精读 → 逐字稿 → 配音 → 代码动画 → 终渲」固化为九个带通过门的阶段。内容层四个写作阶段产出**可回溯的逐字稿**（每句口播都能落到信源证据），生产层五个工具阶段完成声音克隆配音、React 场景动画、抽帧质检与终渲交付。全片派生自文本单一事实源——改稿后 `build → tts → render` 一条链重跑，全程不打开任何剪辑软件。
 
 <p align="center">
-  <img src="docs/assets/demo/hello-video.gif" width="88%" alt="Demo：顶部分段章节进度条段宽随时长、播放头跨段推进，标题 spring 入场、能力标签错峰弹入——画面、配音、字幕全部由代码生成">
+  <img src="docs/assets/demo/hello-video.gif" width="88%" alt="Demo：顶部分段章节进度条段宽随时长、填充跨段推进，标题 spring 入场、能力标签错峰弹入——画面、配音、字幕全部由代码生成">
 </p>
 
 ## 一、核心能力
