@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -399,3 +401,213 @@ def test_scene_anchor_unknown_id_fails(project):
     )
     rc, out = run_check(project, "--check-scenes")
     assert "at()/dur()" not in out, out
+
+
+# ---------------- --lang en：译稿门集（RSI-004）----------------
+#
+# fixture 的 zh narration.json 有 4 句（p0-01/02 · P0，p1-01/02 · P1），en 侧
+# 镜像同 id 集。锁期望值按 zh fixture 文本现算（与 build_narration.zh_digest
+# 同口径），不复制 digest 字面——口径唯一。
+
+EN_ITEMS_OK = [
+    {"id": "p0-01", "scene": "P0", "text": "First sentence of the opening scene."},
+    {"id": "p0-02", "scene": "P0", "text": "Second sentence, still opening."},
+    {"id": "p1-01", "scene": "P1", "text": "Now the development scene begins."},
+    {"id": "p1-02", "scene": "P1", "text": "A slightly longer closing line."},
+]
+
+CFG_EN = """[narration]
+target_minutes = [0.0, 99.0]
+chars_per_min = 280
+langs = ["zh", "en"]
+words_per_min = 150
+
+[narration.en]
+target_minutes = [0.0, 99.0]
+"""
+
+
+def _zh_digest(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
+def fresh_lock(project: Path) -> dict[str, str]:
+    zh = json.loads((project / "script" / "narration.json").read_text(encoding="utf-8"))
+    return {i["id"]: _zh_digest(i["text"]) for i in zh}
+
+
+def setup_en(
+    project: Path,
+    items: list[dict] | None = None,
+    *,
+    lock: dict[str, str] | None = None,
+    toml: str = CFG_EN,
+    with_lock: bool = True,
+) -> None:
+    write_config(project, toml)
+    (project / "script" / "narration.en.json").write_text(
+        json.dumps(items if items is not None else EN_ITEMS_OK, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    if with_lock:
+        (project / "script" / "narration.en.lock.json").write_text(
+            json.dumps(
+                lock if lock is not None else fresh_lock(project), ensure_ascii=False
+            ),
+            encoding="utf-8",
+        )
+
+
+def test_en_all_green_and_skips_language_agnostic_gates(project):
+    """en 全绿：语言无关门点名跳过（覆盖/淡入/场景互比只在主稿执法）。"""
+    setup_en(project)
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 0, out
+    assert "语言无关门" in out and "主稿执法" in out
+    assert "译稿文本门" in out
+
+
+def test_en_han_residue_fails(project):
+    setup_en(project, [dict(EN_ITEMS_OK[0], text="这是一句中文。")] + EN_ITEMS_OK[1:])
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "p0-01" in out and "含汉字" in out and "中文归一化" in out
+
+
+def test_en_no_latin_fails(project):
+    """纯数字/符号句与含汉字句同病：上游 use_chinese() 按整句嗅探路由。"""
+    setup_en(project, [dict(EN_ITEMS_OK[0], text="2.5 42")] + EN_ITEMS_OK[1:])
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "无拉丁字母" in out
+
+
+def test_en_fullwidth_punct_fails(project):
+    setup_en(
+        project,
+        [dict(EN_ITEMS_OK[0], text="Full-width，pause。")] + EN_ITEMS_OK[1:],
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "全角标点" in out and "，" in out and "。" in out
+
+
+def test_en_subtitle_overflow_fails(project):
+    setup_en(
+        project,
+        [dict(EN_ITEMS_OK[0], text="word " * 40)] + EN_ITEMS_OK[1:],
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "字幕两行容量" in out and "p0-01" in out
+
+
+def test_en_word_budget_over_window_fails(project):
+    """en 预算按词数 ÷ words_per_min 对 narration.en.target_minutes 窗口执法
+    （zh 窗口不受牵连——两窗独立）。"""
+    setup_en(
+        project,
+        toml=CFG_EN.replace(
+            "[narration.en]\ntarget_minutes = [0.0, 99.0]",
+            "[narration.en]\ntarget_minutes = [0.0, 0.01]",
+        ),
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "超预算" in out and "词/分" in out
+
+
+def test_en_missing_window_warns_and_skips(project):
+    """narration.en.target_minutes 未声明：点名 WARN 跳过，不继承 zh 窗口。"""
+    setup_en(
+        project,
+        toml=CFG_EN.replace("\n[narration.en]\ntarget_minutes = [0.0, 99.0]\n", "\n"),
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 0, out
+    assert "跳过 en 时长预算门" in out and "不继承" in out
+
+
+def test_en_lock_missing_warns(project):
+    setup_en(project, with_lock=False)
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 0, out  # 锁缺失是 WARN：译稿还没 build 过是常态时序
+    assert "未锁定翻译基线" in out and "build --lang en" in out
+
+
+def test_en_lock_stale_fails(project):
+    """锁与当前主稿 digest 不一致：点名改动句，提示重译后刷新锁。"""
+    stale = fresh_lock(project)
+    stale["p1-02"] = "0" * 12
+    setup_en(project, lock=stale)
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "基线锁失配" in out and "p1-02" in out and "刷新锁" in out
+
+
+def test_en_alignment_gates(project):
+    """对齐门：缺句 / 多句 / 乱序 / 幕归属错挂，各自点名（幕归属经手改 json 构造——
+    md 解析的幕前缀规则使然，json 层才是该门的真实执法面）。"""
+    for frag, items in (
+        ("缺句", EN_ITEMS_OK[:3]),
+        ("多句", EN_ITEMS_OK + [{"id": "p1-03", "scene": "P1", "text": "Extra."}]),
+        (
+            "句序",
+            [EN_ITEMS_OK[1], EN_ITEMS_OK[0], EN_ITEMS_OK[2], EN_ITEMS_OK[3]],
+        ),
+        (
+            "幕归属",
+            [dict(EN_ITEMS_OK[0], scene="P1")] + EN_ITEMS_OK[1:],
+        ),
+    ):
+        setup_en(project, items)
+        rc, out = run_check(project, "--lang", "en")
+        assert rc == 1, (frag, out)
+        assert (
+            "对齐" not in out
+        )  # check 侧消息以「译稿…」点名（build 侧才有「对齐」措辞）
+        assert frag in out, (frag, out)
+
+
+def test_en_missing_zh_master_fails(project):
+    lock = fresh_lock(project)  # 先取锁快照，再抽走主稿
+    (project / "script" / "narration.json").unlink()
+    setup_en(project, lock=lock)
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "主稿" in out and "先 build 主稿" in out
+
+
+def test_pre_tts_en_runs_text_gates_and_blocks_on_stale_lock(project):
+    """--pre-tts --lang en：对齐/锁/文本门/词数预算 + 发音标注合法性；锁失配即拦
+    （长跑前拦最便宜）。"""
+    setup_en(project)
+    rc, out = run_check(project, "--pre-tts", "--lang", "en")
+    assert rc == 0, out
+    assert "pre-TTS" in out and "跳过覆盖性" in out
+
+    stale = fresh_lock(project)
+    stale["p0-01"] = "f" * 12
+    setup_en(project, lock=stale)
+    rc, out = run_check(project, "--pre-tts", "--lang", "en")
+    assert rc == 1
+    assert "基线锁失配" in out
+
+
+def test_check_scenes_en_reports_untranslated_literals(project):
+    """--check-scenes --lang en：未翻译画面文字报告（WARN-only）；已走 <L / useL
+    通道的行豁免。"""
+    setup_en(project)
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const t = '未翻译的标题';\n"
+        'const L1 = <L zh="已翻译" en="Translated"/>;\n'
+        "const l2 = useL('已走通道', 'via hook');\n",
+    )
+    rc, out = run_check(project, "--check-scenes", "--lang", "en")
+    assert rc == 0, out  # WARN-only 不改退出码
+    assert "英文版画面将显示中文" in out and "P0Card.tsx:1" in out
+    assert "P0Card.tsx:2" not in out and "P0Card.tsx:3" not in out
+    # en 模式下不再跑主稿的场景互比门（语言无关，主稿执法）
+    assert "beatWindow" not in out

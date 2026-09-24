@@ -133,3 +133,28 @@ def test_blend_is_pure_and_covers_all_ids():
     assert out[0]["durationSec"] == 4.0 / 4.0  # 未实测：字数外推
     assert out[1]["durationSec"] == 4.2  # 已实测：原值透传
     assert out[0] is not items[0], "blend 返回新对象（浅拷贝逐项展开）"
+
+
+def test_blend_length_fn_swaps_extrapolation_unit():
+    """en 词数口径外推：length_fn 换成 langs.length(text, "en")，未实测句按
+    词数 / 语速外推；缺省 len 保持 zh 字数口径（上一条黄金的另一面）。"""
+    import langs
+
+    items = [
+        {
+            "id": "p0-01",
+            "scene": "P0",
+            "text": "one two three, four five",
+            "durationSec": 0,
+        },
+        {"id": "p0-02", "scene": "P0", "text": "six seven", "durationSec": 0},
+    ]
+    out = blend(
+        items,
+        {"p0-02": 1.5},
+        chars_per_sec=2.5,
+        length_fn=lambda t: langs.length(t, "en"),
+    )
+    assert langs.length("one two three, four five", "en") == 5  # 逗号切词
+    assert out[0]["durationSec"] == 5 / 2.5  # 5 词 ÷ 2.5 词/秒
+    assert out[1]["durationSec"] == 1.5  # 已实测：原值透传，与口径无关

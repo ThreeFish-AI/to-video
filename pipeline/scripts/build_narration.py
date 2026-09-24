@@ -7,6 +7,16 @@ narration.md 是单一事实源；本脚本是纯派生转换，不做任何内�
 派生产物两件：narration.json（逐句）与 video/src/chapters.json（逐幕标题——
 `## Pn 标题` 的标题文字此前被丢弃，现为顶部分段进度条的数据面）。
 
+**双语构建（--lang，RSI-004）**：主语言 zh 解析 narration.md；en 解析
+narration.en.md（同一套 LINE_RE/SCENE_RE，字段同构）并过**硬对齐门**——句 id
+序列 / 幕归属 / 幕集合与主稿逐一相等（缺句 / 多句 / 乱序 / 换幕分别点名），
+1:1 对齐是复用分镜与场景代码的前提。en 构建成功即写**基线锁**
+narration.en.lock.json（`{句id: 主稿句 digest}`，gettext msgid 快照同构）：记录
+「翻译时主稿长什么样」，主稿事后改稿 ⇒ check_script --lang en 可测出译稿失鲜。
+chapters.json 只有一份：zh / en 两种构建产出同一文件，en 幕标题在本集声明
+narration.langs 后附进条目 i18n 键（en 文件缺失/解析失败降级 WARN，zh 构建
+永不为 en 文件失败）。
+
 **发音标注的正交拆分**：逐字稿里可内联 `<原文|读音>` 标注（多音字/英文专名，语法见
 [pron_marks.py](./pron_marks.py)）。本脚本据此派生两个字段：
 
@@ -18,13 +28,14 @@ narration.md 是单一事实源；本脚本是纯派生转换，不做任何内�
 未标注的句子不产生 ttsText 字段，取值与历史完全一致 ⇒ 存量缓存摘要不失效。
 标注本身携带原字，故一处书写即可派生两者，不存在两份副本漂移。
 
-用法：uv run --no-project $T/pipeline/scripts/build_narration.py --project $P
+用法：uv run --no-project $T/pipeline/scripts/build_narration.py --project $P [--lang zh|en]
      工程内薄包装等价于：uv run --no-project scripts/build_narration.py
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -33,7 +44,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from pron_marks import has_marks, load_vocab, strip_marks, validate
+import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
+import langs  # noqa: E402
+from pron_marks import has_marks, load_vocab, strip_marks, validate  # noqa: E402
 
 LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$")
 #: 幕标题文字此前被丢弃；现为顶部分段进度条（ChapterProgress）的数据面，
@@ -52,24 +65,28 @@ PINYIN_VOCAB = (
 )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="narration.md → narration.json")
-    parser.add_argument("--project", default=".", help="视频工程根目录（含 script/）")
-    args = parser.parse_args()
+def parse_md(
+    src: Path, vocab: frozenset[str] | None
+) -> tuple[
+    list[dict[str, str]],
+    dict[str, str],
+    list[str],
+    list[str],
+    list[str],
+    int,
+]:
+    """解析一份逐字稿（zh 主稿与 en 译稿共用同一套 LINE_RE/SCENE_RE）。
 
-    root = Path(args.project).resolve()
-    src = root / "script" / "narration.md"
-    dst = root / "script" / "narration.json"
-
-    # 与 tts.py 同口径的可操作退出（而非裸 FileNotFoundError 栈）
-    if not src.is_file():
-        sys.exit(f"narration.md 不存在: {src} —— 见 {FORMAT_DOC}")
-
-    vocab = load_vocab(PINYIN_VOCAB)
+    → (items, scene_titles, 结构错, 标注错, 标注WARN, 带标注句数)。本函数不退出：
+    错误分类交还调用方决定语义——构建目标（主稿或译稿本体）硬失败，chapters 的
+    i18n 容错收集（collect_scene_i18n）降级 WARN。en 译稿文件的结构规则与 zh
+    完全同构（句 id 幕前缀等），对齐差异归 check_alignment 点名。
+    """
     scene = ""
     scene_titles: dict[str, str] = {}
     items: list[dict[str, str]] = []
     seen: set[str] = set()
+    struct_errors: list[str] = []
     mark_errors: list[str] = []
     mark_warnings: list[str] = []
     marked = 0
@@ -84,16 +101,19 @@ def main() -> None:
             if not scene:
                 # 幕名为空时下一条校验会报出「与所在幕  不一致」这种令人困惑的信息，
                 # 故先明确指出真正的原因：首句之前缺 `## Pn` 标题。
-                sys.exit(
+                struct_errors.append(
                     f"{src}:{lineno} 句 {sid} 出现在任何 `## Pn` 分幕标题之前 —— 每句必须归属于某一幕，见 {FORMAT_DOC}"
                 )
+                continue
             if sid in seen:
-                sys.exit(f"{src}:{lineno} 重复句 id: {sid}")
+                struct_errors.append(f"{src}:{lineno} 重复句 id: {sid}")
+                continue
             if not sid.startswith(scene.lower() + "-"):
-                sys.exit(
+                struct_errors.append(
                     f"{src}:{lineno} 句 id {sid} 与所在幕 {scene} 不一致 —— "
                     f"句 id 必须以幕名小写为前缀（应为 {scene.lower()}-…）"
                 )
+                continue
             seen.add(sid)
             # 发音标注：先校验（标注错 = 必然读错，上游丢弃原字、无字形兜底），
             # 再派生「人读 text」与「送合成 ttsText」
@@ -109,11 +129,122 @@ def main() -> None:
                 item["ttsText"] = text
                 marked += 1
             items.append(item)
+    return items, scene_titles, struct_errors, mark_errors, mark_warnings, marked
 
+
+def zh_digest(text: str) -> str:
+    """基线锁的句 digest：pron 剥离后 text 字段口径的 sha1 前 12 位。
+
+    build（写锁）与 check_script（读锁比对）共用此函数——译稿失鲜判定的单一
+    口径，勿在他处内联同形计算。
+    """
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
+def check_alignment(
+    zh_items: list[dict],
+    en_items: list[dict],
+    zh_titles: dict[str, str],
+    en_titles: dict[str, str],
+) -> None:
+    """硬对齐门：译稿与主稿句 id 序列 / 幕归属 / 幕集合逐一相等，失配大声退出。
+
+    幕标题是译写对象、允许不同；其余任何失配都会让「en 复用 zh 分镜与场景
+    代码」的前提静默失效（beatWindow 按句 id 取窗），故在生成期拦死。"""
+    zh_ids = [i["id"] for i in zh_items]
+    en_ids = [i["id"] for i in en_items]
+    problems: list[str] = []
+    if en_ids != zh_ids:
+        zh_set, en_set = set(zh_ids), set(en_ids)
+        missing = [x for x in zh_ids if x not in en_set]
+        extra = [x for x in en_ids if x not in zh_set]
+        if missing:
+            problems.append(f"缺句（主稿有而译稿无）: {' '.join(missing)}")
+        if extra:
+            problems.append(f"多句（译稿有而主稿无）: {' '.join(extra)}")
+        if not missing and not extra:
+            for k, (z, e) in enumerate(zip(zh_ids, en_ids)):
+                if z != e:
+                    problems.append(f"句序不一致：第 {k + 1} 句主稿为 {z}，译稿为 {e}")
+                    break
+    zh_scene = {i["id"]: i["scene"] for i in zh_items}
+    if wrong := [
+        i["id"]
+        for i in en_items
+        if i["id"] in zh_scene and i["scene"] != zh_scene[i["id"]]
+    ]:
+        problems.append(f"句幕归属不一致: {' '.join(wrong)}")
+    if set(en_titles) != set(zh_titles):
+        problems.append(
+            f"幕集合不一致：主稿独有 {sorted(set(zh_titles) - set(en_titles))}"
+            f"，译稿独有 {sorted(set(en_titles) - set(zh_titles))}"
+        )
+    if problems:
+        for p in problems:
+            print(f"FAIL  对齐: {p}", file=sys.stderr)
+        sys.exit(
+            f"译稿与主稿未对齐（{len(problems)} 类失配）—— 1:1 句 id 对齐是复用分镜/时间轴的前提"
+        )
+
+
+def collect_scene_i18n(root: Path, declared: list[str]) -> dict[str, str] | None:
+    """→ {幕: en 标题}；未声明 en 或 narration.en.md 缺失/解析失败 → None（WARN 降级）。
+
+    语言激活只认 narration.langs 声明（文件存在与否不作依据——二源归一）；
+    只读幕标题，坏文件不炸 zh build（译稿自身的门在 build --lang en 里执法）。"""
+    if "en" not in declared:
+        return None
+    src = langs.narration_md(root, "en")
+    if not src.is_file():
+        print(
+            f"WARN  narration.langs 已声明 en 但缺 {src.name}——chapters.json 暂不带 i18n（zh 构建不为 en 文件失败）",
+            file=sys.stderr,
+        )
+        return None
+    _items, titles, struct_errors, mark_errors, _w, _m = parse_md(src, None)
+    if struct_errors or mark_errors:
+        print(
+            f"WARN  {src.name} 解析失败（{len(struct_errors) + len(mark_errors)} 处）——chapters.json 暂不带 i18n（build --lang en 会点名）",
+            file=sys.stderr,
+        )
+        return None
+    return titles
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="narration.md → narration.json")
+    parser.add_argument("--project", default=".", help="视频工程根目录（含 script/）")
+    parser.add_argument(
+        "--lang", default=langs.PRIMARY, help="构建语言：zh 主稿（缺省）| en 译稿"
+    )
+    args = parser.parse_args()
+    try:
+        lang = langs.validate(args.lang)
+    except ValueError as e:
+        parser.error(str(e))
+
+    root = Path(args.project).resolve()
+    src = langs.narration_md(root, lang)
+    dst = langs.narration_json(root, lang)
+
+    # 与 tts.py 同口径的可操作退出（而非裸 FileNotFoundError 栈）
+    if not src.is_file():
+        sys.exit(f"narration{langs.suffix(lang)}.md 不存在: {src} —— 见 {FORMAT_DOC}")
+
+    vocab = load_vocab(PINYIN_VOCAB)
+    items, scene_titles, struct_errors, mark_errors, mark_warnings, marked = parse_md(
+        src, vocab
+    )
+    if struct_errors:
+        for e in struct_errors:
+            print(f"FAIL  {e}", file=sys.stderr)
+        sys.exit(
+            f"{src.name} 结构解析失败（{len(struct_errors)} 处）—— 见 {FORMAT_DOC}"
+        )
     for w in mark_warnings:
         print(f"WARN  {w}", file=sys.stderr)
     if mark_errors:
-        # 与「重复句 id」「幕前置句」同口径硬失败：绝不产出一份带坏标注的 narration.json，
+        # 与结构病同口径硬失败：绝不产出一份带坏标注的 narration.json，
         # 否则会静默合成出读错音的整集（单槽位 mp3，事后只能靠听发现）
         for e in mark_errors:
             print(f"FAIL  {e}", file=sys.stderr)
@@ -121,42 +252,89 @@ def main() -> None:
             f"发音标注校验失败（{len(mark_errors)} 处）—— 语法见 $T/pipeline/scripts/pron_marks.py"
         )
 
+    # 译稿构建以主稿为基准：对齐门 + 基线锁 + chapters 的 zh 标题底稿
+    zh_titles = scene_titles
+    if lang != langs.PRIMARY:
+        zh_src = langs.narration_md(root, langs.PRIMARY)
+        if not zh_src.is_file():
+            sys.exit(f"主稿不存在: {zh_src} —— 译稿构建以主稿为对齐基准，先构建主稿")
+        zh_items, zh_titles, z_struct, z_marks, _zw, _zm = parse_md(zh_src, vocab)
+        if z_struct or z_marks:
+            for e in (*z_struct, *z_marks):
+                print(f"FAIL  {e}", file=sys.stderr)
+            sys.exit(f"主稿 {zh_src.name} 解析失败——先修复主稿再构建译稿")
+        check_alignment(zh_items, items, zh_titles, scene_titles)
+
     dst.write_text(
         json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    total_chars = sum(len(i["text"]) for i in items)
+
+    # 时长估算：语速常数按语言各配（zh 字/分、en 词/分），默认值只经 config.default
+    cfg, *_rest = config.load(root, required=False, scope={"narration"})
+    narr = cfg.get("narration", {})
+    declared = narr.get("langs", config.default("narration.langs"))
     per_scene: dict[str, int] = {}
     for i in items:
         per_scene[i["scene"]] = per_scene.get(i["scene"], 0) + 1
-    print(f"句数: {len(items)}  总字数: {total_chars}")
-    print(f"各幕句数: {per_scene}")
-    print(f"估算时长(280字/分): {total_chars / 280:.1f} 分钟")
+    if lang == langs.PRIMARY:
+        total = sum(len(i["text"]) for i in items)
+        cpm = narr.get("chars_per_min", config.default("narration.chars_per_min"))
+        print(f"句数: {len(items)}  总字数: {total}")
+        print(f"各幕句数: {per_scene}")
+        print(f"估算时长({cpm}字/分): {total / cpm:.1f} 分钟")
+    else:
+        unit = langs.LANGS[lang].unit
+        total = sum(langs.length(i["text"], lang) for i in items)
+        wpm = narr.get("words_per_min", config.default("narration.words_per_min"))
+        print(f"句数: {len(items)}  总{unit}数: {total}")
+        print(f"各幕句数: {per_scene}")
+        print(f"估算时长({wpm}{unit}/分): {total / wpm:.1f} 分钟")
     if marked:
         print(
             f"发音标注: {marked} 句带 ttsText（字数与字幕仍取剥离后的 text）"
             + ("" if vocab else "；未找到 pinyin.vocab，已跳过「音节是否在表内」告警")
         )
-    print(f"章节标签: {len(scene_titles)} 幕 → video/src/chapters.json（顶部进度条）")
-    emit_chapters(root, scene_titles)
+    if lang != langs.PRIMARY:
+        # 基线锁：记录「翻译时主稿长什么样」——主稿事后改稿 ⇒ 译稿失鲜可测
+        lock_path = langs.lock(root, lang)
+        lock_path.write_text(
+            json.dumps(
+                {i["id"]: zh_digest(i["text"]) for i in zh_items},
+                ensure_ascii=False,
+                indent=1,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"基线锁: {len(zh_items)} 句主稿 digest → {lock_path.name}")
+    # chapters 以主稿标题为底（en 构建同样）：幕数对齐门已保证两稿同幕集
+    print(f"章节标签: {len(zh_titles)} 幕 → video/src/chapters.json（顶部进度条）")
+    emit_chapters(root, zh_titles, declared)
     emit_series_layers(root)
 
 
-def emit_chapters(root: Path, scene_titles: dict[str, str]) -> None:
+def emit_chapters(
+    root: Path, scene_titles: dict[str, str], declared: list[str]
+) -> None:
     """幕标题 → video/src/chapters.json（顶部分段进度条 ChapterProgress 的数据面）。
 
-    与 emit_series_layers 同一派生模式：Remotion 打包根是 video/，读不到工程外
-    文件。无条件写（series-layers 依赖 series.json，本文件只依赖 narration.md
+    scene_titles 恒为主稿（zh）标题；本集声明产出 en 且 narration.en.md 可容错
+    解析时，条目附 `i18n: {en: 译标题}`（ChapterProgress 按渲染语言取用）。
+    zh 与 en 两种构建产出同一文件；未声明 en 的集不带 i18n 键（字节与改造前
+    一致）。无条件写（series-layers 依赖 series.json，本文件只依赖 narration
     本身）；标题缺失写空串，组件侧回退只显 PART n。空集也照写（脚手架期形态）。
     """
+    i18n = collect_scene_i18n(root, declared)
+    entries: list[dict] = []
+    for s, t in scene_titles.items():
+        entry: dict = {"scene": s, "title": t}
+        if i18n and s in i18n:
+            entry["i18n"] = {"en": i18n[s]}
+        entries.append(entry)
     out = root / "video" / "src" / "chapters.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
-        json.dumps(
-            [{"scene": s, "title": t} for s, t in scene_titles.items()],
-            ensure_ascii=False,
-            indent=1,
-        )
-        + "\n",
+        json.dumps(entries, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8",
     )
 
@@ -168,6 +346,8 @@ def emit_series_layers(root: Path) -> None:
     Remotion 的打包根是 video/，读不到工程外文件，故由本脚本每次 build 重派生落盘。
     仅取本集所属系列；集不在任何系列（脚手架期）则跳过不写。层短名取 cardSub
     首段（「执行层 · 循环」→「执行层」）。next 为下一集标题（P6 呼吸预告用）。
+    集条目与 next 的可选 `i18n: {"en": …}` 透传为 titleI18n / nextI18n（P6 身份
+    卡/下期卡按渲染语言取用；无则不加键，zh-only 集字节不变）。
     """
     series_json = root.parent.parent / "series.json"
     if not series_json.is_file():
@@ -183,17 +363,23 @@ def emit_series_layers(root: Path) -> None:
                     "index": i + 1,
                     "layer": e["cardSub"].split(" · ")[0],
                     "title": e["title"],
+                    **({"titleI18n": e["i18n"]} if e.get("i18n") else {}),
                     "published": e.get("status") == "ready"
                     and "已上线" in e.get("voice", ""),
                 }
                 for i, e in enumerate(eps)
             ]
-            payload = {
+            payload: dict = {
                 "seriesId": series["id"],
                 "layers": layers,
                 "activeIndex": k + 1,
-                "next": eps[k + 1]["title"] if k + 1 < len(eps) else None,
             }
+            if k + 1 < len(eps):
+                payload["next"] = eps[k + 1]["title"]
+                if eps[k + 1].get("i18n"):
+                    payload["nextI18n"] = eps[k + 1]["i18n"]
+            else:
+                payload["next"] = None
             out = root / "video" / "src" / "series-layers.json"
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(

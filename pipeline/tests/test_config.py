@@ -327,7 +327,12 @@ def test_missing_config_announces_skipped_gate(project):
 #: `config.default()`。节名（tts/render/…）的 `.get(sec, {})` 不在此列——那是取节。
 _LEAF_KEYS = {k.split(".", 1)[1] for k, *_ in config.SCHEMA}
 _GET_WITH_DEFAULT = re.compile(r'\.get\(\s*"(?P<key>[a-z_]+)"\s*,\s*(?P<dflt>[^)]+)')
-CONSUMERS = ("pipeline.py", "check_script.py", "check_archify_coverage.py")
+CONSUMERS = (
+    "pipeline.py",
+    "check_script.py",
+    "check_archify_coverage.py",
+    "build_narration.py",
+)
 
 
 def test_consumers_do_not_inline_schema_defaults():
@@ -432,3 +437,243 @@ def test_archify_check_thresholds_defaults_and_override(tmp_path):
     assert not fails, fails
     assert not any("archify." in w for w in warns), warns
     assert cfg["archify"]["rate_min"] == 0.6 and cfg["archify"]["min_fps"] == 20.0
+
+
+# ---------------- 双语键：langs / words_per_min / [narration.en] / [tts.en] ----------------
+
+
+def test_bilingual_defaults_and_default_layer_restoration(episodes: list[Path]):
+    """四个新键的默认值 + 受检集（真树集成模式 / golden）不经 toml 声明即生效
+    ——机制常数不入 toml 的等价变换判据对新键同样成立。"""
+    assert config.default("narration.langs") == ["zh"]
+    assert config.default("narration.words_per_min") == 150
+    assert config.default("narration.en") == {}
+    assert config.default("tts.en") == {}
+    for ep in episodes:
+        cfg, origin, fails, _w = config.load(ep, required=True)
+        assert not fails, f"{ep.name}: {fails}"
+        for dotted, want in (
+            ("narration.langs", ["zh"]),
+            ("narration.words_per_min", 150),
+            ("narration.en", {}),
+            ("tts.en", {}),
+        ):
+            assert get(cfg, dotted) == want, f"{ep.name}.{dotted}"
+            assert origin[dotted] == "default", f"{ep.name}.{dotted}"
+
+
+def _bi_write(tmp_path: Path, name: str, body: str) -> Path:
+    root = tmp_path / name
+    root.mkdir()
+    (root / "pipeline.toml").write_text(body, encoding="utf-8")
+    return root
+
+
+_BI_BASE = (
+    '[episode]\nslug = "{slug}"\n[narration]\ntarget_minutes = [1.0, 2.0]\n{narr}\n'
+    '[tts]\nengine = "edge"\n{tts}\n'
+)
+
+
+def test_langs_declaration_domain(tmp_path):
+    """langs 取值域四门：非空 / 元素已注册（消息含合法集）/ 去重 / 必含 zh。"""
+    for i, (extra, frag) in enumerate(
+        [
+            ("langs = []", "非空"),
+            ('langs = ["zh", "fr"]', "fr"),  # 未注册——消息须含合法集
+            ('langs = ["en"]', "必含主语言"),
+            ('langs = ["zh", "zh"]', "重复"),
+        ]
+    ):
+        root = _bi_write(
+            tmp_path,
+            f"ep-{i}-video",
+            _BI_BASE.format(slug=f"ep-{i}-video", narr=extra, tts=""),
+        )
+        _cfg, _o, fails, _w = config.load(root, required=True)
+        assert any("narration.langs" in f and frag in f for f in fails), (extra, fails)
+    # 未注册用例的 FAIL 须报出合法集（合法集是排障的最短路径）
+    root = _bi_write(
+        tmp_path,
+        "ep-fr-video",
+        _BI_BASE.format(slug="ep-fr-video", narr='langs = ["zh", "fr"]', tts=""),
+    )
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any("narration.langs" in f and "en" in f and "zh" in f for f in fails), fails
+
+
+def test_bilingual_declaration_valid_passes(tmp_path):
+    root = _bi_write(
+        tmp_path,
+        "ep-bi-video",
+        _BI_BASE.format(
+            slug="ep-bi-video",
+            narr='langs = ["zh", "en"]\n[narration.en]\ntarget_minutes = [1.2, 2.4]',
+            tts='[tts.en]\nvoice = "en-US-AndrewNeural"',
+        ),
+    )
+    cfg, _o, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert not warns, warns
+    assert cfg["narration"]["langs"] == ["zh", "en"]
+    assert cfg["narration"]["en"] == {"target_minutes": [1.2, 2.4]}
+    assert cfg["tts"]["en"] == {"voice": "en-US-AndrewNeural"}
+
+
+def test_en_override_subkey_whitelist_with_typo_hint(tmp_path):
+    """覆写表子键白名单：未知子键 FAIL + 最近邻建议（复用 _nearest 先例）。"""
+    root = _bi_write(
+        tmp_path,
+        "ep-typo-video",
+        _BI_BASE.format(
+            slug="ep-typo-video",
+            narr='langs = ["zh", "en"]\n[narration.en]\ntarget_minute = [1.2, 2.4]',
+            tts='[tts.en]\nengin = "edge"',
+        ),
+    )
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any(
+        "narration.en.target_minute" in f and "target_minutes" in f for f in fails
+    ), fails
+    assert any("tts.en.engin" in f and "engine" in f for f in fails), fails
+
+
+def test_tts_en_ref_requires_sha1_either_own_or_inherited(tmp_path):
+    """tts.en 给 ref 而无（自身或可继承的）ref_sha1 ⇒ FAIL；继承 [tts] 的
+    ref_sha1 则过——zh/en 可共用同一样本换风格是合法形态。"""
+    root = _bi_write(
+        tmp_path,
+        "ep-nosha-video",
+        _BI_BASE.format(
+            slug="ep-nosha-video",
+            narr='langs = ["zh", "en"]',
+            tts='[tts.en]\nref = "voices/en.wav"',
+        ),
+    )
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any("tts.en.ref" in f and "ref_sha1" in f for f in fails), fails
+
+    root2 = _bi_write(
+        tmp_path,
+        "ep-inherit-video",
+        '[episode]\nslug = "ep-inherit-video"\n[narration]\n'
+        'target_minutes = [1.0, 2.0]\nlangs = ["zh", "en"]\n'
+        '[tts]\nengine = "indextts"\nref = "voices/me.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "sunny-steady"\n'
+        '[tts.en]\nref = "voices/me.wav"\nstyle = "calm-steady"\n',
+    )
+    _cfg, _o, fails2, _w = config.load(root2, required=True)
+    assert not fails2, fails2
+
+
+def test_per_lang_indextts_required_replay(tmp_path):
+    """逐语言必填重放：声明 en 且其生效引擎为 indextts ⇒ 缺 ref/ref_sha1/style
+    以 `[en]` 前缀 FAIL——tts.en 换引擎不能绕开样本/指纹/风格前置。"""
+    root = _bi_write(
+        tmp_path,
+        "ep-replay-video",
+        _BI_BASE.format(
+            slug="ep-replay-video",
+            narr='langs = ["zh", "en"]',
+            tts='[tts.en]\nengine = "indextts"\nref = "voices/en.wav"\nref_sha1 = "54b699cce97f"',
+        ),
+    )
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any("[en] tts.style" in f for f in fails), fails
+    assert not any("[en] tts.ref " in f or "[en] tts.ref_sha1" in f for f in fails), (
+        fails
+    )
+
+    # 补齐 style 即过
+    root2 = _bi_write(
+        tmp_path,
+        "ep-replay2-video",
+        _BI_BASE.format(
+            slug="ep-replay2-video",
+            narr='langs = ["zh", "en"]',
+            tts='[tts.en]\nengine = "indextts"\nref = "voices/en.wav"\nref_sha1 = "54b699cce97f"\nstyle = "sunny-steady"',
+        ),
+    )
+    _cfg, _o, fails2, _w = config.load(root2, required=True)
+    assert not fails2, fails2
+
+
+def test_for_lang_zh_is_identity_view():
+    cfg = {
+        "episode": {"slug": "x-video"},
+        "narration": {"target_minutes": [1.0, 2.0]},
+        "tts": {"engine": "edge"},
+    }
+    view = config.for_lang(cfg, "zh")
+    assert view == cfg
+    assert view is not cfg  # 浅拷贝视图：顶层独立、节共享
+
+
+def test_for_lang_en_overlays_and_isolates():
+    cfg = {
+        "episode": {"slug": "x-video"},
+        "narration": {
+            "target_minutes": [13.0, 14.6],
+            "chars_per_min": 280,
+            "words_per_min": 150,
+            "en": {"target_minutes": [15.0, 16.5]},
+        },
+        "tts": {
+            "engine": "indextts",
+            "ref": "voices/me.wav",
+            "style": "sunny-steady",
+            "lang": "ZH",
+            "en": {"style": "calm-steady"},
+        },
+    }
+    view = config.for_lang(cfg, "en")
+    assert view["tts"]["lang"] == "EN"  # 语言码由注册表派生
+    assert view["tts"]["style"] == "calm-steady"  # 覆写生效
+    assert view["tts"]["engine"] == "indextts"  # 未覆写键继承 [tts]
+    assert view["narration"]["target_minutes"] == [15.0, 16.5]  # en 窗口
+    assert cfg["narration"]["target_minutes"] == [13.0, 14.6]  # 隔离：不改原 cfg
+    assert cfg["tts"]["style"] == "sunny-steady"
+
+
+def test_for_lang_en_without_window_is_none_not_inherited():
+    """narration.en.target_minutes 缺省 → 视图窗口为 None（预算门点名跳过），
+    绝不静默继承 zh 窗口——没人声明过的门不该被造出来。"""
+    cfg = {"narration": {"target_minutes": [13.0, 14.6], "en": {}}, "tts": {}}
+    assert config.for_lang(cfg, "en")["narration"]["target_minutes"] is None
+
+
+def test_for_lang_empty_cfg_is_safe():
+    """load(required=False) 缺 pipeline.toml → cfg={}：视图不崩、窗口 None。"""
+    view = config.for_lang({}, "en")
+    assert view["narration"]["target_minutes"] is None
+    assert view["episode"] == {}
+    assert view["tts"]["lang"] == "EN"
+
+
+def test_for_lang_rejects_unknown_lang():
+    import pytest
+
+    with pytest.raises(ValueError, match="注册表"):
+        config.for_lang({}, "ja")
+
+
+def test_tts_lang_override_warns(tmp_path: Path):
+    """m-6：tts.lang 显式非默认值只在直调 tts.py 时有意义，编排入口静默忽略
+    会误导——validate 点名 WARN（写默认值 ZH 不误报）。"""
+    import tomllib as _t
+
+    root = tmp_path / "golden-episode-video"
+    root.mkdir()
+    text = GOLDEN_EPISODE_TOML.read_text(encoding="utf-8")
+    base = text.replace('engine = "indextts"', 'engine = "indextts"\nlang = "EN"')
+    (root / "pipeline.toml").write_text(base, encoding="utf-8")
+    raw = _t.loads(base)
+    cfg, _o = config.resolve(raw)
+    _fails, warns = config.validate(cfg, raw, root)
+    assert any("tts.lang" in w and "不生效" in w for w in warns)
+
+    same = text.replace('engine = "indextts"', 'engine = "indextts"\nlang = "ZH"')
+    raw2 = _t.loads(same)
+    cfg2, _o2 = config.resolve(raw2)
+    _f2, w2 = config.validate(cfg2, raw2, root)
+    assert not any("tts.lang" in w for w in w2)
