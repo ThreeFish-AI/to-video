@@ -51,6 +51,7 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
@@ -495,14 +496,25 @@ def check_fade_invariant(root: Path, msgs: list[str]) -> None:
         )
 
 
-#: 画面文字 ↔ 口播逐字重合判定的归一化：剥去标点空白与发音标注的读音半边，
-#: 只比汉字与字母数字——「选项之间会互相影响」与「选项之间，会互相影响。」同源。
-_DUP_STRIP_RE = re.compile(r"[\s　-〿＀-／：-＠·—–\-…,.!?:;'\"“”‘’()\[\]/|]")
-_PRON_RE = re.compile(r"<([^|>]+)\|[^>]+>")
-#: TSX 里可能上屏的字面量：单/双引号字符串，以及 JSX 标签间的裸文本。
-_SCENE_TEXT_RE = re.compile(r"'([^'\n]{6,})'|\"([^\"\n]{6,})\"|>([^<>{}\n]{6,})<")
-#: 「部分覆盖」判据的最短长度——短字面量作为子串天然会撞进长句（标签、单词级
-#: 锚点），不设门会误伤。
+#: 画面文字 ↔ 口播逐字重合判定的归一化：NFKC 折叠全角后只留字母数字与汉字
+#: （Unicode \w 去下划线）——「选项之间会互相影响」与「选项之间，会互相影响。」同源。
+_DUP_DROP_RE = re.compile(r"[\W_]+")
+#: TSX 里可能上屏的字面量：引号 / 反引号字符串与同行 JSX 标签间文本。引号左起
+#: 成对、不设长度下限——设下限会让 `at('p0-01')` 的闭引号与正文开引号错配而吞掉
+#: 同行正文；长度门在归一化后判。
+_SCENE_TEXT_RE = re.compile(
+    r"'((?:[^'\\\n]|\\.)*)'|\"((?:[^\"\\\n]|\\.)*)\"|`((?:[^`\\\n]|\\.)*)`"
+    r"|>([^<>{}\n]+)<"
+)
+#: 整行裸文本：JSX 文本独占一行（标签各占一行）是场景代码的主流写法，逐行扫描
+#: 时它不带任何定界符。
+_SCENE_BARE_LINE_RE = re.compile(r"^\s*([^<>{}'\"`=;()\n]+?)\s*$")
+#: 注释行不上屏（场景作者常在注释里引口播标注镜头）。
+_SCENE_COMMENT_RE = re.compile(r"^\s*(?://|/\*|\*|\{/\*)")
+#: 场景文件名的幕前缀：P0Cost.tsx → P0。
+_SCENE_FILE_RE = re.compile(r"^(P\d+)")
+#: 「部分覆盖 / 整句包含」判据的最短长度——短字面量作为子串天然会撞进长句（标签、
+#: 单词级锚点），短句也天然会落进长字面量，不设门会误伤。
 DUP_MIN_CHARS = 10
 #: 「整句相等」判据的最短长度，远低于上者（短句照抄同样是两层重复）；只防单字/
 #: 双字字面量（「是」「对」）与极短口播句误配。
@@ -512,7 +524,16 @@ DUP_MIN_COVERAGE = 0.7
 
 
 def _dup_norm(s: str) -> str:
-    return _DUP_STRIP_RE.sub("", _PRON_RE.sub(r"\1", s))
+    return _DUP_DROP_RE.sub("", unicodedata.normalize("NFKC", s)).casefold()
+
+
+def _scene_texts(line: str) -> list[str]:
+    if _SCENE_COMMENT_RE.match(line):
+        return []
+    texts = [next((g for g in gs if g), "") for gs in _SCENE_TEXT_RE.findall(line)]
+    if m := _SCENE_BARE_LINE_RE.match(line):
+        texts.append(m.group(1))
+    return texts
 
 
 def check_caption_duplication(root: Path, items: list[dict], msgs: list[str]) -> None:
@@ -521,30 +542,41 @@ def check_caption_duplication(root: Path, items: list[dict], msgs: list[str]) ->
     Subtitle 是 frozen 全片 overlay，每句口播必然出现在底部字幕带；场景里再放
     一张与该句逐字相同的文字卡（金句卡 / 清单条 / 判词条），观众看到的就是上下
     两层同一句话。画面文字的职责是补充字幕给不了的信息（数字、标签、关键词、
-    结构），不是复述。判据取「归一化后整句相等（≥DUP_EXACT_MIN_CHARS 字，短句照抄
-    同样拦），或字面量 ≥DUP_MIN_CHARS 字且覆盖该句 ≥DUP_MIN_COVERAGE」——覆盖率
-    而非子串，截掉句首「所以」的复述照样拦，而「选项之间 ⇄ 互相牵动」这类关键词
-    锚点不误伤。
+    结构），不是复述。
+
+    判据（归一化后任一即 FAIL）：整句相等（≥DUP_EXACT_MIN_CHARS 字，短句照抄同样
+    拦）；字面量 ≥DUP_MIN_CHARS 字且是覆盖该句 ≥DUP_MIN_COVERAGE 的子串（截掉句首
+    「所以」的复述照样拦，「选项之间 ⇄ 互相牵动」这类关键词锚点不误伤）；该句
+    ≥DUP_MIN_CHARS 字且整句落在字面量内（加前缀标签、两句并一卡）。口播侧取
+    narration.json 的 text——即字幕所显示的文本，发音标注 build 期已剥。
+
+    近似扫描（TSX 正则本质近似，同 check_scenes 的既定口径）：逐行判定，跨行拆写
+    的同一句按行各自判定；注释行跳过；Pn 前缀的场景文件只比本幕句子（字幕只在
+    该句播出时上屏，别幕回扣同句不构成同屏两层），其余文件比全片。
     """
     scenes_dir = root / "video" / "src" / "scenes"
     if not scenes_dir.is_dir():
         return
-    sents = [(it["id"], _dup_norm(it["text"])) for it in items]
+    sents = [(it["id"], it["scene"], _dup_norm(it["text"])) for it in items]
     for tsx in sorted(scenes_dir.glob("*.tsx")):
+        m = _SCENE_FILE_RE.match(tsx.name)
+        pool = [(i, s) for i, sc, s in sents if s and m and sc == m.group(1)] or [
+            (i, s) for i, _sc, s in sents if s
+        ]
         for lineno, line in enumerate(tsx.read_text(encoding="utf-8").splitlines(), 1):
-            for groups in _SCENE_TEXT_RE.findall(line):
-                lit = next(g for g in groups if g)
+            for lit in _scene_texts(line):
                 n = _dup_norm(lit)
                 if len(n) < DUP_EXACT_MIN_CHARS:
                     continue
-                for sid, s in sents:
+                for sid, s in pool:
                     exact = n == s
-                    partial = (
+                    covers = (
                         len(n) >= DUP_MIN_CHARS
                         and n in s
                         and len(n) >= DUP_MIN_COVERAGE * len(s)
                     )
-                    if s and (exact or partial):
+                    contains = len(s) >= DUP_MIN_CHARS and s in n
+                    if exact or covers or contains:
                         fail(
                             msgs,
                             f"{tsx.name}:{lineno} 画面文字逐字复述口播 {sid}"

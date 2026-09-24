@@ -221,23 +221,49 @@ def test_relative_links_resolve():
 # （RSI-005：--ignore-workspace，ISSUE-175 后已作废但 scaffold 结尾仍在打印）。
 
 SCRIPTS = PIPELINE / "scripts"
-#: 字符串字面量里的 `scripts/xxx.py` 指名（注释与字符串都算——都是给人看的指引）
-_SCRIPT_REF_RE = re.compile(r"(?<![\w/])scripts/([a-z_][a-z0-9_]*\.py)")
+TEMPLATES = PIPELINE / "templates"
+_TEMPLATE_TEXT = {".md", ".tmpl", ".toml", ".txt", ".py", ".yaml", ".ts", ".tsx"}
+#: `scripts/xxx.py` 指名（注释与字符串都算——都是给人看的指引）。前缀不限：
+#: `$T/pipeline/scripts/x.py` 是文案里的主流写法，排除 `/` 前缀会漏掉绝大多数。
+_SCRIPT_REF_RE = re.compile(r"(?<!\w)scripts/([a-z_][a-z0-9_]*\.py)")
+#: 把 `--ignore-workspace` 当命令参数给出的形态；`[\s#]` 跨过换行与注释续行符
+#: （skeleton.toml 注释曾把这条命令断在两行，逐行扫描因此漏检）。
+_IGNORE_WS_CMD_RE = re.compile(r"pnpm install[\s#]+--ignore-workspace")
 
 
-def test_script_references_in_mechanism_resolve():
-    """机制代码里点名的 scripts/*.py 必须真实存在（RSI-006 幽灵脚本回归）。
+def _rel(f: Path) -> Path:
+    root = PIPELINE.parent
+    return f.relative_to(root) if f.is_relative_to(root) else f
 
-    只查 skill 仓自有脚本名：分集侧薄包装（build_narration/tts/qa_frames）与
-    skill 同名，同样落在 pipeline/scripts/ 下，故判据统一为「该名在 skill 的
-    scripts 目录存在」。"""
+
+def user_facing_files() -> list[Path]:
+    """用户照做的文案面：机制脚本（门报错 / 脚手架提示）、规格与门面文档、模板
+    （含注释——scaffold 原样复制，新集作者会读）。"""
+    templates = sorted(
+        p
+        for p in TEMPLATES.rglob("*")
+        if p.is_file() and p.suffix in _TEMPLATE_TEXT and "node_modules" not in p.parts
+    )
+    return (
+        sorted(SCRIPTS.glob("*.py"))
+        + sorted(SKILLS.glob("*.md"))
+        + [README, SKILL_MD, RSI_MD, PLAYBOOK_MD]
+        + templates
+    )
+
+
+def test_script_references_resolve():
+    """文案里点名的 scripts/*.py 必须真实存在（RSI-006 幽灵脚本回归）。
+
+    分集侧薄包装（build_narration/tts/qa_frames）与 skill 同名，同样落在
+    pipeline/scripts/ 下，故判据统一为「该名在 skill 的 scripts 目录存在」。"""
     have = {p.name for p in SCRIPTS.glob("*.py")}
     missing = []
-    for py in sorted(SCRIPTS.glob("*.py")):
-        for lineno, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
+    for f in user_facing_files():
+        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             for name in _SCRIPT_REF_RE.findall(line):
                 if name not in have:
-                    missing.append(f"{py.name}:{lineno} → scripts/{name}")
+                    missing.append(f"{_rel(f)}:{lineno} → scripts/{name}")
     assert not missing, "点名了不存在的脚本（用户会照着找）：\n  " + "\n  ".join(
         missing
     )
@@ -248,20 +274,13 @@ def test_no_instruction_to_add_ignore_workspace():
 
     分集 video/ 已入库 pnpm-workspace.yaml 自锚；pnpm ≥12 加该参数会把工程自身
     workspace 一并忽略 → ERR_PNPM_IGNORED_BUILDS。允许「勿加 / 不要加」式的
-    警示说明，只拦把它当命令参数给出的形态（`pnpm install --ignore-workspace`）。"""
+    警示说明，只拦把它当命令参数给出的形态（含跨行断开的注释）。"""
     offenders = []
-    targets = (
-        sorted(SCRIPTS.glob("*.py"))
-        + sorted(SKILLS.glob("*.md"))
-        + [
-            PIPELINE / "README.md",
-            skill_root() / "SKILL.md",
-        ]
-    )
-    for f in targets:
-        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(r"pnpm install\s+--ignore-workspace", line):
-                offenders.append(f"{f.name}:{lineno}")
+    for f in user_facing_files():
+        text = f.read_text(encoding="utf-8")
+        for m in _IGNORE_WS_CMD_RE.finditer(text):
+            lineno = text.count("\n", 0, m.start()) + 1
+            offenders.append(f"{_rel(f)}:{lineno}")
     assert not offenders, "文案仍在教人加 --ignore-workspace：\n  " + "\n  ".join(
         offenders
     )

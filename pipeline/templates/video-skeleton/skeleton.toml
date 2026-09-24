@@ -10,8 +10,9 @@
 #
 # ## 为什么是「复制 + 命名源头 + 机器校验」而不是共享 npm 包
 #
-# pipeline/README.md 第四节的决策**依然成立**：每集必须 `pnpm install
-# --ignore-workspace` 独立可渲染（嵌套 workspace 隔离 + Remotion 版本自由），
+# pipeline/README.md 第四节的决策**依然成立**：每集必须裸 `pnpm install` 即可
+# 独立可渲染（嵌套 workspace 自锚隔离 + Remotion 版本自由；勿加 --ignore-workspace，
+# 见 README quickstart 与 ISSUE-175），
 # 共享 TS 包会把「一集的视觉改动」泄漏进**已发布**的其他集。本文件不推翻它，
 # 而是补完它缺的那一半：README 原话是「以**任一**既有集工程为模板复制」——
 # 「任一」就是问题所在，391 行冻结基建因此有 4 个同权真理声明者。
