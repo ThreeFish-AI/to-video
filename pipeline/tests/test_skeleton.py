@@ -953,6 +953,37 @@ def test_generation_mismatched_legacy_still_fails(tmp_path):
     assert "DRIFT" in r.stdout or "STALE" in r.stdout, r.stdout
 
 
+def test_generation_mixed_sees_drift_held_files(tmp_path):
+    """**正控 (e)**：drift 放行的旧文件同样是原子组成员——真树形态是花名册集的
+    Main/Subtitle/ChapterProgress 由 [[drift]] 钉住。整组未动 ⇒ 放行（停旧代）；
+    除 drift 文件外全部同步 ⇒ GENERATION-MIXED 点名 drift 文件（此前 drift 文件
+    不入表，组内只剩 new，--strict 全绿且汇总误计「已同步」，而此形态 tsc 已红）。"""
+    import verify_skeleton as vs
+
+    rel = "video/src/components/Subtitle.tsx"
+    skill, ws, legacy = _gen_sandbox(tmp_path)
+    sub = ws / "episodes" / PROBE_A / rel
+    sub.write_bytes(sub.read_bytes() + b"\n// probe: episode-specific drift\n")
+    register_drift(skill, PROBE_A, rel, vs.fingerprint(sub, rel, "frozen"))
+    inject_generation(skill, "gen-f", [PROBE_A], legacy)
+    advance_template(skill, GEN_GROUP)
+
+    script = skill / "pipeline" / "scripts" / "verify_skeleton.py"
+    r = run(script, "--strict", cwd=ws)
+    assert r.returncode == 0, f"整组停旧代（含 drift 文件）被判红：\n{r.stdout}"
+    assert "GENERATION-MIXED" not in r.stdout, r.stdout
+    assert f"INFO  {rel} · {PROBE_A} 停在旧代" not in r.stdout, r.stdout
+
+    tmpl = skill / "pipeline" / "templates" / "video-skeleton"
+    for other, _cls in GEN_GROUP:
+        if other != rel:
+            shutil.copy2(tmpl / other, ws / "episodes" / PROBE_A / other)
+    r = run(script, "--strict", cwd=ws)
+    assert r.returncode == 1, f"drift 集半同步未被判红：\n{r.stdout}"
+    assert "GENERATION-MIXED gen-f" in r.stdout and "Subtitle.tsx" in r.stdout, r.stdout
+    assert "已同步 0" in r.stdout, f"半同步集被计为已同步：\n{r.stdout}"
+
+
 def test_generation_does_not_override_drift_registry(tmp_path):
     """drift 优先于 generation：文件被 [[drift]] 钉住其它指纹的集，即使当前
     指纹 == 旧代登记值也按 drift 语义报 DRIFT-CHANGED，旧代豁免不兜底——特有

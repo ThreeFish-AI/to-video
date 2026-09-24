@@ -202,8 +202,10 @@ def main() -> int:
 
     unregistered = 0
     #: (代 id, slug) → {rel: 'new' | 'old'}：分代状态收集——GENERATION-MIXED
-    #: 判定与每代汇总的数据面。drift 登记管辖的文件不入表（特有偏离优先于代际
-    #: 判定）；既非当代模板亦非登记旧代的文件走普通 DRIFT 路径，同样不入表。
+    #: 判定与每代汇总的数据面。drift 放行的非模板文件同样计 'old'（它仍是本代
+    #: 原子组的成员，漏计则半同步对 drift 集隐身），但不打旧代 INFO（特有偏离
+    #: 优先，报告归 drift 语义）；既非当代模板、亦非登记旧代或 drift 放行的文件
+    #: 走普通 DRIFT 路径，不入表。
     gen_states: dict[tuple[str, str], dict[str, str]] = {}
     print(f">> 骨架漂移门 · 模板 {TEMPLATE} · 受门 {len(gated)} 文件\n")
 
@@ -231,7 +233,10 @@ def main() -> int:
                     continue
                 if fps[slug] == tmpl_fp:
                     gen_states.setdefault((g.id, slug), {})[rel] = "new"
-                elif fps[slug] == g.legacy[rel] and (slug, rel) not in registered:
+                elif (slug, rel) in registered:
+                    if exempt(registered, slug, rel, fps[slug]):
+                        gen_states.setdefault((g.id, slug), {})[rel] = "old"
+                elif fps[slug] == g.legacy[rel]:
                     gen_states.setdefault((g.id, slug), {})[rel] = "old"
                     print(f"    INFO  {rel} · {slug} 停在旧代 {g.id}（重渲时整组同步）")
 
