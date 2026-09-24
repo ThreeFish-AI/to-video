@@ -46,7 +46,7 @@ slug 或该图任一章 label）与场景代码 cue 构成**双向对账**的两
 - 一「镜」（beat）= 一段连续句 id（2–8 句）共享同一主画面；镜内动效随句推进。
 - 句 id 区间必须**覆盖该幕全部句子、无交叠无遗漏**（组件内以 `beatWindow(sentences, sceneFrom, from, to)` 取窗口）。
 - 每镜「画面」写清：主体元素、布局、色彩（用契约色名）、出现的角标；「动效」写清：入场方式、随句节奏的推进（生长/高亮/计数）。
-- **画面文字不复述口播**：每句口播已由 frozen Subtitle 烧录在底部字幕带，金句卡 / 清单条 / 判词条若与该句逐字相同，观众看到的是上下两层同一句话。画面文字只放字幕给不了的东西——关键词、数字、标签、结构（如口播「门槛跟着风险走——够不上就升级」→ 画面「门槛随风险 · 升级留人」）。执法：`check_script.py --check-scenes` 逐字重合即 FAIL（判据见其 `check_caption_duplication` docstring，RSI-007）。
+- **画面文字不复述口播**：每句口播已由 frozen Subtitle 烧录在底部字幕带，金句卡 / 清单条 / 判词条若与该句逐字相同，观众看到的是上下两层同一句话。画面文字只放字幕给不了的东西——关键词、数字、标签、结构（如口播「门槛跟着风险走——够不上就升级」→ 画面「门槛随风险 · 升级留人」）。执法：`pipeline.py check`（`all` 同链；缺省执法，无需 flag；en 版对英文字幕同样执法）逐字重合即 FAIL（判据见 `check_script.py` 的 `check_caption_duplication` docstring，RSI-007）；章节标题卡、同幕回扣等刻意复述，在该行或上一行注 `caption-dup-ok: <理由>` 逐处豁免，降为 WARN 留痕。
 - 风险/反转段显式标注色调切换（如「画面转红调」）。
 - 采用 [建模手册](../MODELING-PLAYBOOK.md) 条目的镜，在「画面/动效」列标注〔M-xxx〕——策展复盘按此计数（至迭代：每次复用都是一次再验证）。
 - **顶部安全带 y<56 由章节条占用**（见 [06-remotion-implementation.md](./06-remotion-implementation.md)「顶部章节进度条」）：

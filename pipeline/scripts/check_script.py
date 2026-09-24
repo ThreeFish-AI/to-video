@@ -20,9 +20,13 @@ words_per_min 对 narration.en.target_minutes 窗口（缺省点名跳过，不�
 --check-scenes --lang en 附未翻译画面文字报告（scenes/*.tsx 中未走 <L zh en> /
 t({zh, en}) 双语对的含汉字字面量，WARN-only）。
 
+画面文字复述口播门（RSI-007，FAIL，**缺省执法、无需 flag**——忘带 flag = 检查面
+静默缩小，同 ISSUE-168）：场景代码里与口播逐字相同的画面文字，与烧录字幕叠成
+同屏两层。语言相关门，zh / en 各自对本语言字幕面执法；--pre-tts 不跑（场景未写）。
+
 可选 --check-scenes：从 video/src/scenes/*.tsx 提取 beatWindow/w('id','id')
-调用，与分镜表互比（WARN-only，TSX 正则本质近似）；另查画面文字逐字复述口播
-（FAIL——烧录字幕已逐句上屏，同屏两层相同文字，RSI-007）。
+调用，与分镜表互比（WARN，TSX 正则本质近似）；at()/dur() 引用的句 id 须真实
+存在（FAIL，ISSUE-190）。
 
 可选 --check-motion：分镜「动效」列的 @动词 标注 ↔ 场景代码运动模型调用互比
 （WARN-only）。动效列可写 `@enter:fall`、`@stagger`、`@draw` 等（动词表从本集
@@ -507,12 +511,17 @@ _SCENE_TEXT_RE = re.compile(
     r"|>([^<>{}\n]+)<"
 )
 #: 整行裸文本：JSX 文本独占一行（标签各占一行）是场景代码的主流写法，逐行扫描
-#: 时它不带任何定界符。
+#: 时它不带任何定界符；相邻的裸文本行是同一文本节点的续写，拼接后另判一次。
 _SCENE_BARE_LINE_RE = re.compile(r"^\s*([^<>{}'\"`=;()\n]+?)\s*$")
+#: 独占一行的 `<br />`：段内换行，不打断续写段。
+_SCENE_BR_RE = re.compile(r"^\s*<br\s*/?>\s*$")
 #: 注释行不上屏（场景作者常在注释里引口播标注镜头）。
 _SCENE_COMMENT_RE = re.compile(r"^\s*(?://|/\*|\*|\{/\*)")
 #: 场景文件名的幕前缀：P0Cost.tsx → P0。
 _SCENE_FILE_RE = re.compile(r"^(P\d+)")
+#: 逐处豁免：命中行或其上一行注 `caption-dup-ok: <理由>`（理由必填）→ 降为 WARN
+#: 留痕。逃逸口必须存在且必须被记录（同 skeleton.toml [[drift]] 立场）。
+_DUP_OK_RE = re.compile(r"caption-dup-ok[:：](.*)$")
 #: 「部分覆盖 / 整句包含」判据的最短长度——短字面量作为子串天然会撞进长句（标签、
 #: 单词级锚点），短句也天然会落进长字面量，不设门会误伤。
 DUP_MIN_CHARS = 10
@@ -527,13 +536,55 @@ def _dup_norm(s: str) -> str:
     return _DUP_DROP_RE.sub("", unicodedata.normalize("NFKC", s)).casefold()
 
 
-def _scene_texts(line: str) -> list[str]:
-    if _SCENE_COMMENT_RE.match(line):
-        return []
-    texts = [next((g for g in gs if g), "") for gs in _SCENE_TEXT_RE.findall(line)]
-    if m := _SCENE_BARE_LINE_RE.match(line):
-        texts.append(m.group(1))
-    return texts
+def _scene_candidates(lines: list[str]) -> list[tuple[tuple[int, ...], str]]:
+    """→ [(所跨行号, 候选文字)]：逐行字面量，外加相邻裸文本行的拼接段。"""
+    out: list[tuple[tuple[int, ...], str]] = []
+    run: list[tuple[int, str]] = []
+
+    def flush() -> None:
+        if len(run) > 1:
+            out.append((tuple(n for n, _ in run), "".join(t for _, t in run)))
+        run.clear()
+
+    for lineno, line in enumerate(lines, 1):
+        if _SCENE_COMMENT_RE.match(line):
+            flush()
+            continue
+        if _SCENE_BR_RE.match(line):
+            continue
+        for gs in _SCENE_TEXT_RE.findall(line):
+            out.append(((lineno,), next((g for g in gs if g), "")))
+        if m := _SCENE_BARE_LINE_RE.match(line):
+            out.append(((lineno,), m.group(1)))
+            run.append((lineno, m.group(1)))
+        else:
+            flush()
+    flush()
+    return out
+
+
+def _dup_ok_reason(line: str) -> str:
+    """→ 该行 `caption-dup-ok:` 标记的理由（剥注释闭合符）；无标记或理由为空 → ""。"""
+    m = _DUP_OK_RE.search(line)
+    return re.sub(r"\*/\}?\s*$", "", m.group(1)).strip() if m else ""
+
+
+def _dup_hit(n: str, pool: list[tuple[str, str]]) -> str | None:
+    """→ 被复述的句 id；None = 未命中。判据见 check_caption_duplication。"""
+    if len(n) < DUP_EXACT_MIN_CHARS:
+        return None
+    for sid, s in pool:
+        if (
+            n == s
+            or (
+                len(n) >= DUP_MIN_CHARS
+                and n in s
+                and len(n) >= DUP_MIN_COVERAGE * len(s)
+            )
+            or (len(s) >= DUP_MIN_CHARS and s in n)
+        ):
+            return sid
+    return None
 
 
 def check_caption_duplication(root: Path, items: list[dict], msgs: list[str]) -> None:
@@ -548,11 +599,14 @@ def check_caption_duplication(root: Path, items: list[dict], msgs: list[str]) ->
     拦）；字面量 ≥DUP_MIN_CHARS 字且是覆盖该句 ≥DUP_MIN_COVERAGE 的子串（截掉句首
     「所以」的复述照样拦，「选项之间 ⇄ 互相牵动」这类关键词锚点不误伤）；该句
     ≥DUP_MIN_CHARS 字且整句落在字面量内（加前缀标签、两句并一卡）。口播侧取
-    narration.json 的 text——即字幕所显示的文本，发音标注 build 期已剥。
+    items 的 text——即本语言字幕所显示的文本，发音标注 build 期已剥；zh / en
+    各查各的字幕面（en 版画面上的 `<L en>` 同样会与英文字幕叠层）。
 
-    近似扫描（TSX 正则本质近似，同 check_scenes 的既定口径）：逐行判定，跨行拆写
-    的同一句按行各自判定；注释行跳过；Pn 前缀的场景文件只比本幕句子（字幕只在
-    该句播出时上屏，别幕回扣同句不构成同屏两层），其余文件比全片。
+    近似扫描（TSX 正则本质近似，同 check_scenes 的既定口径）：逐行判定，相邻
+    裸文本行（JSX 同一文本节点的续写，`<br />` 不断段）拼接后另判；注释行跳过；
+    Pn 前缀的场景文件只比本幕句子（字幕只在该句播出时上屏，别幕回扣同句不构成
+    同屏两层），其余文件比全片。同幕跨镜回扣、章节标题卡等刻意复述，在命中行或
+    上一行注 `caption-dup-ok: <理由>` 豁免，降为 WARN 留痕。
     """
     scenes_dir = root / "video" / "src" / "scenes"
     if not scenes_dir.is_dir():
@@ -563,27 +617,34 @@ def check_caption_duplication(root: Path, items: list[dict], msgs: list[str]) ->
         pool = [(i, s) for i, sc, s in sents if s and m and sc == m.group(1)] or [
             (i, s) for i, _sc, s in sents if s
         ]
-        for lineno, line in enumerate(tsx.read_text(encoding="utf-8").splitlines(), 1):
-            for lit in _scene_texts(line):
-                n = _dup_norm(lit)
-                if len(n) < DUP_EXACT_MIN_CHARS:
-                    continue
-                for sid, s in pool:
-                    exact = n == s
-                    covers = (
-                        len(n) >= DUP_MIN_CHARS
-                        and n in s
-                        and len(n) >= DUP_MIN_COVERAGE * len(s)
-                    )
-                    contains = len(s) >= DUP_MIN_CHARS and s in n
-                    if exact or covers or contains:
-                        fail(
-                            msgs,
-                            f"{tsx.name}:{lineno} 画面文字逐字复述口播 {sid}"
-                            f"「{lit.strip()[:24]}」——字幕已烧录同句，同屏两层重复；"
-                            "画面文字改为关键词/数字/标签锚点",
-                        )
-                        break
+        lines = tsx.read_text(encoding="utf-8").splitlines()
+        seen: dict[str, list[set[int]]] = {}  # 句 id → 已报命中所跨行（拼接段去重）
+        for span, lit in _scene_candidates(lines):
+            sid = _dup_hit(_dup_norm(lit), pool)
+            if sid is None or any(prev & set(span) for prev in seen.get(sid, [])):
+                continue
+            seen.setdefault(sid, []).append(set(span))
+            head = span[0]
+            ok = next(
+                (
+                    r
+                    for ln in (head, head - 1)
+                    if ln >= 1 and (r := _dup_ok_reason(lines[ln - 1]))
+                ),
+                "",
+            )
+            where = f"{tsx.name}:{head} "
+            if ok:
+                warn(
+                    msgs, f"{where}画面文字复述口播 {sid}（caption-dup-ok 豁免：{ok}）"
+                )
+                continue
+            fail(
+                msgs,
+                f"{where}画面文字逐字复述口播 {sid}「{lit.strip()[:24]}」——字幕已烧录"
+                "同句，同屏两层重复；画面文字改为关键词/数字/标签锚点（刻意为之则注 "
+                "caption-dup-ok: <理由>）",
+            )
 
 
 def check_scenes(
@@ -690,7 +751,8 @@ def main() -> None:
     ap.add_argument(
         "--check-scenes",
         action="store_true",
-        help="附:分镜↔场景代码 beat 互比（WARN-only）；--lang en 时改为未翻译画面文字报告",
+        help="附:分镜↔场景代码 beat 互比（WARN）+ at()/dur() 句 id 存在性（FAIL）；"
+        "--lang en 时改为未翻译画面文字报告（复述口播门缺省执法，不依赖本 flag）",
     )
     ap.add_argument(
         "--check-motion",
@@ -767,6 +829,7 @@ def main() -> None:
         check_translation(root, lang, items, msgs)
         check_budget(root, items, cfg, msgs, lang)
         check_pron_marks(items, msgs)
+        check_caption_duplication(root, items, msgs)
         if args.check_scenes:
             report_untranslated_scene_text(root, msgs)
     else:
@@ -777,9 +840,9 @@ def main() -> None:
         check_budget(root, items, cfg, msgs)
         check_reading_traps(items, msgs)
         check_fade_invariant(root, msgs)
+        check_caption_duplication(root, items, msgs)
         if args.check_scenes:
             check_scenes(root, beats, msgs, known_ids={i["id"] for i in items})
-            check_caption_duplication(root, items, msgs)
         if args.check_motion:
             check_motion(root, msgs)
 

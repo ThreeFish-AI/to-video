@@ -58,8 +58,10 @@ baselineOf = "self-evolution"
 
 [classes]
 frozen = [
+  # 仅作说明占位：pnpm ≥11 不从 .npmrc 读 workspace 类设置（旧 ignore-workspace=true
+  # 已退役，见下方 [[generation]] npmrc-inert-key）
   "video/.npmrc",
-  # 与 .npmrc 同属隔离契约：缺此文件时嵌套 install 会覆写根 lockfile（ISSUE-175）
+  # 隔离契约的唯一承担者：缺此文件时嵌套 install 会覆写根 lockfile（ISSUE-175）
   "video/pnpm-workspace.yaml",
   "video/tsconfig.json",
   "video/remotion.config.ts",
@@ -136,6 +138,7 @@ episodes = [
   "dream-rsi-video",
   "experience-era-agents-video",
   "horizon-context-video",
+  "jev-decision-model-video",
   "openviking-video",
   "self-evolving-coding-agents-video",
   "self-improving-agents-video",
@@ -148,6 +151,29 @@ episodes = [
 "video/src/components/ChapterProgress.tsx" = "ca3d397fe1da"
 "video/src/Main.tsx" = "4cb4e9be10a7" # regioned 归一化口径
 "video/src/i18n.tsx" = "缺失"
+
+[[generation]]
+id = "npmrc-inert-key"
+reason = "`.npmrc` 死配置退役（2026-09-24，RSI-005 评审）：旧模板的 ignore-workspace=true 在 pnpm ≥11 下不被读取（实测 11.25.0 / 12.2.1 `pnpm config get ignore-workspace` 恒 undefined，同文件 registry 照常生效），注释还陈述已被推翻的隔离机制；隔离由 pnpm-workspace.yaml 自锚承担。旧文件对安装零影响。撤销条件=花名册内各集下次重渲时拷入模板 .npmrc，同步后从 roster 删除该集。"
+episodes = [
+  "agent-skills-video",
+  "claude-code-concurrency-video",
+  "claude-code-explained-video",
+  "claude-code-memory-video",
+  "claude-code-multiagent-video",
+  "claude-code-planning-video",
+  "context-layer-video",
+  "dream-rsi-video",
+  "experience-era-agents-video",
+  "horizon-context-video",
+  "jev-decision-model-video",
+  "openviking-video",
+  "self-evolving-coding-agents-video",
+  "self-improving-agents-video",
+]
+
+[generation.legacy]
+"video/.npmrc" = "b632c275ddae"
 
 # ── 已登记的合法偏离 ──────────────────────────────────────────────────────
 # 逃逸口必须存在，但必须**被记录**（同 `# noqa` / `eslint-disable` / Copier
@@ -164,6 +190,12 @@ episodes = [
 # 合法**退役**（整文件删除、模板仍保留给其他集）钉字面哨兵 `fingerprint = "缺失"`
 # ——与报告里缺失文件的显示值同源；文件以任何内容重现即指纹失配（DRIFT-CHANGED），
 # 是比内容哈希更严的钉法。
+[[drift]]
+episode = "agent-skills-video"
+path = "video/src/Main.tsx"
+fingerprint = "6a491ae295ca"
+reason = "场景 import 区末尾比旧代 Main 多一空行（归一化不剥空行，归一化后逐行比对仅此一处，无语义差异——regioned 指纹空行陷阱）；已发布成片，源码保持发布态。撤销条件=按 [[generation]] bilingual-i18n 整组同步时一并删去该空行，并撤销本条"
+
 [[drift]]
 episode = "self-improving-agents-video"
 path = "video/src/components/cards.tsx"

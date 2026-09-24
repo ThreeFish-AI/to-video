@@ -93,5 +93,5 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
    （漏跑 = 白闪进片；覆盖门会按图点名 lead 全 0 的图，但只是 WARN）与
    `$T/pipeline/scripts/archify_manifest.py --project $P`。
 5. **build / check**：`pipeline.py build` 重建 narration.json 派生物 → `pipeline.py check`
-   （含 archify 覆盖门）→ `video/` 内 `tsc --noEmit`。
+   （含画面文字复述口播门与 archify 覆盖门）→ `video/` 内 `tsc --noEmit`。
 6. **render**：草渲 + 抽帧 QA（[skills/08](./08-render-qa.md)）→ 终渲（本文件上文）。

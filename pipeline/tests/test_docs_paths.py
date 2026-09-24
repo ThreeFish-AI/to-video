@@ -229,6 +229,9 @@ _SCRIPT_REF_RE = re.compile(r"(?<!\w)scripts/([a-z_][a-z0-9_]*\.py)")
 #: 把 `--ignore-workspace` 当命令参数给出的形态；`[\s#]` 跨过换行与注释续行符
 #: （skeleton.toml 注释曾把这条命令断在两行，逐行扫描因此漏检）。
 _IGNORE_WS_CMD_RE = re.compile(r"pnpm install[\s#]+--ignore-workspace")
+#: 同一 flag 的 .npmrc 配置形态：pnpm ≥11 不从 .npmrc 读它（实测 11.25.0 / 12.2.1
+#: `pnpm config get ignore-workspace` 恒 undefined），写了只会误导隔离机制的归属。
+_IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
 
 
 def _rel(f: Path) -> Path:
@@ -274,13 +277,18 @@ def test_no_instruction_to_add_ignore_workspace():
 
     分集 video/ 已入库 pnpm-workspace.yaml 自锚；pnpm ≥12 加该参数会把工程自身
     workspace 一并忽略 → ERR_PNPM_IGNORED_BUILDS。允许「勿加 / 不要加」式的
-    警示说明，只拦把它当命令参数给出的形态（含跨行断开的注释）。"""
+    警示说明，只拦把它当命令参数给出的形态（含跨行断开的注释），以及模板
+    .npmrc 里的同名死配置。"""
     offenders = []
     for f in user_facing_files():
         text = f.read_text(encoding="utf-8")
         for m in _IGNORE_WS_CMD_RE.finditer(text):
             lineno = text.count("\n", 0, m.start()) + 1
             offenders.append(f"{_rel(f)}:{lineno}")
+    for f in sorted(TEMPLATES.rglob(".npmrc")):
+        text = f.read_text(encoding="utf-8")
+        for m in _IGNORE_WS_NPMRC_RE.finditer(text):
+            offenders.append(f"{_rel(f)}:{text.count(chr(10), 0, m.start()) + 1}")
     assert not offenders, "文案仍在教人加 --ignore-workspace：\n  " + "\n  ".join(
         offenders
     )

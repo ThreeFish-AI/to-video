@@ -944,7 +944,8 @@ def main() -> None:
     p.add_argument(
         "--check-scenes",
         action="store_true",
-        help="附:分镜↔场景代码 beat 互比（WARN-only）",
+        help="附:分镜↔场景代码 beat 互比（WARN）+ at()/dur() 句 id 存在性（FAIL）；"
+        "复述口播门缺省执法，不依赖本 flag",
     )
     p.add_argument(
         "--check-motion",

@@ -118,8 +118,8 @@ class Generation(NamedTuple):
 def gen_owner(generations: list[Generation], slug: str, rel: str) -> Generation | None:
     """→ 该集该文件所属的分代；None = 非分代管辖。
 
-    多代并存时取首个声明代（本仓暂单代；多代叠加属后续演进，届时最旧的代
-    先退役）。episodes 是显式花名册——不在册的集（新集、cp -r 复制集）天然
+    多代并存时取首个声明代（现存各代文件面互不相交，按文件即可唯一归属；同一
+    文件跨代叠加时最旧的代先退役）。episodes 是显式花名册——不在册的集（新集、cp -r 复制集）天然
     不命中，豁免不随复制传播。
     """
     for g in generations:

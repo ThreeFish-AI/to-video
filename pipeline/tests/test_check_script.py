@@ -417,7 +417,8 @@ def test_caption_duplication_fails(project):
 
     钉实测形态：整句照抄、去掉句首连接词的复述（覆盖率判据）、带发音标注的
     口播句（比对字幕面 text——build 期已剥标注，ttsText 不参与）、短于覆盖率
-    长度门的短句整句照抄；非幕文件（无 Pn 前缀）回落全片句子比对。"""
+    长度门的短句整句照抄；非幕文件（无 Pn 前缀）回落全片句子比对。缺省执法：
+    不带 --check-scenes 也跑（忘带 flag = 检查面静默缩小，all / check 同此）。"""
     write_board(project, DUP_BOARD)
     write_config(project, CFG_OK)
     write_narration(
@@ -444,7 +445,7 @@ def test_caption_duplication_fails(project):
     write_scene(
         project, "Callouts.tsx", "<b>{'名字叫Jev，官方管这类模型叫系统一模型'}</b>\n"
     )
-    rc, out = run_check(project, "--check-scenes")
+    rc, out = run_check(project)
     dup = dup_lines(out)
     assert rc == 1, out
     # 截去句首「所以」照样拦
@@ -481,6 +482,16 @@ def test_caption_duplication_fails(project):
             id="整句被包含-加前缀标签",
         ),
         pytest.param("就这么简单。", "<b>{'就这么简单'}</b>", id="4到5字短句整句照抄"),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "<div>\n  当每一次判断都便宜到\n  可以随手来一次——\n</div>",
+            id="同一文本节点跨行续写",
+        ),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "<div>\n  当每一次判断，\n  <br />\n  都便宜到可以随手来一次\n</div>",
+            id="br换行不断段",
+        ),
     ],
 )
 def test_caption_duplication_literal_shapes(project, sentence, scene_src):
@@ -490,7 +501,7 @@ def test_caption_duplication_literal_shapes(project, sentence, scene_src):
     write_config(project, CFG_OK)
     write_narration(project, [BENIGN, BENIGN, BENIGN, sentence])
     write_scene(project, "P1Quote.tsx", "const a = at('p1-01');\n" + scene_src + "\n")
-    _rc, out = run_check(project, "--check-scenes")
+    _rc, out = run_check(project)
     assert any("P1Quote.tsx" in line and "p1-02" in line for line in dup_lines(out)), (
         out
     )
@@ -514,8 +525,31 @@ def test_caption_duplication_spares_keyword_anchors(project):
         f' * 0-A："{s}"\n',
     )
     write_scene(project, "P1Ending.tsx", f"<div>{{'{s}'}}</div>\n")  # 片尾回扣 P0 句
-    _rc, out = run_check(project, "--check-scenes")
+    _rc, out = run_check(project)
     assert not dup_lines(out), out
+
+
+def test_caption_duplication_opt_out_needs_reason(project):
+    """RSI-007：刻意复述（章节标题卡、同幕跨镜回扣）以 `caption-dup-ok: <理由>`
+    逐处豁免——命中行或上一行注明，降为 WARN 留痕；无理由的标记不算豁免。"""
+    write_board(project, DUP_BOARD)
+    write_config(project, CFG_OK)
+    s = "所以打分不是每个选项各算各的，选项之间会互相影响。"
+    write_narration(project, [s, BENIGN, BENIGN, BENIGN])
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "{/* caption-dup-ok: 章节标题卡，口播即标题 */}\n"
+        f"<ChapterCard title='{s}' />\n"
+        f"<Recap text='{s}' /> // caption-dup-ok: 幕尾回扣\n"
+        "{/* caption-dup-ok: */}\n"
+        f"<Quote text='{s}' />\n",
+    )
+    _rc, out = run_check(project)
+    assert "P0Card.tsx:2 画面文字复述口播 p0-01（caption-dup-ok 豁免：章节标题卡" in out
+    assert "P0Card.tsx:3 画面文字复述口播 p0-01（caption-dup-ok 豁免：幕尾回扣" in out
+    assert [line for line in dup_lines(out) if "P0Card.tsx:5 " in line], out
+    assert len(dup_lines(out)) == 1, out
 
 
 # ---------------- --lang en：译稿门集（RSI-004）----------------
@@ -727,6 +761,22 @@ def test_pre_tts_en_runs_text_gates_and_blocks_on_stale_lock(project):
     rc, out = run_check(project, "--pre-tts", "--lang", "en")
     assert rc == 1
     assert "基线锁失配" in out
+
+
+def test_caption_duplication_en_checks_english_subtitle_face(project):
+    """RSI-007 双语：en 版字幕是英文，`<L en>` 与英文字幕逐字相同同样叠层——en 门
+    缺省执法、对英文字幕面比对；中文画面文字不与英文字幕互判。"""
+    setup_en(project)
+    write_scene(
+        project,
+        "P1Quote.tsx",
+        '<L zh="结尾金句" en="A slightly longer closing line" />\n'
+        "<div>{'这是一句普通的中文口播'}</div>\n",
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1, out
+    assert any("P1Quote.tsx:1 " in line and "p1-02" in line for line in dup_lines(out))
+    assert not [line for line in dup_lines(out) if "P1Quote.tsx:2 " in line], out
 
 
 def test_check_scenes_en_reports_untranslated_literals(project):
