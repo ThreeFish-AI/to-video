@@ -8,9 +8,9 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 # to-video：动效图解科普视频流水线（路由壳）
 
-本 Skill 是**路由层**：内容 SSOT 在 `pipeline/skills/01–09.md`（九篇阶段规格），工具 SSOT 在 `pipeline/scripts/`，九阶段的唯一机器可读声明是 [pipeline/stages.toml](pipeline/stages.toml)；此处只给指针与不变量，不复制任何正文（防第二事实源）。机制全量契约见尾部指针。
+本 Skill 是**路由层**：内容 SSOT 在 `references/01–09.md`（九篇阶段规格），工具 SSOT 在 `scripts/`，九阶段的唯一机器可读声明是 [references/stages.toml](references/stages.toml)；此处只给指针与不变量，不复制任何正文（防第二事实源）。机制全量契约见尾部指针。
 
-命令统一用路径变量（唯一定义处 [pipeline/README.md](pipeline/README.md)）：`$T` = skill 根（如 `~/.claude/skills/to-video`），`$W` = 内容工作区根（含 `.to-video-root` 哨兵），`$P` = `$W/episodes/<slug>-video` 分集工程，`$V` = `$W/voices` 音色样本目录（整目录 gitignored）。
+命令统一用路径变量（唯一定义处 [references/PIPELINE.md](references/PIPELINE.md)）：`$T` = skill 根（如 `~/.claude/skills/to-video`），`$W` = 内容工作区根（含 `.to-video-root` 哨兵），`$P` = `$W/episodes/<slug>-video` 分集工程，`$V` = `$W/voices` 音色样本目录（整目录 gitignored）。
 
 ## 快速通道（全新制作的最短序列）
 
@@ -20,50 +20,50 @@ git clone https://github.com/ThreeFish-AI/to-video <目录>
 ln -s <目录> ~/.claude/skills/to-video && T=~/.claude/skills/to-video
 
 # 1) 初始化内容工作区（幂等：哨兵、series 骨架、样本目录、工作区级包装器）
-uv run --no-project $T/pipeline/scripts/scaffold.py --init-workspace <目录>   # 即 $W
+uv run --no-project $T/scripts/scaffold.py --init-workspace <目录>   # 即 $W
 
 # 2) 建集：复制 frozen 骨架生成 $P；随后人工登记 series.json、把样本指纹写进
 #    $V/refs.toml（脚手架刻意不代做，清单见其结尾输出）
-uv run --no-project $T/pipeline/scripts/scaffold.py <slug>-video --title "本集标题"
+uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题"
 
 # 3) Stage ①–⑤ 内容层（规格见下表）：$P/research/ 取证 → planning.md →
 #    narration.md → storyboard.md，再过内容门（check 自动串联 archify 覆盖门）
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P build
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P check
+uv run --no-project $T/scripts/pipeline.py --project $P build
+uv run --no-project $T/scripts/pipeline.py --project $P check
 
 # 4) Stage ⑥ TTS：先预演排期；正式合成前置 = doctor 自检 + 样本试听（07 规格）
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P tts --plan
+uv run --no-project $T/scripts/pipeline.py --project $P tts --plan
 
 # 5) Stage ⑦ 场景实现：$P/video/src/scenes/ 与 Main.tsx 注册表全新撰写（无子命令）
 cd $P/video && pnpm install && npx tsc --noEmit
 
 # 6) Stage ⑧⑨ 草渲抽帧 QA → 终渲交付：
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render   # → $P/out/draft.mp4
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P qa       # 零 FAIL 才放行终渲
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render --final
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions # → $P/out/captions.{srt,vtt}
-uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → 归档 <根>/<系列id>/<标题> vN.mp4（根 = --root 或 env TO_VIDEO_DELIVER_ROOT）
+uv run --no-project $T/scripts/pipeline.py --project $P render   # → $P/out/draft.mp4
+uv run --no-project $T/scripts/pipeline.py --project $P qa       # 零 FAIL 才放行终渲
+uv run --no-project $T/scripts/pipeline.py --project $P render --final
+uv run --no-project $T/scripts/pipeline.py --project $P captions # → $P/out/captions.{srt,vtt}
+uv run --no-project $T/scripts/pipeline.py --project $P deliver # → 归档 <根>/<系列id>/<标题> vN.mp4（根 = --root 或 env TO_VIDEO_DELIVER_ROOT）
 ```
 
-双语集：在 `pipeline.toml` 声明 `narration.langs = ["zh","en"]` 并撰写对齐译稿 `narration.en.md` 后，对 tts/render/captions/deliver 显式加 `--lang en` 即产出英文版（`build`/`check` 缺省覆盖全部声明语言；产物命名加 `.en` 后缀）。机制与规约见 [pipeline/README §五「双语渲染」](pipeline/README.md)。
+双语集：在 `pipeline.toml` 声明 `narration.langs = ["zh","en"]` 并撰写对齐译稿 `narration.en.md` 后，对 tts/render/captions/deliver 显式加 `--lang en` 即产出英文版（`build`/`check` 缺省覆盖全部声明语言；产物命名加 `.en` 后缀）。机制与规约见 [references/PIPELINE.md §五「双语渲染」](references/PIPELINE.md)。
 
 ## 九阶段速查
 
-单入口 `pipeline.py`（完整形态 `$T/pipeline/scripts/pipeline.py --project $P <cmd>`，下表只写子命令；工作区内等价 `$W/scripts/pipeline.py <cmd>`）。
+单入口 `pipeline.py`（完整形态 `$T/scripts/pipeline.py --project $P <cmd>`，下表只写子命令；工作区内等价 `$W/scripts/pipeline.py <cmd>`）。
 
 | Stage | 做什么 | 规格链接 | 工具/命令 | 通过门 |
 |---|---|---|---|---|
-| ① 信源精读取证 | A 型论文：并行子代理逐章 + 官方站点补充；B 型文档/代码/站点：固定提交取证 + 证据三级 | [01](pipeline/skills/01-source-extraction.md) | A 型 `paper_extract.py`；B 型 `source_ledger.py` | 全部断言可回溯；RISKY=0 |
-| ② 策划案 | 受众/结构/视觉契约（色彩语义映射本集核心概念） | [02](pipeline/skills/02-planning.md) | —（authored） | planning.md 六节齐 |
-| ③ 逐字稿 | `narration.md` ★单一事实源 | [03](pipeline/skills/03-narration.md) | `build` | build_narration.py 通过 |
-| ④ 双重校验 | 真实性回溯 + 易懂性 | [04](pipeline/skills/04-verification.md) | `check` | RISKY=0 且 REWRITE=0 |
-| ⑤ 分镜表 | 镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效；beat 覆盖性 | [05](pipeline/skills/05-storyboard.md) | `check --check-scenes` | beat 覆盖率无缺句 |
-| ⑥ TTS 配音 | 声音克隆（IndexTTS-2.5；备选 edge 预置音色，manifest 契约一致） | [07](pipeline/skills/07-tts-voice.md) | `tts --plan` / `captions` | refs 指纹门 + 试听定档 + ETA |
-| ⑦ Remotion 场景 | 代码动画实现；动效走 `src/motion/` 运动模型 | [06](pipeline/skills/06-remotion-implementation.md) | 工程内直调 `tsc --noEmit` 与 motion 测试 | 七条渲染红线 + 运动层铁律 |
-| ⑧ 草渲 + 抽帧 QA | 半分辨率快速迭代（`--beat-heads` 补入场瞬态盲区） | [08](pipeline/skills/08-render-qa.md) | `render` + `qa` | 自动体检零 FAIL（尾幕渐黑必查） |
-| ⑨ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 + 按系列/标题 vN 归档 | [09](pipeline/skills/09-final-render.md) | `render --final` + `captions` + `deliver` | 实测时长落在预算窗内 |
+| ① 信源精读取证 | A 型论文：并行子代理逐章 + 官方站点补充；B 型文档/代码/站点：固定提交取证 + 证据三级 | [01](references/01-source-extraction.md) | A 型 `paper_extract.py`；B 型 `source_ledger.py` | 全部断言可回溯；RISKY=0 |
+| ② 策划案 | 受众/结构/视觉契约（色彩语义映射本集核心概念） | [02](references/02-planning.md) | —（authored） | planning.md 六节齐 |
+| ③ 逐字稿 | `narration.md` ★单一事实源 | [03](references/03-narration.md) | `build` | build_narration.py 通过 |
+| ④ 双重校验 | 真实性回溯 + 易懂性 | [04](references/04-verification.md) | `check` | RISKY=0 且 REWRITE=0 |
+| ⑤ 分镜表 | 镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效；beat 覆盖性 | [05](references/05-storyboard.md) | `check --check-scenes` | beat 覆盖率无缺句 |
+| ⑥ TTS 配音 | 声音克隆（IndexTTS-2.5；备选 edge 预置音色，manifest 契约一致） | [07](references/07-tts-voice.md) | `tts --plan` / `captions` | refs 指纹门 + 试听定档 + ETA |
+| ⑦ Remotion 场景 | 代码动画实现；动效走 `src/motion/` 运动模型 | [06](references/06-remotion-implementation.md) | 工程内直调 `tsc --noEmit` 与 motion 测试 | 七条渲染红线 + 运动层铁律 |
+| ⑧ 草渲 + 抽帧 QA | 半分辨率快速迭代（`--beat-heads` 补入场瞬态盲区） | [08](references/08-render-qa.md) | `render` + `qa` | 自动体检零 FAIL（尾幕渐黑必查） |
+| ⑨ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 + 按系列/标题 vN 归档 | [09](references/09-final-render.md) | `render --final` + `captions` + `deliver` | 实测时长落在预算窗内 |
 
-⚠️ **序号与文件号刻意错位**：Stage ⑥ ↔ `07-tts-voice`、Stage ⑦ ↔ `06-remotion-implementation`（入链 ≥5 处，重命名代价大于收益），由 [tests/test_stages.py](pipeline/tests/test_stages.py) 执法——勿据序号猜文件名，更勿「顺手对齐」。
+⚠️ **序号与文件号刻意错位**：Stage ⑥ ↔ `07-tts-voice`、Stage ⑦ ↔ `06-remotion-implementation`（入链 ≥5 处，重命名代价大于收益），由 [tests/test_stages.py](tests/test_stages.py) 执法——勿据序号猜文件名，更勿「顺手对齐」。
 
 ## 关键不变量
 
@@ -73,10 +73,10 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → �
 - 每集 `pipeline.toml` 是可执行参数唯一来源（默认值在 `config.py` 的 SCHEMA，toml 只写偏离）；README 不复制命令行参数。
 - 时序常数只在 `video/src/timing.json`（`timing.ts` 与 Python 双语共读同一 JSON）；运动语汇只在 `video/src/motion/`（frozen，改 = 模板 + 全集同步）。
 - 声音样本是生物特征：不入库（`voices/refs.toml` 只存指纹），试听后即删。
-- **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头是 `pipeline/templates/video-skeleton/`，由 `scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
+- **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头是 `assets/video-skeleton/`，由 `scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，各居任意目录互不牵连。
 - **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 机制文件只读（例外仅两处仅追加的登记面：台账、建模手册候选区），禁止顺手改。
-- **双语对齐**（双语集）：`narration.en.md` 与主稿句 id 1:1（build/check 执法）+ 基线锁防译稿静默失鲜；语言常数只在 `pipeline/scripts/langs.py`（tts.py 内联镜像由测试钉住）；tts/render/deliver 缺省只跑主语言、显式 `--lang` 才多版本（机制见 [pipeline/README §五「双语渲染」](pipeline/README.md)）。
+- **双语对齐**（双语集）：`narration.en.md` 与主稿句 id 1:1（build/check 执法）+ 基线锁防译稿静默失鲜；语言常数只在 `scripts/langs.py`（tts.py 内联镜像由测试钉住）；tts/render/deliver 缺省只跑主语言、显式 `--lang` 才多版本（机制见 [references/PIPELINE.md §五「双语渲染」](references/PIPELINE.md)）。
 
 ## 双锚点与安装
 
@@ -101,11 +101,11 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → �
 
 ## 自改进回路（RSI）
 
-制片过程中（Agent 或用户）发现**本 Skill 自身**的缺陷或流程/制度/方法改进项——脚本误报漏报、文档命令复制即跑失败、规格与实现漂移等——走 RSI：发现即登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容质量问题不在此列（走 Stage ④/⑧ 既有 QA 回路）。四道门（问题属实 / 方案比选正确 / 正向收益 / 无损历史）全过后自动向本仓发起改进 PR 并回报链接。唯一的内容侧例外：被认可/否决的**动效画面建模方法**追加进有界的 [建模手册](pipeline/MODELING-PLAYBOOK.md) 候选区，交付后由策展子代理攒批并入（字数上限与压缩阶梯见 RSI.md 第十节）。协议全文：[RSI.md](RSI.md)。
+制片过程中（Agent 或用户）发现**本 Skill 自身**的缺陷或流程/制度/方法改进项——脚本误报漏报、文档命令复制即跑失败、规格与实现漂移等——走 RSI：发现即登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容质量问题不在此列（走 Stage ④/⑧ 既有 QA 回路）。四道门（问题属实 / 方案比选正确 / 正向收益 / 无损历史）全过后自动向本仓发起改进 PR 并回报链接。唯一的内容侧例外：被认可/否决的**动效画面建模方法**追加进有界的 [建模手册](references/MODELING-PLAYBOOK.md) 候选区，交付后由策展子代理攒批并入（字数上限与压缩阶梯见 RSI.md 第十节）。协议全文：[RSI.md](RSI.md)。
 
 ## 尾部指针
 
-- [pipeline/README.md](pipeline/README.md) —— 机制全量契约：路径变量 SSOT、`pipeline.toml` 字段表、复用边界、脚手架清单、许可注意。
+- [references/PIPELINE.md](references/PIPELINE.md) —— 机制全量契约：路径变量 SSOT、`pipeline.toml` 字段表、复用边界、脚手架清单、许可注意。
 - [RSI.md](RSI.md) —— RSI 自改进回路：触发分流、台账、子代理协议、四道门与 PR 规范。
-- [pipeline/MODELING-PLAYBOOK.md](pipeline/MODELING-PLAYBOOK.md) —— 动效画面建模手册：跨集经验库（有界，门 `check_playbook.py`）。
+- [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md) —— 动效画面建模手册：跨集经验库（有界，门 `check_playbook.py`）。
 - [README.md](README.md) —— 安装与 quickstart。

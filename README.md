@@ -12,12 +12,12 @@
 
 ## 一、核心能力
 
-- **IndexTTS-2.5 声音克隆配音**：用 10–14 秒干净样本克隆你自己的音色，风格档控制语气；样本勘探与保真度验收、逐句内容寻址缓存、断点续跑零重复合成（机制见 [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md)）。无本地模型时可用 edge 预置音色（edge-tts）兜底。
+- **IndexTTS-2.5 声音克隆配音**：用 10–14 秒干净样本克隆你自己的音色，风格档控制语气；样本勘探与保真度验收、逐句内容寻址缓存、断点续跑零重复合成（机制见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)）。无本地模型时可用 edge 预置音色（edge-tts）兜底。
 - **Remotion 全代码动画**：每个画面是一个 React 场景组件——可 review、可 diff、可编程复渲；frozen 运动层提供跨集一致的时序语汇（时长令牌 / 缓动 / 弹簧 / 错峰），主题与构图每集独立设计。
 - **抽帧 QA 门**：草渲后按幕 / 句 / 末 N 句抽帧，自动体检黑帧、重复帧、安全区侵入与字幕 WCAG 对比度，零 FAIL 才放行终渲——把「渲染缺陷靠肉眼全程盯」压缩为「机器点名 + 定点目检」。
 - **archify 动效图例**：架构图（archify Skill 产物，见「相邻 Skill」）逐章录制为视频动效；覆盖门按句级锚定率执法「图与口播互证」，整幕零锚定即 FAIL。
 - **字幕导出**：srt / vtt 双格式，cue 终点不含句间停顿——外挂字幕的静默期不留残字。
-- **双语版本（zh/en）**：英文逐字稿与主稿句 id 1:1 对齐（分镜/场景全复用，时间轴随英文配音自动重排）、按语言独立的配音槽位与预算门、画面文案轻量 i18n、按语言后缀的渲染与交付归档——`--lang` 一参切换（机制见 [pipeline/README §五「双语渲染」](pipeline/README.md)）。
+- **双语版本（zh/en）**：英文逐字稿与主稿句 id 1:1 对齐（分镜/场景全复用，时间轴随英文配音自动重排）、按语言独立的配音槽位与预算门、画面文案轻量 i18n、按语言后缀的渲染与交付归档——`--lang` 一参切换（机制见 [references/PIPELINE.md §五「双语渲染」](references/PIPELINE.md)）。
 - **1080p30 终渲交付**：音频 manifest 驱动全片时间轴，零手工对轨；时序常数单一事实源（timing.json），TS 与 Python 两侧共读，双语言镜像漂移结构性不存在。
 
 ## 二、流水线总览
@@ -41,7 +41,7 @@
 | ⑧ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`）零 FAIL，含尾幕渐黑必查 |
 | ⑨ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径，实测时长落在预算窗内 |
 
-九阶段的唯一声明源是 [`pipeline/stages.toml`](pipeline/stages.toml)，本表是它的人读视图；每阶段的代理规格见 [`pipeline/skills/`](pipeline/skills/)。
+九阶段的唯一声明源是 [`references/stages.toml`](references/stages.toml)，本表是它的人读视图；每阶段的代理规格见 [`references/`](references/)。
 
 ## 三、安装
 
@@ -55,7 +55,7 @@ Skill 本体是纯指令，零依赖即装即用；下表工具链仅运行流�
 | [uv](https://docs.astral.sh/uv/) | 运行全部 Python 脚本（`uv run --no-project --with …` 按需取依赖，无需预装环境） |
 | pnpm ≥ 12 | 分集 Remotion 工程的依赖安装（workspace 隔离与构建脚本许可已按 pnpm 12 行为配好） |
 | Node ≥ 23.6 | 运动层单测用 `node --test` 原生跑 TS |
-| （可选）IndexTTS-2.5 本地服务 | 声音克隆后端（默认 `127.0.0.1:8766`），部署见 [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md) §二 |
+| （可选）IndexTTS-2.5 本地服务 | 声音克隆后端（默认 `127.0.0.1:8766`），部署见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md) §二 |
 
 ### Claude Code（推荐）
 
@@ -88,7 +88,7 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 
 ## 四、快速上手（Quickstart）
 
-变量约定（完整定义见 [pipeline/README.md](pipeline/README.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下用 edge 预置音色跑一支两幕三句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆见 [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md)。
+变量约定（完整定义见 [references/PIPELINE.md](references/PIPELINE.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下用 edge 预置音色跑一支两幕三句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)。
 
 ```bash
 T=~/.claude/skills/to-video
@@ -96,11 +96,11 @@ W=~/my-videos
 P=$W/episodes/hello-video
 
 # 1) 初始化内容工作区（幂等：哨兵 + series.json + voices/ + 工作区包装器）
-uv run --no-project $T/pipeline/scripts/scaffold.py --init-workspace $W
+uv run --no-project $T/scripts/scaffold.py --init-workspace $W
 
 # 2) 建集脚手架（在 $W 内执行，脚本靠哨兵 .to-video-root 定位工作区）
 cd $W
-uv run --no-project $T/pipeline/scripts/scaffold.py hello-video --title "你好 to-video"
+uv run --no-project $T/scripts/scaffold.py hello-video --title "你好 to-video"
 
 # 3) mini 篇幅调整：改用 edge 预置音色 + 把时长预算窗缩到三句话的量级
 sed -i '' -e 's/^engine = "indextts"/engine = "edge"/' \
@@ -129,8 +129,8 @@ EOF
 
 # 6) 放入两幕场景组件，并在 $P/video/src/Main.tsx 注册（加 import {P0} 与 {P1}；
 #    给刻意留空的 SCENE_COMPONENTS 表各填一行 `P0: P0,` / `P1: P1,`，键 = 幕名
-#    ——每幕必须注册，漏一幕渲染即报错；规格见 pipeline/skills/06）
-cp $T/docs/quickstart/P0.tsx $T/docs/quickstart/P1.tsx "$P/video/src/scenes/"
+#    ——每幕必须注册，漏一幕渲染即报错；规格见 references/06）
+cp $T/assets/quickstart/P0.tsx $T/assets/quickstart/P1.tsx "$P/video/src/scenes/"
 
 # 7) ③④⑤ 内容流水线：逐字稿派生（narration.json + 章节标签 chapters.json）
 #    + 内容门（时长预算 / 分镜覆盖 / 读法陷阱）
@@ -147,20 +147,20 @@ uv run --no-project $W/scripts/pipeline.py --project $P render
 uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4 --last-n 2 --check
 ```
 
-全绿后交付：`captions` 导出 srt/vtt，`render --final` 出 `out/final.mp4`（本文首屏 Demo 即由本流程产出）；`deliver`（`--root` 一次性或 env `TO_VIDEO_DELIVER_ROOT` 持久指定归档根）把成片按 `<根>/<系列id>/<标题> vN.mp4` 归档。随时可用 `status`（阶段新鲜度）与 `doctor`（环境自检）定位问题。真实制作的完整清单（信源取证、series.json 登记、概念色设计）见 [pipeline/README.md](pipeline/README.md)。
+全绿后交付：`captions` 导出 srt/vtt，`render --final` 出 `out/final.mp4`（本文首屏 Demo 即由本流程产出）；`deliver`（`--root` 一次性或 env `TO_VIDEO_DELIVER_ROOT` 持久指定归档根）把成片按 `<根>/<系列id>/<标题> vN.mp4` 归档。随时可用 `status`（阶段新鲜度）与 `doctor`（环境自检）定位问题。真实制作的完整清单（信源取证、series.json 登记、概念色设计）见 [references/PIPELINE.md](references/PIPELINE.md)。
 
 ## 五、文档地图
 
 | 文档 | 内容 |
 | --- | --- |
 | [SKILL.md](SKILL.md) | Skill 路由壳：快速通道、九阶段速查、关键不变量、env 表 |
-| [pipeline/README.md](pipeline/README.md) | 机制 SSOT：脚本清单、pipeline.toml 字段表、路径变量约定、复用边界 |
-| [pipeline/skills/](pipeline/skills/) | 九阶段规格（`01`–`09` 每阶段一份，可直接作为子代理 prompt） |
-| [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md) | 声音克隆操作与参数：部署、样本、风格档、合成、缓存、排障 |
-| [pipeline/INDEXTTS-2.5-ADVANCED.md](pipeline/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
-| [pipeline/PRON-GLOSSARY.md](pipeline/PRON-GLOSSARY.md) | 易错字台账：发音标注（`<原文\|读音>`）跨集复用表 |
+| [references/PIPELINE.md](references/PIPELINE.md) | 机制 SSOT：脚本清单、pipeline.toml 字段表、路径变量约定、复用边界 |
+| [references/](references/) | 九阶段规格（`01`–`09` 每阶段一份，可直接作为子代理 prompt） |
+| [references/VOICE-CLONING.md](references/VOICE-CLONING.md) | 声音克隆操作与参数：部署、样本、风格档、合成、缓存、排障 |
+| [references/INDEXTTS-2.5-ADVANCED.md](references/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
+| [references/PRON-GLOSSARY.md](references/PRON-GLOSSARY.md) | 易错字台账：发音标注（`<原文\|读音>`）跨集复用表 |
 | [RSI.md](RSI.md) | RSI 自改进回路：Skill 缺陷/改进的台账登记、子代理协议、四道门核验与 PR 回流 |
-| [pipeline/MODELING-PLAYBOOK.md](pipeline/MODELING-PLAYBOOK.md) | 动效画面建模手册：跨集复用的建模方法与反模式（字数有界，上限见 `check_playbook.py`；超限按压缩阶梯回收） |
+| [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md) | 动效画面建模手册：跨集复用的建模方法与反模式（字数有界，上限见 `check_playbook.py`；超限按压缩阶梯回收） |
 | [docs/research/modeling-experience-distillation.md](docs/research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本史与迁移记录 |
 
@@ -176,6 +176,6 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 
 - **本仓代码**：[MIT](LICENSE)。
 - **Remotion**：个人与不超过 3 人的公司免费，更大团队需购买[商业许可证](https://www.remotion.dev/license)。
-- **IndexTTS-2.5**：按 [bilibili 模型使用许可](https://github.com/index-tts/index-tts/blob/main/LICENSE)发布——个人 / 研究用途可用，商用需联系 indexspeech@bilibili.com（详见 [pipeline/VOICE-CLONING.md](pipeline/VOICE-CLONING.md) §八）。
+- **IndexTTS-2.5**：按 [bilibili 模型使用许可](https://github.com/index-tts/index-tts/blob/main/LICENSE)发布——个人 / 研究用途可用，商用需联系 indexspeech@bilibili.com（详见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md) §八）。
 - **edge-tts**：微软在线语音接口；发布前请确认目标平台对合成语音的标注要求。
 - **声音权利**：克隆他人声音必须取得本人书面授权。声音样本是生物特征：样本目录整目录 gitignored，仓库只存指纹（refs.toml）。

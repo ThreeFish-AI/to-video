@@ -1,10 +1,10 @@
 # 动效画面建模经验的有界沉淀：理论、证据与方案比选
 
-> **结论先行**：建模经验以**条目化、带权重、有字数上限**的经验库（[pipeline/MODELING-PLAYBOOK.md](../../pipeline/MODELING-PLAYBOOK.md)）沉淀；制片主 Agent 只往候选区追加信号，策展子代理攒批增量合并；超限时按「失真由小到大」的六级阶梯压缩，**禁止整体重写**。协议正文在 [RSI.md 第十节](../../RSI.md)，规则唯一实现在 [check_playbook.py](../../pipeline/scripts/check_playbook.py)，本文只存设计依据（台账：[RSI-003](../.agents/issue.md)）。
+> **结论先行**：建模经验以**条目化、带权重、有字数上限**的经验库（[pipeline/MODELING-PLAYBOOK.md](../../references/MODELING-PLAYBOOK.md)）沉淀；制片主 Agent 只往候选区追加信号，策展子代理攒批增量合并；超限时按「失真由小到大」的六级阶梯压缩，**禁止整体重写**。协议正文在 [RSI.md 第十节](../../RSI.md)，规则唯一实现在 [check_playbook.py](../../scripts/check_playbook.py)，本文只存设计依据（台账：[RSI-003](../.agents/issue.md)）。
 
 ## 一、问题：为什么需要「有界」
 
-- **经验在蒸发**：被用户认可的建模方法（如 LoopRing「恒定视觉锚」、「以静写闷」）此前只能以散文偶然埋进 [skills/06](../../pipeline/skills/06-remotion-implementation.md) 母题表与 [skills/08](../../pipeline/skills/08-render-qa.md) 缺陷表，无结构化入口、无认可强度、无淘汰机制。
+- **经验在蒸发**：被用户认可的建模方法（如 LoopRing「恒定视觉锚」、「以静写闷」）此前只能以散文偶然埋进 [skills/06](../../references/06-remotion-implementation.md) 母题表与 [skills/08](../../references/08-render-qa.md) 缺陷表，无结构化入口、无认可强度、无淘汰机制。
 - **无界即膨胀**：经验逐集回流天然单调增长。skills/06 已约 6150 字（全仓最大），继续追加会把新经验埋进中段——长上下文的中段利用率显著下降 [13]、输入越长模型越退化 [12]。
 - **全仓无先例**：此前没有任何文档体量执法，本机制是第一个。
 
@@ -45,7 +45,7 @@
 
 | 决策点 | 候选 | 评选 | 理由 |
 |---|---|---|---|
-| 经验落点 | ① 追加进 skills/06 正文 ② 独立有界手册 ③ issue.md 台账复用 | **②** | ① 正是膨胀源；③ 混淆「机制缺陷」与「内容经验」的分流边界；② 与 [PRON-GLOSSARY](../../pipeline/PRON-GLOSSARY.md) 同构（跨集沉淀台账先例），且不能放 `pipeline/skills/`（速查表恰 9 行执法） |
+| 经验落点 | ① 追加进 skills/06 正文 ② 独立有界手册 ③ issue.md 台账复用 | **②** | ① 正是膨胀源；③ 混淆「机制缺陷」与「内容经验」的分流边界；② 与 [PRON-GLOSSARY](../../references/PRON-GLOSSARY.md) 同构（跨集沉淀台账先例），且不能放 `pipeline/skills/`（速查表恰 9 行执法） |
 | 候选暂存 | ① 手册内候选区 ② 分集 `$P/script/` ③ issue.md | **①**（用户确认） | 候选计入预算，预算压力天然逼迫及时策展；代价是 RSI 只读例外由一处扩为两处（均为仅追加） |
 | 字数上限 | 2000 / **3000** / 5000 | **3000**（用户确认） | 与 SKILL.md（约 2120）同量级，约容 30 条；5000 逼近 skills/06 体量，context rot 风险上升；2000 早期即频繁压缩 |
 | 水位 | 单阈值 / **滞回双阈值** | 滞回 | 单阈值会在每次追加时抖动；HIGH−TARGET = 450 字约容 4–5 条新条目 |

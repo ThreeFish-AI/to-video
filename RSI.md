@@ -8,7 +8,7 @@
 
 | 现象 | 归属 | 去处 |
 |---|---|---|
-| 断言与信源不符、黑帧、覆盖门 FAIL、字幕错位 | 视频内容问题 | 既有 QA 回路（[04](pipeline/skills/04-verification.md) 校验清零 / [08](pipeline/skills/08-render-qa.md) 修复回路），**不进 RSI** |
+| 断言与信源不符、黑帧、覆盖门 FAIL、字幕错位 | 视频内容问题 | 既有 QA 回路（[04](references/04-verification.md) 校验清零 / [08](references/08-render-qa.md) 修复回路），**不进 RSI** |
 | 脚本崩溃/误报/漏报、文档命令复制即跑失败、契约不清致代理误用、模板与执法测试矛盾、规格与实现漂移 | Skill 自身缺陷 | RSI |
 | 用户提出「这个流程/制度/方法可以更好」 | Skill 自身改进项 | RSI |
 | 用户对某个**建模方法**（概念 → 画面/母题/构图/动效强度）明确认可或否决、或主 Agent 自评认可，且可跨集复用 | 建模经验 | RSI 建模经验分支（第十节）：追加手册候选区，攒批策展 |
@@ -25,7 +25,7 @@
 
 ## 三、子代理协议（fresh context）
 
-主代理只做三件事：**登记台账 → 另起子代理 → 不顺手改**（制作过程中 `$T` 机制文件对主代理只读，例外仅两处**仅追加**的登记面：本台账、[建模手册](pipeline/MODELING-PLAYBOOK.md)「候选区」——机制热修与手册条目增删改都走子代理，不在制片上下文里顺手落笔）。
+主代理只做三件事：**登记台账 → 另起子代理 → 不顺手改**（制作过程中 `$T` 机制文件对主代理只读，例外仅两处**仅追加**的登记面：本台账、[建模手册](references/MODELING-PLAYBOOK.md)「候选区」——机制热修与手册条目增删改都走子代理，不在制片上下文里顺手落笔）。
 
 输入契约（主代理必须交给子代理）：
 
@@ -48,13 +48,13 @@
 | 门 | 名称 | 判据（全部满足才过） | 机器执法 |
 |---|---|---|---|
 | G1 | 问题属实 | 复现成立且命令 + 输出已留台账；排除环境特异（配置错 / 旧版本）；定性正确——内容问题误报退回 QA 回路 | 复现命令可重跑 |
-| G2 | 方案正确 | **方案比选**：充分且全面调研高标准候选——仓内先例 + 业界经典设计模式与最佳实践（必要时联网检索），列候选对比、评选最佳并论证；落在最小干预面（能改文档不改代码、能改一处不改两处）；不制造第二事实源（只加指针不复制正文）；触碰历史决策须引用原决策理由并论证推翻的成本收益 | [test_stages](pipeline/tests/test_stages.py) / [test_docs_paths](pipeline/tests/test_docs_paths.py) / test_config 全绿 |
+| G2 | 方案正确 | **方案比选**：充分且全面调研高标准候选——仓内先例 + 业界经典设计模式与最佳实践（必要时联网检索），列候选对比、评选最佳并论证；落在最小干预面（能改文档不改代码、能改一处不改两处）；不制造第二事实源（只加指针不复制正文）；触碰历史决策须引用原决策理由并论证推翻的成本收益 | [test_stages](tests/test_stages.py) / [test_docs_paths](tests/test_docs_paths.py) / test_config 全绿 |
 | G3 | 正向收益 | 收益可验证：缺陷类**必须新增回归测试**钉住失败形态；改进类给出可检验的收益声明（省多少步 / 拦住哪类事故 / 防什么复发） | pytest 全绿（命令见下） |
 | G4 | 无损历史 | 第九节清单逐项三档核对：未触碰（过）/ 触碰但有显式权衡与同步方案（过，PR 描述须点名）/ 破坏且无论证（**阻断**） | 清单各条目自带的执法测试 |
 
 ```bash
 # G2/G3 机器执法统一入口（命令 SSOT = pyproject.toml 顶部注释；依赖漂移在 pytest 收集阶段即大声报错）
-uv run --no-project --with pytest --with numpy --with pillow --with mutagen --with soundfile python -m pytest pipeline/tests -q
+uv run --no-project --with pytest --with numpy --with pillow --with mutagen --with soundfile python -m pytest tests -q
 ```
 
 ## 五、两种处理模式
@@ -89,26 +89,26 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 3. frozen Remotion skeleton：改 frozen 文件 = 改模板 + 全集同步 + `verify_skeleton.py` 字节级过；不得只改某一集的复制件。
 4. 运动层 `video/src/motion/` frozen 且不读 theme token。
 5. `timing.json` 时序 SSOT（TS/Python 双语共读），不得在任何一侧内联时序常数。
-6. 「复制不共享」边界：Python 实现只住 `$T/pipeline/scripts/`，工作区 / 分集 scripts 只许薄包装。
+6. 「复制不共享」边界：Python 实现只住 `$T/scripts/`，工作区 / 分集 scripts 只许薄包装。
 7. config SCHEMA 是默认值唯一来源，toml 只写偏离；机器属性永不进 toml。
-8. 九阶段 gates 与 [stages.toml](pipeline/stages.toml) 同源；不新增阶段状态机。
+8. 九阶段 gates 与 [stages.toml](references/stages.toml) 同源；不新增阶段状态机。
 9. `deliver` 刻意不串联 `render --final`、不入扇出白名单（完成行信号契约 + 破坏性命令显式执行）。
-10. 命令四变量锚定：`$T` 命令不混工作区字面量；变量定义只在 [pipeline/README.md](pipeline/README.md)（执法：`test_docs_paths.py`）。
+10. 命令四变量锚定：`$T` 命令不混工作区字面量；变量定义只在 [references/PIPELINE.md](references/PIPELINE.md)（执法：`test_docs_paths.py`）。
 11. SKILL.md 路由壳纪律：只给指针与不变量、速查表恰 9 行、不复制正文。
 12. 双锚点：skill 根自 `__file__` 找 SKILL.md、工作区根由哨兵搜索；静默猜根被禁止。
 13. 声音样本生物特征纪律：不入库只存指纹；RSI 材料与示例不得引导样本路径进仓。
 14. 许可与依赖纪律：pyproject 刻意无 `[project]`（依赖走 `--with`）；不引入未审计第三方依赖或新许可冲突。
-15. 建模手册有界：预算与条目规则唯一实现于 [check_playbook.py](pipeline/scripts/check_playbook.py)；超限只许按第十节压缩阶梯逐级压缩，禁整文件重写与「搬进规格正文腾预算」（执法：[test_modeling_playbook](pipeline/tests/test_modeling_playbook.py)）。
+15. 建模手册有界：预算与条目规则唯一实现于 [check_playbook.py](scripts/check_playbook.py)；超限只许按第十节压缩阶梯逐级压缩，禁整文件重写与「搬进规格正文腾预算」（执法：[test_modeling_playbook](tests/test_modeling_playbook.py)）。
 
 ## 十、建模经验分支（有界经验库的策展协议）
 
-作用对象是 [pipeline/MODELING-PLAYBOOK.md](pipeline/MODELING-PLAYBOOK.md)：沉淀「画什么、怎么隐喻」的策略层经验，与 skills/06「怎么动」的机制层正交。设计依据与证据见 [研究文档](docs/research/modeling-experience-distillation.md)。
+作用对象是 [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md)：沉淀「画什么、怎么隐喻」的策略层经验，与 references/06「怎么动」的机制层正交。设计依据与证据见 [研究文档](docs/research/modeling-experience-distillation.md)。
 
 **信号与角色**（Generator / Reflector / Curator 分权，防自评自改）：
 
 - **Generator = 制片主 Agent**：②⑤ 设计前读手册；分镜采用条目时标注〔M-xxx〕；收到显式信号当场往候选区追加一行 `- 〔±号来源〕<集目录名>#<镜号>：…`（`〔+用户〕` 认可 / `〔-用户〕` 否决 / `〔+主〕` 主 Agent 自评认可；主 Agent 不单独否决），不改条目。
 - **Reflector + Curator = 策展子代理**（fresh context）：默认在 ⑨ 交付后、候选区非空时启动一次（攒批），同一时刻至多一个策展 PR 在途；逐条给出处置 ADD / EDIT / VOTE±1 / MERGE / DISCARD，提交态候选区恒为空。删并既有条目 ≥3 条或触发压缩时，另起独立核验子代理（同第三节分级）。
-- **交接**（每条信号只计一次）：候选行是 `$T` 主检出的未提交追加，建自 HEAD 的 worktree 看不到——主代理须把候选行**原文**随输入契约交给策展子代理；PR 合入前这些行留在主检出作在途记录（PR 被丢弃则顺延进下一批）；合入后 pull `$T` 前撤掉已交出的行（期间无新追加即 `git -C $T checkout -- pipeline/MODELING-PLAYBOOK.md`；有则先摘出新行、同法还原、pull 后原样追加回）。否则 pull 被本地改动拦住，或同一 VOTE 在下一批重复计入。
+- **交接**（每条信号只计一次）：候选行是 `$T` 主检出的未提交追加，建自 HEAD 的 worktree 看不到——主代理须把候选行**原文**随输入契约交给策展子代理；PR 合入前这些行留在主检出作在途记录（PR 被丢弃则顺延进下一批）；合入后 pull `$T` 前撤掉已交出的行（期间无新追加即 `git -C $T checkout -- references/MODELING-PLAYBOOK.md`；有则先摘出新行、同法还原、pull 后原样追加回）。否则 pull 被本地改动拦住，或同一 VOTE 在下一批重复计入。
 - 信号强度：用户显式认可/否决为强信号；主 Agent 自评为弱信号，只能新增 w=1 的试行条目，不能单独推动晋升（存储的错误经验会被后续照抄放大）。
 
 **权重生命周期**：新条目 w=2（用户认可）或 w=1（仅主 Agent）；复用后被认可 +1、被否决或返工 −1；w≤0 必须移出。**晋升定式**须 w ≥ `PROMOTE_W`、证覆盖 ≥ `PROMOTE_EPISODES` 集（门执法），且含 ≥1 次用户信号（门不可见，由核验子代理对照条目去向表核对）。
@@ -124,6 +124,6 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 5. **冷退**：试行、w 最低、最久未更新且**非唯一覆盖**其概念类型者移出（保能力删除：先删被包含者，唯一覆盖者最后动）；
 6. **措辞精简**：只压「非/据/证」等附属字段，「当/故/验」语义不得丢。
 
-**禁令**：整文件或整节重写（ACE 实测整体重写致上下文坍缩、准确率跌破无适应基线）；为腾预算把条目搬进 skills/06 等规格正文（转移熵而非减熵）；删唯一覆盖或高 w 条目凑数。
+**禁令**：整文件或整节重写（ACE 实测整体重写致上下文坍缩、准确率跌破无适应基线）；为腾预算把条目搬进 references/06 等规格正文（转移熵而非减熵）；删唯一覆盖或高 w 条目凑数。
 
 **回潮信号**（递归纠偏）：被淘汰或归纳掉的条目，其同键候选再次出现 ⇒ 判为过度压缩，恢复原条目（w 重置为 2）并在 PR 点名——压缩阶梯本身也受经验反馈约束。
