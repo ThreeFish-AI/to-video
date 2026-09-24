@@ -45,6 +45,8 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P captions # → 
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → 归档 <根>/<系列id>/<标题> vN.mp4（根 = --root 或 env TO_VIDEO_DELIVER_ROOT）
 ```
 
+双语集：在 `pipeline.toml` 声明 `narration.langs = ["zh","en"]` 并撰写对齐译稿 `narration.en.md` 后，对 tts/render/captions/deliver 显式加 `--lang en` 即产出英文版（`build`/`check` 缺省覆盖全部声明语言；产物命名加 `.en` 后缀）。机制与规约见 [pipeline/README §五「双语渲染」](pipeline/README.md)。
+
 ## 九阶段速查
 
 单入口 `pipeline.py`（完整形态 `$T/pipeline/scripts/pipeline.py --project $P <cmd>`，下表只写子命令；工作区内等价 `$W/scripts/pipeline.py <cmd>`）。
@@ -74,6 +76,7 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver # → �
 - **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头是 `pipeline/templates/video-skeleton/`，由 `scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，各居任意目录互不牵连。
 - **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 机制文件只读（例外仅两处仅追加的登记面：台账、建模手册候选区），禁止顺手改。
+- **双语对齐**（双语集）：`narration.en.md` 与主稿句 id 1:1（build/check 执法）+ 基线锁防译稿静默失鲜；语言常数只在 `pipeline/scripts/langs.py`（tts.py 内联镜像由测试钉住）；tts/render/deliver 缺省只跑主语言、显式 `--lang` 才多版本（机制见 [pipeline/README §五「双语渲染」](pipeline/README.md)）。
 
 ## 双锚点与安装
 

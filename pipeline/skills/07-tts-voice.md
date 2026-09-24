@@ -18,6 +18,14 @@
    重掷循环例外：只在带 seed 的隔离 digest 上掷、定稿回存 canonical digest（§5.4 协议）。
 6. **音色签名护栏**：与上次合成不一致会被 `.engine` 标记硬拦（显式 `--allow-voice-switch` 才放行）——这正是防「README 旧命令静默重录整集」的机制。
 
+## 双语配音（en 版，双语集）
+
+- **生效配置**：`[tts.en]` 可覆写 `engine / ref / ref_sha1 / style / voice`，缺省**继承 `[tts]` 同一样本与风格**；IndexTTS 的 `lang` 由语言自动解析为 `EN`（zh 版仍 `ZH`，两版 digest 与 `.engine` 签名天然隔离）。`engine = "edge"` 时英文缺省音色 `en-US-AndrewNeural`（注册表 [langs.py](../scripts/langs.py)）。
+- **跨语种克隆必须先试听定档**（决策树第 3 闸的英文版，不可跳过）：`uv run --no-project --with mutagen $T/pipeline/scripts/tts_sample.py --ref <样本> --lang EN --text "<本集最难英文句>"` ——同一样本跨语种可能带口音、风格档 alpha 是在中文选段上标定的；未试听不得进长跑。
+- **en 版需 IndexTTS-2.5 服务**（`lang` 仅 2.5 的 infer 转发；服务版本见 `/health`）。
+- **命令**：`uv run --no-project $T/pipeline/scripts/pipeline.py --project $P tts --lang en`（缺省只跑 zh，显式 `--lang` 才跑英文——昂贵命令显式化）；产物落 `video/public/audio/en/`（独立 `.engine` 护栏与 manifest）；tts-store 按 digest 中英并存，互不覆盖。
+- **ETA 口径**：`--plan` 的 4.2 s/句与 tts_progress 的秒/字基线均为 zh 标定——en 侧只作量级参考，热节流判定对 en 跳过（首集英文实测后校准）。
+
 ## 两遍法（长片的既定工作法）
 
 草稿遍 `--style sunny`（快 ≈3.4×）拿真 manifest 校时间轴与分镜 → 定稿遍回到成片档（`sunny-steady`，beams=3）。**改稿只废改动句；换档全量重合成**（摘要含 style/ref/束宽，见 VOICE-CLONING §六）。B 遍必须在文稿字节冻结后启动。

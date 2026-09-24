@@ -42,6 +42,8 @@ uv run --no-project $T/pipeline/scripts/captions.py --project $P
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver
 ```
 
+**双语集（en 版）**：终渲 `pipeline.py --project $P render --final --lang en` → `out/final.en.mp4`；字幕 `captions --lang en` → `out/captions.en.{srt,vtt}`；归档 `deliver --lang en` → `<根>/<系列id>/<集标题> vN.en.mp4`（**版本号按语言独立**，与 zh 版互不抬号；标题暂仍取 series.json 的 zh 标题——英文标题字段属后续演进）。完成行按语言分打（`>> render 完成（en，…s）`），某语言失败不打该语言完成行。Studio 预览英文版需 `remotion studio --props='{"lang":"en"}'`。
+
 - [ ] `out/final.mp4`（1080p30，h264/aac192K；`remotion ffmpeg -i` 核流摘要）
 - [ ] `out/captions.srt` + `out/captions.vtt`
 - [ ] 封面帧（可从 `qa_frames.py` 挑一张标题卡帧，或 `remotion still` 单渲）
