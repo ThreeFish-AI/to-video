@@ -1,0 +1,27 @@
+%% source: docs/research/modeling-experience-distillation.md — §三 回路总览
+%% slug: modeling-experience--loop
+%% type: workflow
+%% derived: RSI.md 第十节「建模经验分支」；水位只写常量名，数值 SSOT = pipeline/scripts/check_playbook.py
+flowchart LR
+    subgraph G["制片上下文（Generator · 主 Agent）"]
+        R[②⑤ 读手册<br/>定式优先 · w 降序] --> U[分镜标注〔M-xxx〕<br/>⑦⑧ 实现与复检]
+        U --> S{用户/主 Agent<br/>显式认可或否决}
+        S -->|仅追加一行| C[手册候选区<br/>〔±用户〕〔+主〕]
+    end
+    subgraph K["策展子代理（Reflector + Curator · fresh context）"]
+        C -->|⑨ 交付后攒批| D[逐条处置<br/>ADD / EDIT / VOTE±1<br/>MERGE / DISCARD]
+        D --> W[权重生命周期<br/>w≤0 移出 · 晋升双门槛]
+        W --> Q{check_playbook<br/>字数水位}
+        Q -->|≥ HIGH| Z[六级压缩阶梯<br/>淘汰→合并→下沉→归纳→冷退→精简<br/>压至 ≤ TARGET]
+        Z --> Q
+    end
+    subgraph V["RSI 四道门（核验子代理）"]
+        Q -->|< HIGH| P[G1 信号属实 · G2 可迁移不重复<br/>G3 pytest 全绿 · G4 条目去向表]
+        P --> M[(MODELING-PLAYBOOK.md<br/>有界经验库)]
+    end
+    M -.下一集.-> R
+    Z -.回潮信号：同键候选复现 ⇒ 恢复原条目.-> D
+    style C fill:#5c3a1a,stroke:#FF9F45,color:#fff
+    style M fill:#1a3a5c,stroke:#4A9EFF,color:#fff
+    style Z fill:#5c1a2a,stroke:#FF5C5C,color:#fff
+    style P fill:#2d5c1a,stroke:#7ED321,color:#fff
