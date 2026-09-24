@@ -22,6 +22,13 @@ IndexTTS 整集合成是 2 小时量级的无人值守长跑，而本机（M4 ba
 - 基线 1.868 s/字：EP1 v3 B 遍（sunny-steady）187 句实测墙钟折算——同机同档
   的历史口径，非上游论文数字。
 
+## 双语口径（--lang）
+
+`--lang en` 读 narration.en.json 与 audio/en/，长度单位改**词**（正则内联，与
+langs.length 同构口径——监视器保持零同目录依赖，同 tts.py 的镜像纪律）。
+秒/词基线**未标定**（SEC_PER_CHAR_BASELINE 是 zh 实测）：en 只报进度与滚动
+速率、不判定热节流/越阈——点名跳过而非假判，首集英文长跑实测后再校准。
+
 用法：uv run --no-project $T/pipeline/scripts/tts_progress.py --project $P [--window 30]
 退出码恒 0（监视器不打断长跑；处置决策在人）。
 """
@@ -30,11 +37,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics as st
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+#: en 词计数：字母数字串，允许撇号/连字符内连（don't / state-of-the-art 各计 1 词；
+#: en/em dash 断词）。
+#: 与 pipeline/scripts/langs.py 的 _WORD_RE / length(en) 同构口径——内联而非 import，
+#: 监视器作为旁路工具保持零同目录依赖（同 tts.py 的 LANG_MIRROR 纪律）。
+_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’‐‑-][A-Za-z0-9]+)*")
 
 #: 同机同档（sunny-steady，EP1 v3 B 遍 187 句）的历史实测折算，监视判据的分母。
 #: ⚠️ 该基线取自**机器空闲**时的长跑。分母是「空闲态」这件事必须记住：
@@ -44,9 +56,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 SEC_PER_CHAR_BASELINE = 1.868
 #: 判据阈值（对基线的倍数）：>1.2× 提示；>1.5× 建议中止。
 #: 越阈时**先分因**：`sysctl -n vm.loadavg` 高 + `pmset -g therm` 无告警 ⇒ 竞争；
-#: 反之（负载低而仍慢）⇒ 才是热节流，按 INDEXTTS-2.5-ADVANCED §6.5 验证环境。
+#: 反之（负载低而仍慢）⇒ 才是热节流，按 INDEXTTS-2.5-ADVANCED.md §6.5 验证环境。
 PAUSE_RATIO = 1.2
 ABORT_RATIO = 1.5
+
+
+def text_length(text: str, lang: str) -> int:
+    """该语言口径的句长：zh 数字符（与 len(text) 一致）、en 数词。"""
+    return len(text) if lang == "zh" else len(_WORD_RE.findall(text))
 
 
 def main() -> None:
@@ -55,6 +72,13 @@ def main() -> None:
     )
     ap.add_argument("--project", default=".", help="视频工程根目录（含 video/）")
     ap.add_argument(
+        "--lang",
+        default="zh",
+        choices=["zh", "en"],
+        help="语言版本（默认 zh；en 读 narration.en.json 与 audio/en/，"
+        "秒/词基线未标定只报不判）",
+    )
+    ap.add_argument(
         "--window",
         type=int,
         default=30,
@@ -62,13 +86,21 @@ def main() -> None:
     )
     args = ap.parse_args()
 
+    lang = args.lang
+    # 后缀规则内联（与 langs.narration_json / langs.audio_dir 同构）：zh 路径不变
+    sfx = "" if lang == "zh" else f".{lang}"
+    unit = "字" if lang == "zh" else "词"
     root = Path(args.project).resolve()
-    audio = root / "video" / "public" / "audio"
-    narration = root / "script" / "narration.json"
+    audio_base = root / "video" / "public" / "audio"
+    audio = audio_base if lang == "zh" else audio_base / lang
+    narration = root / "script" / f"narration{sfx}.json"
     if not narration.is_file():
-        sys.exit(f"narration.json 不存在: {narration} —— 先运行 build_narration.py")
+        sys.exit(
+            f"narration{sfx}.json 不存在: {narration}"
+            f" —— 先运行 build_narration.py --lang {lang}"
+        )
     items = json.loads(narration.read_text(encoding="utf-8"))
-    chars = {i["id"]: len(i["text"]) for i in items}
+    chars = {i["id"]: text_length(i["text"], lang) for i in items}
 
     done = sorted(
         (p.stat().st_mtime, p.stem)
@@ -102,7 +134,6 @@ def main() -> None:
     spc = [w / max(1, c) for _, w, c in walls]
     win = spc[-args.window :] if args.window > 0 else spc
     roll = st.median(win)
-    ratio = roll / SEC_PER_CHAR_BASELINE
 
     print(
         f">> 进度 {len(done)}/{len(items)} 句 · 已跑 {elapsed / 60:.0f} 分钟"
@@ -112,36 +143,45 @@ def main() -> None:
         f"   每句墙钟（mtime 差口径）：均值 {st.mean(per_s):.1f}s · "
         f"滚动{len(win)}句中位 {st.median([w for _, w, _ in walls[-args.window :]]):.1f}s"
     )
-    print(
-        f"   秒/字：滚动{len(win)}句中位 {roll:.3f} vs 基线 {SEC_PER_CHAR_BASELINE}"
-        f"（EP1 v3 B 遍同机口径）= {ratio:.2f}×"
-    )
-    if ratio > ABORT_RATIO:
+    print(f"   秒/{unit}：滚动{len(win)}句中位 {roll:.3f}")
+    if lang != "zh":
+        # 基线是 zh（字符）口径的实测：en 用词口径对不上分母，任何「比值」都是
+        # 假判——点名跳过，首集英文长跑实测后再立基线（issue.md RSI-004）。
         print(
-            f"   ❌ {ratio:.1f}× > {ABORT_RATIO}×：慢得离谱。**先分因再处置**——"
-            f"`sysctl -n vm.loadavg` 与 `pmset -g therm` 各看一眼："
-        )
-        print(
-            "      · 负载高 + 无热告警 ⇒ 只是 CPU 竞争：产物无损，停掉别的活或就这么等，重排期即可"
-        )
-        print(
-            "      · 负载低 + 仍慢（或有热告警）⇒ 热节流坐实：中止，跑 tts_bench.py --check-only "
-            "验证环境，空闲时段再续（逐句缓存无损续跑）"
-        )
-    elif ratio > PAUSE_RATIO:
-        print(
-            f"   ⚠️  {ratio:.1f}× > {PAUSE_RATIO}×：比空闲基线慢。多半是同机争 CPU"
-            f"（渲染/编辑器/浏览器），先停掉能停的；仍 >{ABORT_RATIO}× 按上一条分因"
+            f"   ⚠️  en 秒/{unit}基线未标定：仅报进度与滚动速率，不判定热节流"
+            "（基线校准见 issue.md RSI-004 同类问题影响）"
         )
     else:
-        print("   ✅ OK：节奏与基线同量级（判据用量级不用秩相关，见 §6.5）")
-    # 剩余句粗估：滚动秒/字 × 剩余字数（量级参考，非承诺）
+        ratio = roll / SEC_PER_CHAR_BASELINE
+        print(
+            f"   vs 基线 {SEC_PER_CHAR_BASELINE}（EP1 v3 B 遍同机口径）= {ratio:.2f}×"
+        )
+        if ratio > ABORT_RATIO:
+            print(
+                f"   ❌ {ratio:.1f}× > {ABORT_RATIO}×：慢得离谱。**先分因再处置**——"
+                f"`sysctl -n vm.loadavg` 与 `pmset -g therm` 各看一眼："
+            )
+            print(
+                "      · 负载高 + 无热告警 ⇒ 只是 CPU 竞争：产物无损，停掉别的活或就这么等，重排期即可"
+            )
+            print(
+                "      · 负载低 + 仍慢（或有热告警）⇒ 热节流坐实：中止，跑 tts_bench.py --check-only "
+                "验证环境，空闲时段再续（逐句缓存无损续跑）"
+            )
+        elif ratio > PAUSE_RATIO:
+            print(
+                f"   ⚠️  {ratio:.1f}× > {PAUSE_RATIO}×：比空闲基线慢。多半是同机争 CPU"
+                f"（渲染/编辑器/浏览器），先停掉能停的；仍 >{ABORT_RATIO}× 按上一条分因"
+            )
+        else:
+            print("   ✅ OK：节奏与基线同量级（判据用量级不用秩相关，见 §6.5）")
+    # 剩余句粗估：滚动秒/单位 × 剩余长度（量级参考，非承诺）
     done_ids = {sid for _, sid in done}
     left_ids = [i["id"] for i in items if i["id"] not in done_ids]
     left_chars = sum(chars[i] for i in left_ids)
     if left_chars:
         print(
-            f"   剩余 {len(left_ids)} 句 / {left_chars} 字 · 按当前节奏约 "
+            f"   剩余 {len(left_ids)} 句 / {left_chars} {unit} · 按当前节奏约 "
             f"{left_chars * roll / 60:.0f} 分钟"
         )
 

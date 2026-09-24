@@ -106,13 +106,21 @@ def total_duration_in_frames(items: list[dict], c: dict) -> int:
 
 
 def blend(
-    items: list[dict], measured: dict[str, float], chars_per_sec: float
+    items: list[dict],
+    measured: dict[str, float],
+    chars_per_sec: float,
+    length_fn=len,
 ) -> list[dict]:
     """部分 manifest 混合时间轴：已合成句用实测时长，其余按语速外推。
 
     长跑中途的分幕复检（skills/08「TTS 长跑期间做，不要等成片」）只有部分句子
     合成完：`measured` 取部分 manifest（或逐句 mp3 实测）的 `{id: durationSec}`，
-    未合成句以 `len(text) / chars_per_sec` 外推——这是 skills/08 步骤 1 的机械化。
+    未合成句以 `length_fn(text) / chars_per_sec` 外推——这是 skills/08 步骤 1 的
+    机械化。
+
+    `length_fn` 是外推的长度口径：缺省 len（zh 数字符，既有黄金行为）；en 传
+    `langs.length(text, "en")` 的词数口径（外推语速按语言各配——qa_frames 侧
+    接线）。参数名 chars_per_sec 沿用历史，语义是「length_fn 单位每秒」。
 
     关键性质（test_timeline 黄金钉死）：**已实测前缀的 fromFrame 与全量 manifest
     完全一致**。compute() 是顺序游标推进，前缀各帧位只取决于前面的时长，后面
@@ -126,5 +134,5 @@ def blend(
         if (dur := measured.get(it["id"])) is not None:
             out.append({**it, "durationSec": dur})
         else:
-            out.append({**it, "durationSec": len(it["text"]) / chars_per_sec})
+            out.append({**it, "durationSec": length_fn(it["text"]) / chars_per_sec})
     return out

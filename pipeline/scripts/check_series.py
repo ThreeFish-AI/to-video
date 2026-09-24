@@ -84,6 +84,15 @@ def _cfg_list(section_key: str) -> tuple[str, ...]:
 ORDINAL_WORDS = re.compile(
     r"上一集|上集|上期|下一集|下集|第[一二三四五六七八九十]集|前一集|本系列"
 )
+#: en 译稿（narration.en.md）的顺序词。白名单：`next time` / `see you next time`
+#: 收尾语——与 zh「下期」同一先例（顺序无关的告别语，改序仍成立），故只收
+#: next episode 而不收裸 next；大小写不敏感（英文句首大写是常态）。词边界防子串
+#: 误命中；`this series of …`（「这一连串」）是惯用法而非系列指代，放行。RL 语境
+#: 的 next episode 同样命中——宁严勿漏，改写措辞（如 a new episode）。
+EN_ORDINAL_WORDS = re.compile(
+    r"\b(?:previous|next|last) episode\b|\bepisode \d+\b|\bthis series\b(?!\s+of\b)",
+    re.I,
+)
 SPOKEN_LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$", re.M)
 REL_LINK_RE = re.compile(r"\]\((\.{1,2}/[^)#?]+)\)")
 EP_NUM = re.compile(r"第([一二三四五六七八九十])集")
@@ -113,6 +122,9 @@ NEXT_CARD_SERIES_IDS = frozenset(_cfg_list("next_card_series_ids"))
 #: 仓库层履行，观众层匿名化（系列改造决策 2026-08-23）。
 AUDIENCE_GLOBS = (
     "episodes/*/script/narration.md",
+    # en 译稿同属观众可见层（ASCII 站点标识在英文稿更易顺手写出）；文件不存在
+    # 时 glob 自然跳过——未声明双语的集是常态，不是漏检
+    "episodes/*/script/narration.en.md",
     "episodes/*/script/storyboard.md",
     "episodes/*/video/src/scenes/*.tsx",
 )
@@ -186,7 +198,10 @@ def covered_files() -> list[Path]:
 
 
 def rule_spoken_interleave(series_list: list[dict], msgs: list[str]) -> None:
-    """规则 1：口播反串线（**跨系列全局**——见模块 docstring「多系列语义」）。"""
+    """规则 1：口播反串线（**跨系列全局**——见模块 docstring「多系列语义」）。
+
+    zh 主稿查他集标题 + 顺序词；en 译稿只查英文顺序词——他集标题互查对 en
+    暂不可执法（series.json 标题仅 zh，已知边界：英文标题上线时再扩）。"""
     eps = all_episodes(series_list)
     for ep in eps:
         others = [e["title"] for e in eps if e["slug"] != ep["slug"]]
@@ -205,6 +220,16 @@ def rule_spoken_interleave(series_list: list[dict], msgs: list[str]) -> None:
                 msgs.append(
                     f"FAIL 规则1：{ep['slug']} {sid} 口播出现顺序词「{w.group(0)}」"
                     "——序号只允许存在于视觉层与 series.json"
+                )
+        # en 译稿：文件缺失静默（未声明双语的集是常态）
+        en_md = WORKSPACE / ep["path"] / "script" / "narration.en.md"
+        if not en_md.is_file():
+            continue
+        for m in SPOKEN_LINE_RE.finditer(en_md.read_text(encoding="utf-8")):
+            if w := EN_ORDINAL_WORDS.search(m.group("text")):
+                msgs.append(
+                    f"FAIL 规则1：{ep['slug']} {m.group('id')} en 口播出现顺序词"
+                    f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
                 )
 
 

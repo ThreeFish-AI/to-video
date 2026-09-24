@@ -66,6 +66,14 @@
   [VOICE-CLONING.md §5.4](../VOICE-CLONING.md)）。
 - 发现的读错字请沉淀到 [PRON-GLOSSARY.md](../PRON-GLOSSARY.md) 供跨集复用。
 
+## 英文译稿（双语集，可选）
+
+- **激活**：`pipeline.toml` 声明 `narration.langs = ["zh", "en"]`（`narration.langs` 是语言激活的唯一来源；未声明的集与现状完全一致）。
+- **形态**：`script/narration.en.md` 与主稿**句 id 1:1 对齐**——同 id、同序、同幕归属（幕标题译写）；`build --lang en` 派生 `narration.en.json` 并写**基线锁** `narration.en.lock.json`（翻译时主稿句文本的 digest 快照，gettext msgid 同构——主稿事后改稿，`check --lang en` 会点名失配句，译稿不会静默失鲜）。重建取 gettext fuzzy 语义：主稿改了而译句没动的句**保持失配**直到复核——重译该句（build 自动刷新），或确认译文无需改动后 `build --lang en --accept <ids>`（`all` = 全部）。
+- **写作口径**：口语化英文短句；单句 ≤ 约 170 字符（两行字幕容量，`check_script --lang en` 执法）；**句内禁汉字与全角标点、必须含拉丁字母**（上游 `use_chinese()` 逐句嗅探，违者被路由进中文归一化）；英文方法名在英文版**直接口播**（无需角标降级）；数字写法保持自然（读法由上游英文归一化承担）；确需强制读音时 CMU 音素通道照常可用。
+- **预算**：英文窗口独立声明（`[narration.en] target_minutes`），不继承 zh 窗口——两种语言口播时长天然不同；估算口径 = 词数 ÷ `narration.words_per_min`（默认 150，首集实测后校准）。
+- **校验入口**：`uv run --no-project $T/pipeline/scripts/pipeline.py --project $P check --lang en`（对齐 / 基线锁 / 读法门 / 词数预算 / 字幕长度）；译文**保真**校验见 [skills/04](./04-verification.md)。
+
 ## 写作纪律
 
 1. **事实回溯**：每个论文断言必须能在 paper-notes 找到对应条目；论文外内容须口播标明「论文之外多说一句」。

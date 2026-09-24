@@ -11,6 +11,15 @@
   4. 读法陷阱：上游中文归一化实测会读错的写法（4 位年份带空格、三段版本号、
      数字区间连字符、±、10x、整句无汉字…）——见 READING_TRAPS，每条都附实测输出。
 
+**双语（--lang en，RSI-004）**：语言无关门（分镜覆盖/淡入/场景互比/动效互比）
+只在主稿执法——分镜与场景代码是 zh 主稿的派生物，en 按句 id 复用，重复执法
+只会双报同源错。en 门集见 check_translation：对齐（与主稿句 id 1:1）、基线锁
+（译稿失鲜）、文本形态（禁汉字 / 必含拉丁字母 / 禁全角标点——防上游
+use_chinese() 的整句嗅探把英文句路由进中文归一化）、字幕溢出；预算按词数 /
+words_per_min 对 narration.en.target_minutes 窗口（缺省点名跳过，不继承 zh）。
+--check-scenes --lang en 附未翻译画面文字报告（scenes/*.tsx 中未走 <L zh en> /
+t({zh, en}) 双语对的含汉字字面量，WARN-only）。
+
 可选 --check-scenes：从 video/src/scenes/*.tsx 提取 beatWindow/w('id','id')
 调用，与分镜表互比（WARN-only，TSX 正则本质近似）。
 
@@ -31,7 +40,7 @@ manifest 若在则含实测口径）+ 读法陷阱 + 发音标注合法性（bui
 （候选表见 pron_marks.POLYPHONE_CANDIDATES；与 --pre-tts 互斥——一个是门、
 一个是注意力清单，混跑会让退出码语义含混）。退出码恒 0。
 
-用法：uv run --no-project $T/pipeline/scripts/check_script.py --project $P
+用法：uv run --no-project $T/pipeline/scripts/check_script.py --project $P [--lang zh|en]
 退出码：0 = 通过；1 = 有 FAIL。WARN 不影响退出码但会列明。
 """
 
@@ -45,6 +54,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
+import langs  # noqa: E402
+from build_narration import read_lock, stale_ids  # noqa: E402
 from pron_marks import scan_candidates, validate  # noqa: E402
 from timeline import load_constants, total_duration_in_frames  # noqa: E402
 
@@ -152,8 +163,16 @@ def check_coverage(
         warn(msgs, f"分镜覆盖的幕 {beat_nums} 与 narration 的幕 {scene_nums} 不一致")
 
 
-def check_budget(root: Path, items: list[dict], cfg: dict, msgs: list[str]) -> None:
-    narr = cfg.get("narration", {})
+def check_budget(
+    root: Path, items: list[dict], cfg: dict, msgs: list[str], lang: str = langs.PRIMARY
+) -> None:
+    """时长预算门（估算 + 实测），窗口与语速单位经 config.for_lang 视图取。
+
+    zh：target_minutes 窗口 + chars_per_min 字数口径（行为与单语时代逐字节一致）。
+    en：窗口只认 narration.en.target_minutes——缺省点名 WARN 跳过、**不继承 zh
+    窗口**（英文稿的合理窗与中文不同，静默继承等于造出一个没人声明过的门）；
+    估算 = 词数 ÷ words_per_min；实测读 audio/en/manifest.json。"""
+    narr = config.for_lang(cfg, lang).get("narration", {})
     budget = narr.get("target_minutes")
     # 形状校验归 config.validate（FAIL 已在那里报过）；此处只管「能否作为预算窗使用」。
     # 缺失与形状非法同路处理：解包前崩溃会让 FAIL 清单一条也打不出来。
@@ -165,25 +184,45 @@ def check_budget(root: Path, items: list[dict], cfg: dict, msgs: list[str]) -> N
     if not usable:
         # 此前缺失时静默退化为 [0, 999]——一个「你以为开着其实关着的门」。
         # 点名 WARN 是本次改动的要点：门被跳过必须说出来。
-        warn(
-            msgs,
-            f"narration.target_minutes 缺失或形状非法（{budget!r}）："
-            "**跳过时长预算门**（无 pipeline.toml？）",
-        )
+        if lang != langs.PRIMARY and budget is None:
+            warn(
+                msgs,
+                "narration.en.target_minutes 未声明：**跳过 en 时长预算门**"
+                "（英文窗口独立声明，不继承 zh 窗口）",
+            )
+        else:
+            key = (
+                "narration.target_minutes"
+                if lang == langs.PRIMARY
+                else f"narration.{lang}.target_minutes"
+            )
+            warn(
+                msgs,
+                f"{key} 缺失或形状非法（{budget!r}）："
+                "**跳过时长预算门**（无 pipeline.toml？）",
+            )
         lo, hi = 0, 999
     else:
         lo, hi = budget
     # 默认值取自 config.SCHEMA：本函数在 `required=False` 且缺 pipeline.toml 时
-    # 拿到的 cfg 是 `{}`（load 不走 resolve），内联一份 280 就是第二事实源。
-    cpm = narr.get("chars_per_min", config.default("narration.chars_per_min"))
-    chars = sum(len(i["text"]) for i in items)
-    est_min = chars / cpm
-    print(
-        f"  估算口径：{chars} 字 ÷ {cpm} 字/分 = {est_min:.1f} 分钟（目标 {lo}–{hi}）"
-    )
+    # 拿到的 cfg 是 `{}`（load 不走 resolve），内联一份就是第二事实源。
+    if lang == langs.PRIMARY:
+        cpm = narr.get("chars_per_min", config.default("narration.chars_per_min"))
+        chars = sum(len(i["text"]) for i in items)
+        est_min = chars / cpm
+        print(
+            f"  估算口径：{chars} 字 ÷ {cpm} 字/分 = {est_min:.1f} 分钟（目标 {lo}–{hi}）"
+        )
+    else:
+        wpm = narr.get("words_per_min", config.default("narration.words_per_min"))
+        words = sum(langs.length(i["text"], lang) for i in items)
+        est_min = words / wpm
+        print(
+            f"  估算口径：{words} 词 ÷ {wpm} 词/分 = {est_min:.1f} 分钟（目标 {lo}–{hi}）"
+        )
     if not lo <= est_min <= hi:
         fail(msgs, f"估算时长 {est_min:.1f} 分超预算 [{lo}, {hi}]")
-    manifest = root / "video" / "public" / "audio" / "manifest.json"
+    manifest = langs.manifest(root, lang)
     if manifest.is_file():
         c = load_constants(root)
         m_items = json.loads(manifest.read_text(encoding="utf-8"))
@@ -280,6 +319,168 @@ def check_reading_traps(items: list[dict], msgs: list[str]) -> None:
                 "数字会读成英文（`2.5`→`two point five`）——请并入相邻句或补中文",
             )
     print(f"  读法陷阱：{len(items)} 句扫描，命中 {hits} 处")
+
+
+# ---------------- en 译稿门集（--lang en）----------------
+
+#: en 译稿禁用的全角标点（逐字符判定）。只列英文确无用途的 CJK 全角形；
+#: `—`（em dash）与 `…`（ellipsis）是标准英文排版字符，**刻意不禁**——zh 的
+#: `——`/`……` 映射只作用于 ZH（tts_text 对非 ZH 原样透传），无混入路径；
+#: 若上游实测发现新读法风险再按「先探针后成门」补录。
+EN_FULLWIDTH = "（）。？！，、：；"
+
+#: en 字幕单句字符上限。推导锚 Subtitle.tsx 两行 30px 几何：安全区行宽约
+#: 1528px ÷ 平均字符宽约 15.6px ≈ 98 字符/行，两行 ≈ 196；留 fitText 收缩与
+#: textWrap 平衡排版的余量取 170（实施后用 fitText 实测复核标定）。
+EN_SUBTITLE_MAX_CHARS = 170
+
+LATIN_RE = re.compile(r"[A-Za-z]")
+#: 引号内夹汉字的字符串字面量（近似正则：一行内引号对之间含汉字即命中）
+HAN_LITERAL_RE = re.compile(r"['\"][^'\"]*[一-鿿][^'\"]*['\"]")
+#: 已走 i18n 通道的片段（扫描前剥除，其余字面量照常判定）：带 en 属性的 <L …>
+#: 标签（`<L zh=… />` 缺 en 会回落中文，不剥）；同行含 en 键时 `zh: '…'` 的值
+#: （`t({zh: '…', en: '…'})` 字面对）。`<Label`/`<Loop` 等不以 `<L\s` 开头，不剥。
+I18N_TAG_RE = re.compile(r"<L\s(?=[^>]*\ben\s*=)[^>]*>")
+I18N_ZH_VALUE_RE = re.compile(r"""\bzh\s*:\s*(['"`])(?:\\.|(?!\1).)*\1""")
+I18N_EN_KEY_RE = re.compile(r"\ben\s*:")
+
+
+def strip_translated(line: str) -> str:
+    """→ 剥除已翻译片段后的行（report_untranslated_scene_text 的判定面）。"""
+    line = I18N_TAG_RE.sub("", line)
+    return I18N_ZH_VALUE_RE.sub("", line) if I18N_EN_KEY_RE.search(line) else line
+
+
+def check_translation(
+    root: Path, lang: str, items: list[dict], msgs: list[str]
+) -> None:
+    """en 译稿门集：对齐 / 基线锁 / 文本形态 / 字幕溢出（zh 主稿为基准 SSOT）。
+
+    文本形态三门的共同病因是上游 use_chinese() 的整句嗅探：含汉字或纯数字/符号
+    的「英文句」都会被路由进中文归一化（数字读中文、标点映射错乱）。"""
+    zh_json = langs.narration_json(root, langs.PRIMARY)
+    if not zh_json.is_file():
+        fail(
+            msgs,
+            f"主稿 {zh_json.name} 不存在——译稿门以主稿为对齐基准，先 build 主稿（zh）",
+        )
+    else:
+        zh_items = json.loads(zh_json.read_text(encoding="utf-8"))
+        # 对齐门：句 id 序列与幕归属逐一相等（beatWindow 按句 id 取窗的前提）
+        zh_ids = [i["id"] for i in zh_items]
+        en_ids = [i["id"] for i in items]
+        if en_ids != zh_ids:
+            zh_set, en_set = set(zh_ids), set(en_ids)
+            if missing := [x for x in zh_ids if x not in en_set]:
+                fail(msgs, f"译稿缺句（主稿有而译稿无）: {' '.join(missing)}")
+            if extra := [x for x in en_ids if x not in zh_set]:
+                fail(msgs, f"译稿多句（译稿有而主稿无）: {' '.join(extra)}")
+            if set(en_ids) == zh_set:  # 集合相等而序列不同 → 纯乱序
+                for k, (z, e) in enumerate(zip(zh_ids, en_ids)):
+                    if z != e:
+                        fail(
+                            msgs,
+                            f"译稿句序不一致：第 {k + 1} 句主稿为 {z}，译稿为 {e}",
+                        )
+                        break
+        zh_scene = {i["id"]: i["scene"] for i in zh_items}
+        if wrong := [
+            i["id"]
+            for i in items
+            if i["id"] in zh_scene and i["scene"] != zh_scene[i["id"]]
+        ]:
+            fail(msgs, f"译稿句幕归属与主稿不一致: {' '.join(wrong)}")
+        # 基线锁门：锁 = 翻译时主稿句 digest 快照，主稿改稿 ⇒ 失鲜可测
+        lock_path = langs.lock(root, lang)
+        if not lock_path.is_file():
+            warn(
+                msgs,
+                f"未锁定翻译基线（缺 {lock_path.name}）——先 build --lang en 生成锁",
+            )
+        else:
+            try:
+                stale = stale_ids(read_lock(lock_path), zh_items)
+            except ValueError as e:
+                fail(
+                    msgs,
+                    f"基线锁损坏：{e}——复核译稿后 build --lang {lang} --accept all 重建",
+                )
+            else:
+                if stale:
+                    fail(
+                        msgs,
+                        f"基线锁失配：主稿句 {' '.join(stale)} 在锁定后被改动——"
+                        f"重译这些句后重跑 build --lang {lang} 刷新锁（译文确实无需"
+                        f"改动时加 --accept {','.join(stale)}）",
+                    )
+    # 文本形态 + 字幕溢出（不依赖主稿，逐句自判）
+    n_han = n_latin = n_fw = n_over = 0
+    for it in items:
+        text = it["text"]
+        if m := HAN_RE.search(text):
+            n_han += 1
+            fail(
+                msgs,
+                f"句 {it['id']} 含汉字 {m.group(0)!r}："
+                "en 译稿不得残留中文——上游 use_chinese() 会把该句路由中文归一化",
+            )
+        if not LATIN_RE.search(text):
+            n_latin += 1
+            fail(
+                msgs,
+                f"句 {it['id']} 无拉丁字母（{text!r}）：纯数字/符号句同样被路由"
+                "中文归一化——改写为含字母的英文句",
+            )
+        if hits := "".join(sorted({ch for ch in EN_FULLWIDTH if ch in text})):
+            n_fw += 1
+            fail(
+                msgs,
+                f"句 {it['id']} 含全角标点 {hits!r}：英文版用半角标点"
+                "（兼防 tts_text 的全角映射混入英文）",
+            )
+        if len(text) > EN_SUBTITLE_MAX_CHARS:
+            n_over += 1
+            fail(
+                msgs,
+                f"句 {it['id']} 长 {len(text)} 超过 en 字幕两行容量 "
+                f"{EN_SUBTITLE_MAX_CHARS}——拆句或精简",
+            )
+    print(
+        f"  译稿文本门：{len(items)} 句扫描（汉字 {n_han} · 无拉丁 {n_latin} · "
+        f"全角 {n_fw} · 超长 {n_over}）"
+    )
+
+
+def report_untranslated_scene_text(root: Path, msgs: list[str]) -> None:
+    """en 版未翻译画面文字报告（WARN-only）：scenes/*.tsx 中未走 i18n 通道的
+    含汉字字符串字面量——英文版渲染时这些字会原样显示中文。
+
+    近似扫描（TSX 正则本质近似，同 check_scenes 的既定口径），只提醒不拦：
+    逐行判定，先剥除已翻译片段（见 strip_translated）再找含汉字字面量；跨行
+    书写的双语对按行各自判定。"""
+    scenes_dir = root / "video" / "src" / "scenes"
+    if not scenes_dir.is_dir():
+        return
+    hits = 0
+    for tsx in sorted(scenes_dir.glob("*.tsx")):
+        for lineno, line in enumerate(tsx.read_text(encoding="utf-8").splitlines(), 1):
+            if HAN_LITERAL_RE.search(strip_translated(line)):
+                hits += 1
+                warn(
+                    msgs,
+                    f"{tsx.name}:{lineno} 含汉字字符串字面量——英文版画面将显示中文"
+                    "（改用 <L zh=… en=…> / t({zh, en})）",
+                )
+    print(f"  画面 i18n 扫描：{hits} 处未翻译汉字字面量（WARN-only）")
+
+
+def check_pron_marks(items: list[dict], msgs: list[str]) -> None:
+    """发音标注合法性收口（build 生成期已拦，此处对 narration.json 再收口一遍；
+    pron_marks.validate 的 CMU 通道对 en 标注天然可用，两语言复用同一循环）。"""
+    for it in items:
+        errs, _warns = validate(it.get("ttsText") or it["text"])
+        if errs:
+            fail(msgs, f"句 {it['id']} 发音标注非法：{errs[0]}")
 
 
 def check_fade_invariant(root: Path, msgs: list[str]) -> None:
@@ -390,9 +591,14 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="④⑤ 内容门：覆盖性/预算/淡入不变式")
     ap.add_argument("--project", default=".", help="视频工程根目录")
     ap.add_argument(
+        "--lang",
+        default=langs.PRIMARY,
+        help="受检语言：zh 主稿（缺省）| en 译稿（门集见 check_translation）",
+    )
+    ap.add_argument(
         "--check-scenes",
         action="store_true",
-        help="附:分镜↔场景代码 beat 互比（WARN-only）",
+        help="附:分镜↔场景代码 beat 互比（WARN-only）；--lang en 时改为未翻译画面文字报告",
     )
     ap.add_argument(
         "--check-motion",
@@ -416,6 +622,10 @@ def main() -> None:
     args = ap.parse_args()
     if args.pre_tts and args.pron_candidates:
         ap.error("--pre-tts 是门、--pron-candidates 是报告，两者互斥")
+    try:
+        lang = langs.validate(args.lang)
+    except ValueError as e:
+        ap.error(str(e))
 
     root = Path(args.project).resolve()
     # required=False：内容门在没有 pipeline.toml 时仍应能跑（如新集脚手架期）。
@@ -424,7 +634,7 @@ def main() -> None:
     cfg, _origin, cfg_fails, cfg_warns = config.load(
         root, required=False, scope={"narration"}
     )
-    items = json.loads((root / "script" / "narration.json").read_text(encoding="utf-8"))
+    items = json.loads(langs.narration_json(root, lang).read_text(encoding="utf-8"))
 
     if args.pron_candidates:
         hits = scan_candidates(items)
@@ -435,7 +645,8 @@ def main() -> None:
         return
 
     board = root / "script" / "storyboard.md"
-    if not args.pre_tts and not board.is_file():
+    # storyboard 只在主稿完整门被消费；en 门集与 --pre-tts 均不要求分镜存在
+    if not args.pre_tts and lang == langs.PRIMARY and not board.is_file():
         sys.exit(f"storyboard.md 不存在: {board}")
 
     msgs: list[str] = []
@@ -450,12 +661,22 @@ def main() -> None:
         print(
             f">> pre-TTS 前置门 · {root.name} · {len(items)} 句（分镜未写，跳过覆盖性/淡入/场景互比）"
         )
-        check_budget(root, items, cfg, msgs)
-        check_reading_traps(items, msgs)
-        for it in items:
-            errs, _warns = validate(it.get("ttsText") or it["text"])
-            if errs:
-                fail(msgs, f"句 {it['id']} 发音标注非法：{errs[0]}")
+        if lang != langs.PRIMARY:
+            check_translation(root, lang, items, msgs)
+        check_budget(root, items, cfg, msgs, lang)
+        if lang == langs.PRIMARY:
+            check_reading_traps(items, msgs)
+        check_pron_marks(items, msgs)
+    elif lang != langs.PRIMARY:
+        # en 完整门：语言无关门（覆盖/淡入/场景互比/动效互比）只在主稿执法——
+        # 分镜与场景代码是 zh 主稿的派生物，en 按句 id 复用，重复执法只会双报
+        # 同源错。跳过必须说出来，不能静默。
+        print("  语言无关门（覆盖性/淡入/场景互比/动效互比）在主稿执法——en 模式跳过")
+        check_translation(root, lang, items, msgs)
+        check_budget(root, items, cfg, msgs, lang)
+        check_pron_marks(items, msgs)
+        if args.check_scenes:
+            report_untranslated_scene_text(root, msgs)
     else:
         beats = parse_storyboard(board)
         if not beats:
@@ -476,8 +697,11 @@ def main() -> None:
             json.dumps({"fails": fails, "warns": warns}, ensure_ascii=False, indent=1)
         )
     else:
-        n_beats = "—" if args.pre_tts else len(beats)
-        print(f">> 内容门 · {root.name} · {len(items)} 句 / {n_beats} 镜")
+        if lang != langs.PRIMARY:
+            print(f">> 内容门 · {root.name} · {len(items)} 句 · lang=en")
+        else:
+            n_beats = "—" if args.pre_tts else len(beats)
+            print(f">> 内容门 · {root.name} · {len(items)} 句 / {n_beats} 镜")
         for m in msgs:
             print(f"  {m}")
         print(f">> FAIL {len(fails)} · WARN {len(warns)}")

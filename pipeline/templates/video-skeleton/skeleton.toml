@@ -65,6 +65,9 @@ frozen = [
   "video/src/index.ts",
   "video/src/types.ts",
   "video/src/timing.ts",
+  # 语言 context 与 audioDir 同构契约（与 pipeline/scripts/langs.py 镜像、
+  # test_skeleton 执法），同 Subtitle 性质的机械 chrome——跨集一致即产品意图
+  "video/src/i18n.tsx",
   "video/src/Root.tsx",
   "video/src/components/NarrationAudio.tsx",
   "video/src/components/Subtitle.tsx",
@@ -107,6 +110,43 @@ seeded = [
   "pipeline.toml",
   "README.md",
 ]
+
+# ── 骨架分代（generation）──────────────────────────────────────────────────
+# 「一次模板升级 = 一代」。分代文件是**原子组**：半同步集（只换部分文件）tsc 必红
+# ——例如只拷新 Main 不拷 i18n.tsx，import 当场断，skeleton.toml 顶部注释点过名的
+# 正是这种形态。故豁免只对「整组停在旧代」放行（verify_skeleton：旧代集 I1/I2 免报
+# 并打 INFO、组内新旧混杂报 GENERATION-MIXED 计入未登记）。
+# episodes 是**显式花名册**而非全局指纹：新集与 cp -r 复制集不继承豁免（防「从旧
+# 代集复制」把豁免带进新集）；某集整组同步到当代后从花名册删除——豁免随 roster
+# 退役，不成长期免检清单（同 [[drift]]「逃逸口用完即收」纪律）。
+# legacy 指纹口径与档位一致（frozen 字节 md5、regioned 取归一化后 md5）；「缺失」=
+# 该文件在上一代尚不存在（合法旧态，同 [[drift]] 的退役哨兵）。
+[[generation]]
+id = "bilingual-i18n"
+reason = "双语渲染分代（2026-09-24，RSI-004）：Root/NarrationAudio/Subtitle/ChapterProgress/Main 加 lang 维度、新增 i18n.tsx；zh 渲染逐像素不变。撤销条件=花名册内各集下次重渲时按整组同步（五文件 + i18n.tsx 拷齐再 tsc），同步后从 roster 删除该集。"
+episodes = [
+  "agent-skills-video",
+  "claude-code-concurrency-video",
+  "claude-code-explained-video",
+  "claude-code-memory-video",
+  "claude-code-multiagent-video",
+  "claude-code-planning-video",
+  "context-layer-video",
+  "dream-rsi-video",
+  "experience-era-agents-video",
+  "horizon-context-video",
+  "openviking-video",
+  "self-evolving-coding-agents-video",
+  "self-improving-agents-video",
+]
+
+[generation.legacy]
+"video/src/Root.tsx" = "6554f6af763d"
+"video/src/components/NarrationAudio.tsx" = "ebe05df884cf"
+"video/src/components/Subtitle.tsx" = "7faa361ae76f"
+"video/src/components/ChapterProgress.tsx" = "ca3d397fe1da"
+"video/src/Main.tsx" = "4cb4e9be10a7" # regioned 归一化口径
+"video/src/i18n.tsx" = "缺失"
 
 # ── 已登记的合法偏离 ──────────────────────────────────────────────────────
 # 逃逸口必须存在，但必须**被记录**（同 `# noqa` / `eslint-disable` / Copier
@@ -151,163 +191,176 @@ reason = "A 轨 @remotion/three 无头渲染强制要求 Chromium OpenGL 后端 
 episode = "experience-era-agents-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "self-improving-agents-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "self-evolving-coding-agents-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-explained-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-planning-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-memory-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-concurrency-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-multiagent-video"
 path = "video/src/components/Subtitle.tsx"
 fingerprint = "61df1a5e08e2"
-reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Subtitle"
+reason = "字幕风格分代（2026-09-14）：模板已升级为渲染层剥除句尾「。」；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 # 顶部进度条分代（2026-09-22）：模板 Main.tsx 归一化指纹 179be60ed605 为分代前
 # 模板值（10 个既有集此前已收敛对齐、零历史登记——9 已发布 + context-layer-video
 # 待审），与上方 Subtitle 分代同构；新 frozen 的 ChapterProgress.tsx 既有集尚无此
 # 文件（旧脚手架期产物，Main 未挂载不影响渲染），按 cards.tsx 先例钉「缺失」哨兵。
-# 两批撤销条件同一：本集下次重渲时同步模板 Main + ChapterProgress.tsx 并重跑 build
-# 派生 chapters.json（只同步 Main 会因组件 import 缺失而 tsc 红），同步后本批整体撤销。
+# 本批与 Subtitle 批的撤销指引已并入 bilingual-i18n 分代（2026-09-24）：单独同步
+# Main/ChapterProgress/Subtitle 任一文件都会因 i18n.tsx import 断链而 tsc 红，
+# 须按上方 [[generation]] 整组同步后一并撤销。
 [[drift]]
 episode = "experience-era-agents-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "self-improving-agents-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "self-evolving-coding-agents-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "horizon-context-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-explained-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-planning-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-memory-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-concurrency-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-multiagent-video"
 path = "video/src/Main.tsx"
 fingerprint = "179be60ed605"
-reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=本集下次重渲时同步模板新 Main 与 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：模板 Main.tsx 新增 ChapterProgress 挂载；本集为已发布成片，源码保持发布态。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "experience-era-agents-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "self-improving-agents-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "self-evolving-coding-agents-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "horizon-context-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-explained-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-planning-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-memory-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-concurrency-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 [[drift]]
 episode = "claude-code-multiagent-video"
 path = "video/src/components/ChapterProgress.tsx"
 fingerprint = "缺失"
-reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=本集下次重渲时从模板复制 ChapterProgress.tsx，并重跑 build 派生 chapters.json"
+reason = "顶部进度条分代（2026-09-22）：新 frozen 文件本集尚无（旧脚手架期产物）；Main 未挂载故不影响既有渲染。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
+
+[[drift]]
+episode = "dream-rsi-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "4e79c14a211a"
+reason = "停在 2026-09-22 分代之前的更早版本（该集晚于此文件冻结清单建立、早于 09-22 模板收敛，09-22 批次登记了「缺失」集却漏了这两个「有而更旧」的集）。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
+
+[[drift]]
+episode = "context-layer-video"
+path = "video/src/components/ChapterProgress.tsx"
+fingerprint = "4e79c14a211a"
+reason = "停在 2026-09-22 分代之前的更早版本（同 dream-rsi 条目成因；双语分代使其从「被模板锚遮蔽」转为显形，此处补齐 09-22 批次遗漏的登记）。撤销条件=按 skeleton.toml [[generation]] bilingual-i18n 整组同步（Main + ChapterProgress + Subtitle + Root + NarrationAudio + i18n.tsx，拷齐再 tsc --noEmit），并重跑 build 派生 chapters.json；同步后从 generation roster 删除本集并撤销本条"
 
 # 已撤销（2026-08）：`Main.tsx` 的两条登记。建门时那两集的 SceneFade 块落后于模板
 # 一处注释扩写与换行调整，当时刻意只登记不收敛（收敛要动两个**已发布**集，属独立

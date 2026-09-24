@@ -757,3 +757,63 @@ def test_rules_7_8_inactive_without_workspace_config(tmp_path):
     _write_p6(ws, COURSE_S, "// {'下期 · 规划层'} {'旧标题占位'}")
     rc, out = run_check(ws)
     assert rc == 0 and "规则7" not in out and "规则8" not in out
+
+
+# ── en 译稿：规则 1 英文顺序词 + 规则 7 受检面（RSI-004）──────────────────────
+
+
+def test_rule1_en_ordinal_word_fails(tmp_path):
+    """en 译稿口播出现英文顺序词（previous episode 等）——序号只允许存在于
+    视觉层与 series.json，en 侧同理执法。"""
+    ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
+    (ep_root(ws, EP1) / "script/narration.en.md").write_text(
+        "## P0\n\n- [p0-01] In the previous episode we covered the loop.\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 1 and "规则1" in out and "previous episode" in out
+
+
+def test_rule1_en_next_time_closing_passes(tmp_path):
+    """白名单：`see you next time` 收尾语放行——顺序无关的告别语（与 zh「下期」
+    同一先例），正则只收 next episode 而不收裸 next。"""
+    ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
+    (ep_root(ws, EP1) / "script/narration.en.md").write_text(
+        "## P0\n\n- [p0-01] That is the whole picture. See you next time!\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 0, out
+
+
+def test_rule1_en_ordinal_word_boundaries(tmp_path):
+    """词边界 + 惯用法：`this series of …`（「这一连串」）放行；zh「上一集」最常见
+    的英文说法 last episode 命中。"""
+    ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
+    en_md = ep_root(ws, EP1) / "script/narration.en.md"
+    en_md.write_text(
+        "## P0\n\n- [p0-01] This series of commands builds the index.\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 0, out
+    en_md.write_text(
+        "## P0\n\n- [p0-01] In the last episode we built the index.\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 1 and "规则1" in out and "last episode" in out
+
+
+def test_rule7_en_narration_in_audience_globs(tmp_path):
+    """AUDIENCE_GLOBS 增 narration.en.md：英文稿里的站点标识同样进门（ASCII
+    章号在英文稿更易顺手写出）；他集标题互查对 en 跳过（标题仅 zh，已知边界）。"""
+    ws = build_workspace(
+        tmp_path, [S("claude-code-explained", COURSE_S)], {}, toml=COURSE_TOML
+    )
+    (ep_root(ws, COURSE_S) / "script/narration.en.md").write_text(
+        "## P0\n\n- [p0-01] See the course site for details (s01).\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 1 and "规则7" in out and "s01" in out and "narration.en.md" in out

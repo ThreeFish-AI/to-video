@@ -762,3 +762,304 @@ def test_chapter_progress_mount_is_load_bearing():
 
     text = (TEMPLATE / "video/src/Main.tsx").read_text(encoding="utf-8")
     assert "ChapterProgress" in vs.normalize_main(text)
+
+
+# ── 骨架分代（generation）：旧代原子组豁免的表合法性 + 正控 ─────────────────
+#
+# 「一次模板升级 = 一代」：分代文件是原子组（半同步 tsc 必红），故豁免只对
+# 「整组停在旧代」放行。与 [[drift]] 的分工：drift 钉该集**特有**偏离（一集
+# 一文件一指纹），generation 钉**模板升级遗留**的整组旧态（一组文件一组指纹，
+# 按显式花名册退役）。正控沿双锚点沙箱形态（mirror_skill + flat_ws），注入的
+# 分代登记落在镜像 skeleton.toml 上——真实 legacy 指纹指向真实旧代文件，镜像
+# 里无从复现，故正控自登记「镜像当代」为旧代再升模板，复现整组旧态。
+
+#: bilingual-i18n 分代组的文件面（含档位），正控与表合法性测试共用。
+GEN_GROUP: tuple[tuple[str, str], ...] = (
+    ("video/src/Root.tsx", "frozen"),
+    ("video/src/components/NarrationAudio.tsx", "frozen"),
+    ("video/src/components/Subtitle.tsx", "frozen"),
+    ("video/src/components/ChapterProgress.tsx", "frozen"),
+    ("video/src/Main.tsx", "regioned"),
+    ("video/src/i18n.tsx", "frozen"),
+)
+
+
+def test_generation_registry_is_well_formed():
+    """分代表条目合法性：legacy 指纹 12 位 hex 或「缺失」；≠ 当前模板指纹
+    （登记成当代值 = 永真豁免，门对该文件失明——同 drift 不钉指纹的教训）；
+    声明的文件都在受门档位里（不在档内的文件无从按档位口径比对指纹）。
+    Main 的 regioned 归一化口径无法在测试内对旧内容复现，由「≠ 当前模板指纹」
+    与真树正控（各集停在登记旧代时门全绿）共同担保。"""
+    import verify_skeleton as vs
+
+    skel = skeleton()
+    gens = skel.get("generation", [])
+    assert gens, "模板缺 [[generation]]（分代机制的登记前提）"
+    gated_of = {
+        rel: cls for cls in GATED_CLASSES for rel in skel["classes"].get(cls, [])
+    }
+    for g in gens:
+        assert g["id"].strip() and g.get("reason", "").strip(), (
+            f"generation {g.get('id')!r} 缺 id/reason —— 分代必须被记录"
+        )
+        assert g.get("episodes"), f"generation {g['id']} 花名册为空"
+        legacy = g.get("legacy", {})
+        assert legacy, f"generation {g['id']} 缺 legacy 指纹表"
+        for rel, fp in legacy.items():
+            assert rel in gated_of, (
+                f"generation {g['id']} 声明了不受门的文件：{rel}"
+                "（分代豁免按档位口径比对指纹）"
+            )
+            assert fp == "缺失" or re.fullmatch(r"[0-9a-f]{12}", fp), (
+                f"generation {g['id']} 的 {rel} 指纹非法：{fp!r}"
+                "（应 12 位 hex 或「缺失」哨兵）"
+            )
+            tmpl_fp = vs.fingerprint(vs.template_source(rel), rel, gated_of[rel])
+            assert fp != tmpl_fp, (
+                f"generation {g['id']} 的 {rel} legacy 指纹 == 当前模板 —— "
+                "登记成当代值会把该文件永久豁免"
+            )
+
+
+@needs_real_tree
+def test_generation_roster_references_real_episodes():
+    """花名册不能指向不存在的集（同 drift 引用测试先例）——陈旧 roster 会让
+    豁免指向幻影集、汇总行的「停旧代 N」失真。"""
+    influence = Path(INTEGRATION_WS).resolve()
+    slugs = {p.name for p in (influence / "episodes").iterdir() if p.is_dir()}
+    for g in skeleton().get("generation", []):
+        for slug in g["episodes"]:
+            assert slug in slugs, f"generation {g['id']} 花名册指向不存在的集：{slug}"
+
+
+def inject_generation(
+    skill: Path, gid: str, episodes: list[str], legacy: dict[str, str]
+) -> None:
+    """往镜像 skill 的 skeleton.toml 追加一个 [[generation]]（正控用）。"""
+    toml = skill / "pipeline" / "templates" / "video-skeleton" / "skeleton.toml"
+    eps = ", ".join(f'"{e}"' for e in episodes)
+    lines = [
+        "\n[[generation]]",
+        f'id = "{gid}"',
+        'reason = "正控用分代"',
+        f"episodes = [{eps}]",
+        "",
+        "[generation.legacy]",
+    ]
+    lines += [f'"{rel}" = "{fp}"' for rel, fp in legacy.items()]
+    with toml.open("a", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
+def advance_template(skill: Path, rels: list[tuple[str, str]]) -> None:
+    """把镜像模板的给定文件「升一代」：追加一行注释——字节与归一化指纹都变、
+    语义零变化（regioned 的 Main.tsx 追加普通注释行同样改变归一化指纹）。"""
+    for rel, _cls in rels:
+        p = skill / "pipeline" / "templates" / "video-skeleton" / rel
+        p.write_bytes(p.read_bytes() + b"\n// positive-control: generation bump\n")
+
+
+def _gen_sandbox(tmp_path: Path, slug: str = PROBE_A):
+    """正控公共脚手架：镜像 skill + scaffold 一集 + 该集当前指纹表（= 即将
+    登记的「旧代」）。返回 (skill, ws, legacy)。"""
+    import verify_skeleton as vs
+
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, slug).returncode == 0
+    write_series(ws, [("solo", [slug])])
+    legacy = {
+        rel: vs.fingerprint(ws / "episodes" / slug / rel, rel, cls)
+        for rel, cls in GEN_GROUP
+    }
+    assert all(legacy.values()), "指纹表含缺失（scaffold 应复制全部分代文件）"
+    return skill, ws, legacy
+
+
+def test_generation_old_generation_is_exempt(tmp_path):
+    """**正控 (a)**：花名册集全部文件停旧代 ⇒ 0 未登记 + INFO 可见 + 汇总行。
+
+    scaffold 产物 == 模板（即「上一代」），登记该代后把模板升一代——集未动 =
+    整组停旧代。--strict 必须放行：generation 是合法过渡态而非漂移。"""
+    skill, ws, legacy = _gen_sandbox(tmp_path)
+    inject_generation(skill, "gen-a", [PROBE_A], legacy)
+    advance_template(skill, GEN_GROUP)
+
+    r = run(skill / "pipeline" / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode == 0, f"整组停旧代被判红：\n{r.stdout}"
+    assert "停在旧代 gen-a" in r.stdout, f"旧代集缺 INFO 可见性：\n{r.stdout}"
+    assert "GENERATION-MIXED" not in r.stdout, r.stdout
+    assert "代 gen-a" in r.stdout and "停旧代 1" in r.stdout, (
+        f"每代汇总行缺失：\n{r.stdout}"
+    )
+
+
+def test_generation_mixed_half_sync_fails(tmp_path):
+    """**正控 (b)**：半同步（部分文件到新代、部分停旧代）⇒ GENERATION-MIXED
+    计入未登记、--strict 失败。单集系列里这种形态对 I1/I2 **都静默**（新代指纹
+    恰是唯一参照、模板在 seen），MIXED 判定是唯一的网——半同步集 tsc 必红。"""
+    skill, ws, legacy = _gen_sandbox(tmp_path)
+    inject_generation(skill, "gen-b", [PROBE_A], legacy)
+    advance_template(skill, GEN_GROUP)
+    # 只把 Root.tsx 同步到新代（模拟「拷了部分文件就停手」）
+    shutil.copy2(
+        skill / "pipeline" / "templates" / "video-skeleton" / "video/src/Root.tsx",
+        ws / "episodes" / PROBE_A / "video/src/Root.tsx",
+    )
+
+    r = run(skill / "pipeline" / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode == 1, f"半同步未被判红：\n{r.stdout}"
+    assert "GENERATION-MIXED gen-b" in r.stdout, r.stdout
+    assert "Root.tsx" in r.stdout, f"MIXED 组摘要缺文件点名：\n{r.stdout}"
+
+
+def test_generation_exempt_does_not_leak_beyond_roster(tmp_path):
+    """**正控 (c)**：非花名册集停在旧代指纹 ⇒ 仍报 STALE/DRIFT——豁免按显式
+    roster 生效，cp -r 复制集与新集不继承（否则「从旧代集复制」会把豁免带进
+    新集，等于给未登记漂移开了传播通道）。"""
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    assert scaffold_into(skill, ws, PROBE_B).returncode == 0
+    write_series(ws, [("pair", [PROBE_A, PROBE_B])])
+    import verify_skeleton as vs
+
+    legacy = {
+        rel: vs.fingerprint(ws / "episodes" / PROBE_A / rel, rel, cls)
+        for rel, cls in GEN_GROUP
+    }
+    inject_generation(skill, "gen-c", [PROBE_A], legacy)  # 花名册只含 A
+    advance_template(skill, GEN_GROUP)
+
+    r = run(skill / "pipeline" / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode == 1, f"非花名册集继承了旧代豁免：\n{r.stdout}"
+    assert PROBE_B in r.stdout and "STALE" in r.stdout, r.stdout
+
+
+def test_generation_mismatched_legacy_still_fails(tmp_path):
+    """**正控 (d)**：旧代指纹 ≠ 登记值 ⇒ 仍红——分代豁免同样钉指纹，登记值与
+    实际不符即失效（同 [[drift]] 纪律：防「登记一次、永久免检」）。"""
+    skill, ws, _legacy = _gen_sandbox(tmp_path)
+    inject_generation(
+        skill,
+        "gen-d",
+        [PROBE_A],
+        {rel: "000000000000" for rel, _cls in GEN_GROUP},
+    )
+    advance_template(skill, GEN_GROUP)
+
+    r = run(skill / "pipeline" / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode == 1, f"假登记值兜住了真偏离：\n{r.stdout}"
+    assert "DRIFT" in r.stdout or "STALE" in r.stdout, r.stdout
+
+
+def test_generation_mixed_sees_drift_held_files(tmp_path):
+    """**正控 (e)**：drift 放行的旧文件同样是原子组成员——真树形态是花名册集的
+    Main/Subtitle/ChapterProgress 由 [[drift]] 钉住。整组未动 ⇒ 放行（停旧代）；
+    除 drift 文件外全部同步 ⇒ GENERATION-MIXED 点名 drift 文件（此前 drift 文件
+    不入表，组内只剩 new，--strict 全绿且汇总误计「已同步」，而此形态 tsc 已红）。"""
+    import verify_skeleton as vs
+
+    rel = "video/src/components/Subtitle.tsx"
+    skill, ws, legacy = _gen_sandbox(tmp_path)
+    sub = ws / "episodes" / PROBE_A / rel
+    sub.write_bytes(sub.read_bytes() + b"\n// probe: episode-specific drift\n")
+    register_drift(skill, PROBE_A, rel, vs.fingerprint(sub, rel, "frozen"))
+    inject_generation(skill, "gen-f", [PROBE_A], legacy)
+    advance_template(skill, GEN_GROUP)
+
+    script = skill / "pipeline" / "scripts" / "verify_skeleton.py"
+    r = run(script, "--strict", cwd=ws)
+    assert r.returncode == 0, f"整组停旧代（含 drift 文件）被判红：\n{r.stdout}"
+    assert "GENERATION-MIXED" not in r.stdout, r.stdout
+    assert f"INFO  {rel} · {PROBE_A} 停在旧代" not in r.stdout, r.stdout
+
+    tmpl = skill / "pipeline" / "templates" / "video-skeleton"
+    for other, _cls in GEN_GROUP:
+        if other != rel:
+            shutil.copy2(tmpl / other, ws / "episodes" / PROBE_A / other)
+    r = run(script, "--strict", cwd=ws)
+    assert r.returncode == 1, f"drift 集半同步未被判红：\n{r.stdout}"
+    assert "GENERATION-MIXED gen-f" in r.stdout and "Subtitle.tsx" in r.stdout, r.stdout
+    assert "已同步 0" in r.stdout, f"半同步集被计为已同步：\n{r.stdout}"
+
+
+def test_generation_does_not_override_drift_registry(tmp_path):
+    """drift 优先于 generation：文件被 [[drift]] 钉住其它指纹的集，即使当前
+    指纹 == 旧代登记值也按 drift 语义报 DRIFT-CHANGED，旧代豁免不兜底——特有
+    偏离比代际滞后更需要盯。真树稳定形态：9 集 Subtitle 停剥句号前代，由
+    [[drift]] 61df1a5e08e2 钉住而非 generation legacy。A 同步到新代（I1 参照
+    稳定取模板指纹）+ B 纯旧代，才能确定性走到 DRIFT-CHANGED 分支。"""
+    rel = "video/src/components/Subtitle.tsx"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    assert scaffold_into(skill, ws, PROBE_B).returncode == 0
+    write_series(ws, [("pair", [PROBE_A, PROBE_B])])
+    import verify_skeleton as vs
+
+    legacy = {
+        r: vs.fingerprint(ws / "episodes" / PROBE_A / r, r, c) for r, c in GEN_GROUP
+    }
+    advance_template(skill, GEN_GROUP)
+    # A 整组同步到新代（拷新模板）；B 不动 = 纯旧代集，但其 Subtitle 被 drift
+    # 钉了一个 ≠ 旧代值的指纹（模拟「登记未随集推进复核」的形态）
+    tmpl = skill / "pipeline" / "templates" / "video-skeleton"
+    for r, _cls in GEN_GROUP:
+        shutil.copy2(tmpl / r, ws / "episodes" / PROBE_A / r)
+    register_drift(skill, PROBE_B, rel, "111111111111")
+    inject_generation(skill, "gen-e", [PROBE_A, PROBE_B], legacy)
+
+    r = run(skill / "pipeline" / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode == 1, f"drift 指纹失效被 generation 旧代值兜底：\n{r.stdout}"
+    assert "DRIFT-CHANGED" in r.stdout and PROBE_B in r.stdout, r.stdout
+    assert f"INFO  {rel} · {PROBE_B} 停在旧代" not in r.stdout, (
+        f"drift 管辖的文件不应打旧代 INFO（优先级语义）：\n{r.stdout}"
+    )
+
+
+# ── 双语骨架（bilingual-i18n 分代内容侧）──────────────────────────────────
+
+
+def test_i18n_frozen_and_audiodir_mirrors_python():
+    """i18n.tsx 归 frozen（test_every_template_file_is_classified 的反向覆盖
+    之外，此处钉「在 frozen 而非 seeded」——错放 seeded 会重蹈 motifs 裂成多份
+    的覆辙）；audioDir/PRIMARY_LANG 与 langs.py 同构——TS/Python 双侧路径契约
+    的文本形态执法（zh 无后缀是既有集零回归的根）。"""
+    import langs
+
+    skel = skeleton()
+    assert "video/src/i18n.tsx" in skel["classes"]["frozen"]
+    src = (TEMPLATE / "video/src/i18n.tsx").read_text(encoding="utf-8")
+    assert "export const PRIMARY_LANG: Lang = 'zh';" in src, "主语言须恒 'zh'"
+    assert re.search(r"lang === PRIMARY_LANG \? 'audio' : `audio/\$\{lang\}`", src), (
+        "audioDir 形态漂移：与 langs.audio_dir 的同构契约破了（zh 无后缀/子目录）"
+    )
+    # Python 侧行为对照：两侧注册表口径一致
+    assert langs.PRIMARY == "zh" and set(langs.LANGS) == {"zh", "en"}
+
+
+def test_lang_provider_mount_is_load_bearing():
+    """LangProvider 挂载行必须落在 regioned 归一化保留区（同 ChapterProgress
+    mount 先例）——否则某集删除挂载后语言 context 消失、useLang 全部回落 zh，
+    英文版静默渲成中文而漂移门放行。"""
+    import verify_skeleton as vs
+
+    text = (TEMPLATE / "video/src/Main.tsx").read_text(encoding="utf-8")
+    assert "LangProvider" in vs.normalize_main(text)
+
+
+def test_subtitle_en_two_line_geometry_is_pinned():
+    """en 双行几何守恒：marginBottom 35 + padding 24 + 2×30×1.3 = 137 ≤ 137.4
+    （zh 单行满字号包络）——不越过 qa_frames SUBTITLE_BOX_H_PX=132 检查线的
+    padding 缓冲带，侵入检测两语言照常执法。三常数互锁，动任何一个须连同
+    检查线重标定；zh 分支锚（54 / nowrap）同时钉住逐像素不变。"""
+    src = (TEMPLATE / "video/src/components/Subtitle.tsx").read_text(encoding="utf-8")
+    for pin in (
+        "EN_MARGIN_BOTTOM = 35",
+        "EN_TWO_LINE_SIZE = 30",
+        "EN_LINE_HEIGHT = 1.3",
+        "isZh ? 54 : EN_MARGIN_BOTTOM",
+        "whiteSpace: twoLine ? 'normal' : 'nowrap'",
+    ):
+        assert pin in src, f"字幕几何/zh 分支锚被动：{pin}"

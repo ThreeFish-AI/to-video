@@ -176,6 +176,16 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 - `Sequence name` 与 storyboard 镜号一一对应（QA 时可对照）；
 - beat 内动画优先走 `src/motion/` 运动模型（见上节铁律）；裸 `interpolate`/`spring` 是逃生舱而非默认。一律帧驱动，禁 `Date.now()`/随机数——渲染必须确定。
 
+## 双语 i18n（场景文案，双语集）
+
+机制 SSOT 是 frozen [i18n.tsx](../templates/video-skeleton/video/src/i18n.tsx)（`LangProvider` 由 `Main.tsx` 挂载，`lang` 经 `remotion render --props '{"lang":"en"}'` 注入、缺省 zh）：
+
+- **内联双语对**（推荐——与文案同址，无键表间接层）：`import {L, useL, useLang} from '../i18n';` 后 `<L zh="上下文窗口" en="Context Window" />`；运行时取值用 `const t = useL(); t({zh: '…', en: '…'})`。**en 缺省回落 zh**（渐进 Localization 的刻意图省：未翻译的画面在英文版显示中文，`check_script --check-scenes --lang en` 会以 WARN 列出未翻译的含汉字字面量）。
+- React context 穿透 `Sequence`/`SceneFade`；`@react-three/fiber` 的 `Canvas` 经 its-fine 自动桥接——`useLang()` 在 ThreeCanvas 内直接可用。
+- **章节条标题自动双语**：chapters.json 条目的 `i18n.en` 由 build 从 `narration.en.md` 幕标题派生（声明见 skills/03「英文译稿」）；series.json 集条目可选 `i18n: {"en": …}` 会以 `titleI18n`/`nextI18n` 透传进 series-layers.json，P6 身份卡/下期卡按需消费。
+- **archify 录制件保持 zh**：英文版 = 英文配音 + 中文图示（录制件文字已焙进画面；`archify/en/` 重录机制属后续演进，先在 planning.md 声明该取舍）。
+- **英文字幕两行回落（frozen Subtitle.tsx）**：en 单行 fitText < 30px 时回落两行 30px（`textWrap: balance`）；盒几何 `marginBottom 35 + padding 24 + 2×30×1.3 = 137 ≤ 137.4`（zh 单行满字号包络）——**守恒设计**：字幕带侵入检测（qa `SUBTITLE_BOX_H_PX=132`）两语言共用同一判据，无需豁免。
+
 ## 顶部章节进度条（frozen chrome · ChapterProgress）
 
 全片 overlay，`Main.tsx` 挂 `<Subtitle>` 之后（最顶层），向观众标示各幕篇幅占比与播放进度。

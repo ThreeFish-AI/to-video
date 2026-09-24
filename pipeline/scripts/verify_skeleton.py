@@ -14,6 +14,11 @@
 会让单集系列拿不到文档承诺的豁免（I1 放行、I2 仍红，登记者无路可走）。豁免按
 指纹钉住，偏离内容一变即报 DRIFT-CHANGED——否则「登记一次、永久免检」。
 
+第二个逃逸口是 `[[generation]]`（骨架分代，见 skeleton.toml 分代节）：一次模板
+升级 = 一代，花名册集「整组停在旧代」是合法态（I1/I2 免报、打 INFO），但组内
+新旧混杂（半同步）计入未登记（GENERATION-MIXED）——只换部分文件 tsc 必红。
+drift 与 generation 重叠时 drift 优先：特有偏离比代际滞后更需要盯。
+
 本档**只报告不阻塞**（退出码恒 0，除非 --strict）：转阻塞前须先把既有漂移登记
 或收敛，否则第一次运行就红，而一个「一上线就红」的门只会被立刻关掉。
 
@@ -31,6 +36,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paths  # noqa: E402 - SKILL 模块级、WORKSPACE 惰性解析
@@ -97,6 +103,42 @@ def fingerprint(path: Path, rel: str, cls: str) -> str | None:
 Registry = dict[tuple[str, str], tuple[str, str | None]]
 
 
+class Generation(NamedTuple):
+    """skeleton.toml 的 [[generation]]（原子组旧代豁免，见该文件「骨架分代」节）。
+
+    legacy 键为受门相对路径、值为上一代指纹（12 位 hex 或「缺失」哨兵，口径与
+    档位一致：frozen/structured 取原指纹、regioned 取归一化后指纹）。"""
+
+    id: str
+    reason: str
+    episodes: frozenset[str]
+    legacy: dict[str, str]
+
+
+def gen_owner(generations: list[Generation], slug: str, rel: str) -> Generation | None:
+    """→ 该集该文件所属的分代；None = 非分代管辖。
+
+    多代并存时取首个声明代（本仓暂单代；多代叠加属后续演进，届时最旧的代
+    先退役）。episodes 是显式花名册——不在册的集（新集、cp -r 复制集）天然
+    不命中，豁免不随复制传播。
+    """
+    for g in generations:
+        if slug in g.episodes and rel in g.legacy:
+            return g
+    return None
+
+
+def generation_hit(generations: list[Generation], slug: str, rel: str, fp: str) -> bool:
+    """旧代豁免：花名册集的文件指纹 == 该代登记值（含「缺失」哨兵）⇒ 合法旧代。
+
+    调用方须先过 drift 登记（exempt / DRIFT-CHANGED）——drift 钉的是该集特有
+    偏离，优先级高于代豁免：某文件被 [[drift]] 钉住其它指纹时按 drift 语义处理，
+    代豁免不兜底。
+    """
+    g = gen_owner(generations, slug, rel)
+    return g is not None and g.legacy[rel] == fp
+
+
 def exempt(registry: Registry, slug: str, rel: str, fp: str) -> bool:
     """该集该文件的**当前**指纹是否被登记表放行。
 
@@ -125,6 +167,19 @@ def main() -> int:
         (d["episode"], d["path"]): (d.get("reason", ""), d.get("fingerprint"))
         for d in skel.get("drift", [])
     }
+    #: 分代登记（[[generation]]）：花名册集「整组停在旧代」的合法态。与 [[drift]]
+    #: 的分工——drift 钉**该集特有**偏离（一集一文件一指纹），generation 钉**模板
+    #: 升级遗留**的整组旧代（一次升级一代、一组文件一组指纹）；两者重叠时 drift
+    #: 优先（特有偏离比代际滞后更需要盯）。
+    generations: list[Generation] = [
+        Generation(
+            id=str(g["id"]),
+            reason=str(g.get("reason", "")),
+            episodes=frozenset(g.get("episodes", [])),
+            legacy=dict(g.get("legacy", {})),
+        )
+        for g in skel.get("generation", [])
+    ]
     series_list = json.loads(
         (paths.WORKSPACE / "series.json").read_text(encoding="utf-8")
     )["seriesList"]
@@ -146,6 +201,12 @@ def main() -> int:
     ]
 
     unregistered = 0
+    #: (代 id, slug) → {rel: 'new' | 'old'}：分代状态收集——GENERATION-MIXED
+    #: 判定与每代汇总的数据面。drift 放行的非模板文件同样计 'old'（它仍是本代
+    #: 原子组的成员，漏计则半同步对 drift 集隐身），但不打旧代 INFO（特有偏离
+    #: 优先，报告归 drift 语义）；既非当代模板、亦非登记旧代或 drift 放行的文件
+    #: 走普通 DRIFT 路径，不入表。
+    gen_states: dict[tuple[str, str], dict[str, str]] = {}
     print(f">> 骨架漂移门 · 模板 {TEMPLATE} · 受门 {len(gated)} 文件\n")
 
     for series in series_list:
@@ -161,6 +222,24 @@ def main() -> int:
                 or "缺失"
                 for slug in eps
             }
+
+            # 分代状态收集 + 旧代可见性：独立于 I1 参照系——纯旧代系列里旧代指纹
+            # 恰是系列多数（I1 对它无话可说），旧代集仍须在报告里点名（INFO），
+            # 否则「13 集都停在旧代」会静默得像一切如常。旧代集在 I2 参照系选择
+            # 中同样静默（见下），这份 INFO 是唯一的逐集可见性。
+            for slug in eps:
+                g = gen_owner(generations, slug, rel)
+                if g is None:
+                    continue
+                if fps[slug] == tmpl_fp:
+                    gen_states.setdefault((g.id, slug), {})[rel] = "new"
+                elif (slug, rel) in registered:
+                    if exempt(registered, slug, rel, fps[slug]):
+                        gen_states.setdefault((g.id, slug), {})[rel] = "old"
+                elif fps[slug] == g.legacy[rel]:
+                    gen_states.setdefault((g.id, slug), {})[rel] = "old"
+                    print(f"    INFO  {rel} · {slug} 停在旧代 {g.id}（重渲时整组同步）")
+
             seen: dict[str, list[str]] = {}
             for slug, fp in fps.items():
                 seen.setdefault(fp, []).append(slug)
@@ -187,6 +266,10 @@ def main() -> int:
                             f" —— 偏离内容已变，豁免失效：请复核后更新 skeleton.toml"
                         )
                         continue
+                    if generation_hit(generations, slug, rel, fp):
+                        # 整组停在旧代：合法态（逐文件 INFO 已在上方状态收集中
+                        # 打过）；半同步的原子性执法在主循环后的 GENERATION-MIXED。
+                        continue
                     if cls == "overridable":
                         print(f"    INFO  {rel} · {slug} 行使了覆写许可（{fp}）")
                         continue
@@ -206,7 +289,12 @@ def main() -> int:
             # ——会让 --strict 变红，逼人为一次合法覆写去登记 [[drift]]，等于把
             # 档位声明的许可撤回一半（timing.json 恰是文档鼓励「改节奏只动 JSON」
             # 的那个文件，claude-code-explained 今天恰是单集系列）。
-            unreg = [s for s in eps if not exempt(registered, s, rel, fps[s])]
+            unreg = [
+                s
+                for s in eps
+                if not exempt(registered, s, rel, fps[s])
+                and not generation_hit(generations, s, rel, fps[s])
+            ]
             if cls != "overridable" and tmpl_fp and tmpl_fp not in seen and unreg:
                 unregistered += 1
                 scope = "基线系列" if is_baseline else "系列"
@@ -232,6 +320,41 @@ def main() -> int:
             f"\n  ⚠️  未登记到 series.json 的工程目录（阻塞门在 check_series.py 规则4；"
             f"narration.md 落盘后该处 FAIL）：{orphans}"
         )
+
+    # GENERATION-MIXED（原子性执法）：花名册集的分代文件**新旧混杂**——半同步集
+    # tsc 必红（只拷新 Main 不拷 i18n.tsx，import 当场断），且这种形态对 I1/I2 都
+    # 可能静默（单集系列里新代指纹恰是唯一参照）。整组同步或整组回退二选一，
+    # 半同步计入未登记。
+    for (gid, slug), states in sorted(gen_states.items()):
+        if "new" in states.values() and "old" in states.values():
+            unregistered += 1
+            news = sorted(r for r, v in states.items() if v == "new")
+            olds = sorted(r for r, v in states.items() if v == "old")
+            print(
+                f"    GENERATION-MIXED {gid} · {slug}：分代文件新旧混杂"
+                f"（新代 {news} / 旧代 {olds}）"
+                "——只换部分文件 tsc 必红，须整组同步或整组回退"
+            )
+
+    # 每代一行汇总：旧代集在 I1 参照系选择与 I2 判定中均为静默（合法态不报警），
+    # 但「还有几集停在上一代」是重渲排期要读的信号，须可见（roster 总数含不在
+    # 本工作区的集；状态只统计 series.json 可见集）。
+    if generations:
+        print()
+        for g in generations:
+            states_of = {
+                slug: st for (gid, slug), st in gen_states.items() if gid == g.id
+            }
+            synced = sum(1 for st in states_of.values() if set(st.values()) == {"new"})
+            lagging = sum(
+                1
+                for st in states_of.values()
+                if "old" in st.values() and "new" not in st.values()
+            )
+            print(
+                f"  代 {g.id}：roster {len(g.episodes)} 集 · 已同步 {synced} · "
+                f"停旧代 {lagging}（重渲时整组同步）"
+            )
 
     #: 漂移登记表随模板分发（skill 仓 skeleton.toml），但登记指向的是**具体工作区
     #: 的具体集**——只显示本工作区 series.json 已知的 slug，他工作区的历史登记

@@ -37,6 +37,12 @@ uv run --no-project --with pillow --with numpy $T/pipeline/scripts/qa_frames.py 
 #    （该轮改的是 P0/P6 的层板，坏的却是 P1–P6 的常驻条——只看改动幕会全过）
 ```
 
+## 双语集（en 版）
+
+- 草渲 `uv run --no-project $T/pipeline/scripts/pipeline.py --project $P render --lang en` → `out/draft.en.mp4`；抽帧 `… qa --lang en $P/out/draft.en.mp4 …`（`--lang` 缺省按视频文件名 `.en` 后缀推断，显式冲突即报错）；帧目录 `out/frames.en/`。
+- **英文 TTS 之后、英文渲染之前必跑** `uv run --no-project $T/pipeline/scripts/check_archify.py --project $P --lang en`：archify cue 的 playbackRate = 章时长 ÷ 锚句时长，英文锚句时长不同，**显式 `fit='stretch'` 的 cue 越界会在渲染期直接抛错**（zh 版同理但时序不变故无此增量风险）。
+- 英文字幕的两行回落几何（盒顶 137 ≤ 单行包络 137.4，字幕带侵入检测两语言照常执法）见 [06](./06-remotion-implementation.md)。
+
 ## 自动体检判据与处置
 
 | 判据 | 级别 | 处置 |

@@ -52,7 +52,8 @@ $P/
 │   ├── planning.md         # 策划案
 │   ├── narration.md        # 逐字稿（唯一维护处，勿改 narration.json）
 │   ├── narration.json      # 派生物（build_narration.py 生成）
-│   └── storyboard.md       # 分镜表（镜号↔句 id 区间↔画面↔动效）
+│   ├── storyboard.md       # 分镜表（镜号↔句 id 区间↔画面↔动效）
+│   └── narration.en.md …   # 双语集才有：英文对齐译稿 + narration.en.json + 基线锁（见 §五「双语渲染」）
 ├── scripts/*.py            # 薄包装 → skill 解析器（保 CLI 契约）
 ├── video/                  # Remotion 独立 pnpm 工程（自带 pnpm-workspace.yaml，钉为独立 workspace 根）
 └── out/                    # 渲染产物（gitignored）
@@ -130,7 +131,11 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](./scripts/c
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
 | `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名                                                                                                             |
-| `tts.lang`                      |                 | `ZH`                    | 机制常数                                                                                                                       |
+| `tts.lang`                      |                 | `ZH`                    | 机制常数（zh 主稿恒 ZH；en 版由语言自动解析为 EN，见 §五「双语渲染」）                                                          |
+| `narration.langs`               |                 | `["zh"]`                | **策略声明**：本集产出的语言版本（必含 zh）；en 需显式声明并配 `narration.en.md`                                               |
+| `narration.words_per_min`       |                 | `150`                  | 机制常数：英文含停顿等效语速（首集实测后校准）                                                                                  |
+| `narration.en`                  |                 | `{}`                   | 英文覆写表，允许 `target_minutes`（缺省 ⇒ 英文预算门点名跳过，不继承 zh 窗口）                                                 |
+| `tts.en`                         |                 | `{}`                   | 英文配音覆写表，允许 `engine/ref/ref_sha1/style/voice`，其余继承 `[tts]`                                                       |
 | `tts.server`                    |                 | `http://127.0.0.1:8766` | **机器属性**：可用 `INDEXTTS_SERVER` 覆盖，永不写进 toml                                                                       |
 | `render.draft_scale`            |                 | `0.5`                   | 机制常数（`qa --scale` 推断依赖它）                                                                                            |
 | `render.draft_jpeg_quality`     |                 | `60`                    | 机制常数                                                                                                                       |
@@ -157,7 +162,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](./scripts/c
 uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver [--root ~/Documents/video] [--dry-run]
 ```
 
-- **根路径两渠道**（解析序：`--root` 一次性/prompt 指定 > env `TO_VIDEO_DELIVER_ROOT` 持久统一配置）：机器属性，**永不写进受版本控制的 toml**——同 `tts.server` / tts-store 立场（执法：[tests/test_config.py](./tests/test_config.py) 的 machine-property 用例）。相对路径锚 `$W`（绝不锚 CWD）；两渠道皆无则大声退出并列出用法。
+- **根路径两渠道**（解析序：`--root` 一次性/prompt 指定 > env `TO_VIDEO_DELIVER_ROOT` 持久统一配置）：机器属性，**永不写进受版本控制的 toml**——同 `tts.server` / tts-store 立场（执法：[tests/test_config.py](./tests/test_config.py) 的 machine-property 用例）。相对路径锚 `$W`（绝不锚 CWD）；两渠道皆无则大声退出并列出用法。双语集 en 版：`deliver --lang en` 归档 `<集标题> vN.en.mp4`，版本扫描按语言独立（fullmatch 后缀隔离，与 zh 互不抬号）。
 - **触发形态**：显式子命令，**刻意不串联进 `render --final`**——编排层完成行 `>> render 完成` 是 [skills/09](./skills/09-final-render.md) 钉死的判完成信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号；与 `captions` 同为 ⑨ 的显式交付命令。用户在 prompt 给出目标路径时，agent 在终渲成功后显式执行 `deliver --root <路径>`（契约见 skills/09 §交付归档）。
 - **扇出**：deliver 不在 `--series` 白名单——写用户目录且累积版本文件的交付操作须显式逐集执行。
 
@@ -173,6 +178,21 @@ uv run --no-project $T/pipeline/scripts/pipeline.py --project $P deliver [--root
 每句一段 MP3；`tts.py` 产出 `video/public/audio/manifest.json`（含每句实测时长）；Remotion `calculateMetadata` 读取 manifest 计算全片时间轴。**改稿后只需重跑：build → tts → render**。引擎可选 edge 预置音色或用自己的声音克隆（[VOICE-CLONING.md](./VOICE-CLONING.md)），两种引擎的 manifest 契约完全一致。
 
 **时序常数单一事实源** = 每集 `video/src/timing.json`（句间/幕间/片头/片尾/幕间淡入淡出）：`timing.ts` 经 `resolveJsonModule` 同步 import，Python 侧（qa_frames/captions/check_script）经 `timeline.py` 直读同一文件——改节奏只动 JSON，双语言镜像漂移结构性不存在。**渲染主机约束**：三集未内嵌 CJK 字体（PingFang SC/Songti SC/SF Mono 系统栈），渲染仅限 macOS；两个重启触发器见 [skills/06 事实条](./skills/06-remotion-implementation.md)。
+
+### 双语渲染（zh 主稿 + en 对齐译稿，可选）
+
+「语言」是与九阶段正交的维度，分三层（RSI-004；逐字稿对齐与译写规约见 [skills/03](./skills/03-narration.md)，画面文案 i18n 见 [skills/06](./skills/06-remotion-implementation.md)，配音决策见 [skills/07](./skills/07-tts-voice.md)）：
+
+| 层 | 载体 | 职责 |
+| --- | --- | --- |
+| 机制 | [scripts/langs.py](./scripts/langs.py) | 语言注册表（tts 码 / edge 音色 / 长度单位）+ 产物路径派生 + `--lang` 解析；tts.py 因导入边界持内联镜像（一致性测试钉住） |
+| 策略 | `pipeline.toml` | `narration.langs` 声明本集语言版本；`[narration.en]` / `[tts.en]` 覆写英文偏离项 |
+| 执行 | `pipeline.py <cmd> --lang zh\|en\|zh,en\|all` | 本次运行产出哪几版 |
+
+- **路径约定**：主语言 zh 与改造前逐字节一致；en 为 `script/narration.en.{md,json}`、`video/public/audio/en/`（独立 `.engine` 护栏）、`out/captions.en.{srt,vtt}`、`out/{draft,final}.en.mp4`、`out/frames.en/`、交付 `<标题> vN.en.mp4`（版本号按语言独立）。英文时间轴由英文配音实测时长自动重排——分镜 beat 以句 id 取窗，语言无关。
+- **对齐与失鲜**：`narration.en.md` 与主稿句 id 1:1（`build --lang en` 硬对齐门）；基线锁 `narration.en.lock.json` 记录翻译时的主稿句 digest，主稿改稿后 `check --lang en` 点名失配句。重建**不自动接受**改过的主稿（gettext fuzzy 语义）：译句改写即视为已重译、自动刷新；译文无需改动时 `build --lang en --accept <ids>` 显式确认。
+- **缺省语义（昂贵命令显式化）**：`build` / `check` / `captions` / `status` 缺省跑全部声明语言；**`tts` / `render` / `deliver` / `all` 缺省只跑 zh**（声明多语言而未指定即报错提示 `--lang`），显式多值才顺序执行且完成行按语言分打；`qa` 恒单语言（按视频文件名 `.en` 后缀推断）。
+- **骨架分代**：改 frozen 骨架文件引入语言维度属新代（`skeleton.toml` 的 `[[generation]]` 登记旧代指纹与花名册，`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
 
 ## 六、新集脚手架清单
 

@@ -594,6 +594,49 @@ def test_toml_deliver_root_is_not_a_channel(tmp_path: Path):
     assert "未配置" in out_text(r)
 
 
+# ---------------- 双语：en 槽位与版本号独立 ----------------
+
+
+def test_scan_versions_suffix_isolates_language_slots():
+    """sfx 进 fullmatch：zh/en 版本号互不抬号（"T v1.en.mp4" 不是 "T" 的版本）。"""
+    assert deliver.scan_versions(["T v1.en.mp4", "T v2.en.mp4"], "T", ".en") == [
+        (1, "T v1.en.mp4"),
+        (2, "T v2.en.mp4"),
+    ]
+    assert deliver.scan_versions(["T v3.mp4"], "T", ".en") == []  # zh 版本不抬 en 号
+    assert deliver.scan_versions(["T v3.en.mp4"], "T", "") == []  # en 版本不抬 zh 号
+    # sfx 空串与旧口径同构（既有黄金零漂移）
+    assert deliver.scan_versions(["T v1.mp4"], "T", "") == [(1, "T v1.mp4")]
+
+
+def test_en_delivery_names_and_versions_independent(tmp_path: Path):
+    """en 命名 `<标题> vN.en.mp4`；先投 en v1 再投 zh v1 共存、zh 升 v2 不动 en。"""
+    ws = build_ws(tmp_path)
+    out = ws / "episodes" / SLUG / "out"
+    root = tmp_path / "dv"
+    (out / "final.en.mp4").write_bytes(b"en-A")
+    assert run_deliver(ws, "--root", str(root), "--lang", "en").returncode == 0
+    assert (root / SID / f"{TITLE} v1.en.mp4").read_bytes() == b"en-A"
+
+    assert run_deliver(ws, "--root", str(root)).returncode == 0  # zh v1
+    assert (root / SID / f"{TITLE} v1.mp4").is_file()
+    (out / "final.mp4").write_bytes(b"zh-B")
+    assert run_deliver(ws, "--root", str(root)).returncode == 0  # zh v2
+    assert (root / SID / f"{TITLE} v2.mp4").read_bytes() == b"zh-B"
+    # en 侧不受 zh 两次投递影响（版本号独立计号）
+    assert (root / SID / f"{TITLE} v1.en.mp4").read_bytes() == b"en-A"
+    assert not (root / SID / f"{TITLE} v2.en.mp4").exists()
+
+
+def test_en_missing_source_hints_render_lang(tmp_path: Path):
+    """en 源缺失：报错点名 final.en.mp4 与 `render --final --lang en` 修复路径。"""
+    ws = build_ws(tmp_path)
+    r = run_deliver(ws, "--root", str(tmp_path / "dv"), "--lang", "en")
+    assert r.returncode != 0
+    assert "final.en.mp4" in out_text(r)
+    assert "render --final --lang en" in out_text(r)
+
+
 # ---------------- 评审补钉二轮（3 项确认发现） ----------------
 
 

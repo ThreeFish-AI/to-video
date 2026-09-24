@@ -38,6 +38,8 @@ from pathlib import Path
 
 import tomllib
 
+import langs
+
 #: (点分键路径, 类型, 默认值, 必填条件, 说明)
 #: 必填条件：True = 恒必填；str = 条件表达式（当前只支持 "engine==indextts"）；False = 可选
 SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
@@ -50,6 +52,27 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
     ),
     ("narration.target_minutes", list, None, True, "[下限, 上限] 两元素，单位分钟"),
     ("narration.chars_per_min", int, 280, False, "机制常数：含停顿的等效口径"),
+    (
+        "narration.langs",
+        list,
+        ["zh"],
+        False,
+        "策略声明：本集产出的语言版本；必含主语言 zh",
+    ),
+    (
+        "narration.words_per_min",
+        int,
+        150,
+        False,
+        "机制常数：英文含停顿等效口径（首集实测后校准）",
+    ),
+    (
+        "narration.en",
+        dict,
+        {},
+        False,
+        "英文覆写：允许 target_minutes；缺省时英文预算门点名跳过、不继承 zh 窗口",
+    ),
     ("tts.engine", str, "indextts", False, "策略声明：indextts | edge"),
     (
         "tts.ref",
@@ -61,6 +84,13 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
     ("tts.ref_sha1", str, None, "engine==indextts", "12 位，同 tts.py 口径"),
     ("tts.style", str, None, "engine==indextts", "STYLE_PRESETS 中的档名"),
     ("tts.lang", str, "ZH", False, "机制常数"),
+    (
+        "tts.en",
+        dict,
+        {},
+        False,
+        "英文配音覆写：允许 engine/ref/ref_sha1/style/voice；其余继承 [tts]",
+    ),
     (
         "tts.server",
         str,
@@ -198,6 +228,9 @@ ENV_OVERRIDES = {"tts.server": "INDEXTTS_SERVER"}
 _KNOWN = {k for k, *_ in SCHEMA}
 _SECTIONS = {k.split(".")[0] for k in _KNOWN}
 _DEFAULTS = {k: d for k, _t, d, _r, _n in SCHEMA}
+#: 逐语言覆写表的子键白名单（dict 键先例：archify.html_overrides + 定制校验）
+_NARRATION_EN_KEYS = {"target_minutes"}
+_TTS_EN_KEYS = {"engine", "ref", "ref_sha1", "style", "voice"}
 
 
 def default(dotted: str):
@@ -224,6 +257,16 @@ def _get(cfg: dict, dotted: str):
 def _set(cfg: dict, dotted: str, value) -> None:
     sec, key = dotted.split(".", 1)
     cfg.setdefault(sec, {})[key] = value
+
+
+def _is_window(tm) -> bool:
+    """[下限, 上限] 两元素数值且下限 ≤ 上限——target_minutes 基础层与逐语言覆写共用。"""
+    return (
+        isinstance(tm, list)
+        and len(tm) == 2
+        and all(isinstance(x, (int, float)) for x in tm)
+        and tm[0] <= tm[1]
+    )
 
 
 def _nearest(name: str, pool: set[str]) -> str | None:
@@ -279,6 +322,16 @@ def validate(
     warns: list[str] = []
     engine = _get(cfg, "tts.engine")
 
+    # tts.lang 显式覆写在编排入口不生效（lang 由 --narration-lang 按语言自解析），
+    # 只在直调 tts.py 且显式给 --lang 时才有意义——静默忽略会让人误以为改了语言。
+    if _get(raw, "tts.lang") is not None and _get(raw, "tts.lang") != _DEFAULTS.get(
+        "tts.lang"
+    ):
+        warns.append(
+            "tts.lang 由语言自动解析（zh→ZH、en→EN），显式覆写在 pipeline.py "
+            "入口不生效——语言版本用 narration.langs 声明、--lang 选择"
+        )
+
     # 未知键 → WARN（保留前向兼容）+ 最近邻建议
     for sec, body in raw.items():
         if sec not in _SECTIONS:
@@ -323,11 +376,7 @@ def validate(
         return scope is None or dotted.split(".")[0] in scope
 
     tm = _get(cfg, "narration.target_minutes") if in_scope("narration.x") else None
-    if isinstance(tm, list) and (
-        len(tm) != 2
-        or not all(isinstance(x, (int, float)) for x in tm)
-        or tm[0] > tm[1]
-    ):
+    if isinstance(tm, list) and not _is_window(tm):
         fails.append(
             f"narration.target_minutes 应为 [下限, 上限] 且下限 ≤ 上限，实际 {tm}"
         )
@@ -381,6 +430,77 @@ def validate(
             f"archify.html_overrides 应为 {{slug = 文件名}} 的字符串表，实际 {ho}"
         )
 
+    # ── 双语声明与逐语言覆写表（RSI-004）───────────────────────────────
+    # langs 是语言激活的唯一来源（chapters i18n、命令缺省全由它定——二源归一，
+    # 不看「en 文件是否存在」）。
+    lg = _get(cfg, "narration.langs") if in_scope("narration.x") else None
+    if isinstance(lg, list):
+        if not lg:
+            fails.append("narration.langs 非空：至少须含主语言 zh")
+        else:
+            if unknown := [
+                x for x in lg if not (isinstance(x, str) and x in langs.LANGS)
+            ]:
+                fails.append(
+                    f"narration.langs 含未注册语言 {unknown}"
+                    f"（合法集 {sorted(langs.LANGS)}，注册表在 langs.py）"
+                )
+            if len(set(map(str, lg))) != len(lg):
+                fails.append(f"narration.langs 有重复语言: {lg}")
+            if langs.PRIMARY not in lg:
+                fails.append(
+                    f"narration.langs 必含主语言 {langs.PRIMARY!r}（主稿 SSOT），实际 {lg}"
+                )
+    for dotted, table, allowed in (
+        ("narration.en", _get(cfg, "narration.en"), _NARRATION_EN_KEYS),
+        ("tts.en", _get(cfg, "tts.en"), _TTS_EN_KEYS),
+    ):
+        if not isinstance(table, dict):
+            continue
+        sec = dotted.split(".")[0]
+        if not in_scope(f"{sec}.x"):
+            continue
+        for key in table:
+            if key not in allowed:
+                tip = _nearest(key, allowed)
+                fails.append(
+                    f"{dotted}.{key} 未知（允许 {'/'.join(sorted(allowed))}）"
+                    + (f"，是否想写 {tip}？" if tip else "")
+                )
+        # 覆写窗口与基础层同一形状执法：否则坏窗口只在 check 降级为 WARN 跳门
+        if "target_minutes" in allowed and "target_minutes" in table:
+            if not _is_window(table["target_minutes"]):
+                fails.append(
+                    f"{dotted}.target_minutes 应为 [下限, 上限] 且下限 ≤ 上限，"
+                    f"实际 {table['target_minutes']!r}"
+                )
+    en_tts = _get(cfg, "tts.en") if in_scope("tts.x") else None
+    if isinstance(en_tts, dict):
+        # 未录指纹的样本不得启用：给 ref 而无（自身或可继承的）ref_sha1 即 FAIL。
+        # 继承是有意的（zh/en 可共用同一样本换风格），故判定取两者的并集。
+        if en_tts.get("ref") and not (
+            en_tts.get("ref_sha1") or _get(cfg, "tts.ref_sha1")
+        ):
+            fails.append(
+                "tts.en.ref 已给出但缺 ref_sha1（可继承 [tts] ref_sha1；"
+                "未录指纹的样本不得启用）"
+            )
+        # 逐语言必填重放：对每个声明的非主语言取 for_lang 生效视图，重放
+        # engine==indextts 必填——tts.en 换引擎不能绕开样本/指纹/风格前置。
+        # langs 触发源不受 scope 限制（cfg 恒经 resolve 填过默认，scope 只管执法）。
+        for one in _get(cfg, "narration.langs") or []:
+            if one == langs.PRIMARY or one not in langs.LANGS:
+                continue
+            view = for_lang(cfg, one)
+            if _get(view, "tts.engine") != "indextts":
+                continue
+            for dotted in ("tts.ref", "tts.ref_sha1", "tts.style"):
+                if _get(view, dotted) is None:
+                    fails.append(
+                        f"[{one}] {dotted} 缺少必填键"
+                        "（narration.langs 声明该语言且其生效引擎为 indextts）"
+                    )
+
     # 身份校验：把一份「无人读取的死数据」变成 toml 与工程目录之间的连接件。
     # 它防的不是运行期 bug（没人读 slug），而是**手抄来的陈旧 toml 看起来很权威**
     # —— scaffold.py 已改为从模板渲染 slug，但 `cp -r` 既有集这条老路仍走得通
@@ -391,6 +511,37 @@ def validate(
     if slug and slug != root.name:
         fails.append(f"episode.slug={slug!r} 与工程目录名 {root.name!r} 不一致")
     return fails, warns
+
+
+def for_lang(cfg: dict, lang: str) -> dict:
+    """→ 该语言的生效配置视图（Helm values overlay 同型：基础层 + 逐语言覆写层）。
+
+    zh（主语言）恒等返回浅拷贝视图；其余语言叠加 `[narration.<lang>]` / `[tts.<lang>]`
+    覆写表：narration 的 target_minutes 被覆写为该语言窗口（**缺省置 None**——
+    预算门据此点名跳过，绝不静默继承 zh 窗口）；tts 叠加覆写键并把 lang 换成
+    该语言的 tts_code。未覆写的键一律继承基础层。
+
+    **视图只投影 episode / narration / tts 三节**（现有消费者只读这三节）——
+    在视图上读 archify / render 会静默取空，需要时先扩本函数的投影面。
+
+    **覆写读取只许发生在本函数内部**：消费者里的 `.get("en", …)` 是绕开视图的
+    第二事实源（tests/test_config.py 的 _LEAF_KEYS 扫描会把它判红），一律改为
+    `config.for_lang(cfg, lang)` 后按普通键读取。纯函数：不改动入参 cfg。
+    """
+    langs.validate(lang)
+    if lang == langs.PRIMARY:
+        return dict(cfg)
+    base_n = cfg.get("narration", {})
+    base_t = cfg.get("tts", {})
+    # 覆写表写成非表（validate 已报「类型应为 dict」）按空表处理：消费者在此崩溃
+    # 会让 FAIL 清单一条也打不出来
+    over_n = o if isinstance(o := _get(cfg, f"narration.{lang}"), dict) else {}
+    over_t = o if isinstance(o := _get(cfg, f"tts.{lang}"), dict) else {}
+    return {
+        "episode": cfg.get("episode", {}),
+        "narration": {**base_n, "target_minutes": over_n.get("target_minutes")},
+        "tts": {**base_t, "lang": langs.LANGS[lang].tts_code, **over_t},
+    }
 
 
 def load(
