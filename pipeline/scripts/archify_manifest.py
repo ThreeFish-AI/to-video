@@ -27,7 +27,7 @@ def main() -> None:
         diagrams[d["slug"]] = {
             "slug": d["slug"],
             # 图型（architecture/workflow/sequence/dataflow/lifecycle）——覆盖门
-            # 图型多样性门的数据源；旧 sidecar 缺此字段由 scripts/archify_types.py 回填
+            # 图型多样性门的数据源；缺此字段时手工写回 sidecar 顶层 type（见覆盖门 WARN 指引）
             **({"type": d["type"]} if d.get("type") else {}),
             "chapters": [
                 {

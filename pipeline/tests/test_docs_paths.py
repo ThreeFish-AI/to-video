@@ -211,3 +211,84 @@ def test_relative_links_resolve():
     assert not offenders, (
         "相对链接目标不存在（skill 内链接须可跳转）：\n  " + "\n  ".join(offenders)
     )
+
+
+# ---- 用户可见文案 ↔ 工具面一致性（RSI-005 / RSI-006）----
+#
+# 门的报错指引与脚手架的「下一步」提示是用户照做的命令——它们与机制面漂移时，
+# 使用者先在错误路径上找工具。两类实测漂移：指引点名的脚本根本不存在
+# （RSI-006：scripts/archify_types.py），以及提示教人加一个会弄坏安装的参数
+# （RSI-005：--ignore-workspace，ISSUE-175 后已作废但 scaffold 结尾仍在打印）。
+
+SCRIPTS = PIPELINE / "scripts"
+TEMPLATES = PIPELINE / "templates"
+_TEMPLATE_TEXT = {".md", ".tmpl", ".toml", ".txt", ".py", ".yaml", ".ts", ".tsx"}
+#: `scripts/xxx.py` 指名（注释与字符串都算——都是给人看的指引）。前缀不限：
+#: `$T/pipeline/scripts/x.py` 是文案里的主流写法，排除 `/` 前缀会漏掉绝大多数。
+_SCRIPT_REF_RE = re.compile(r"(?<!\w)scripts/([a-z_][a-z0-9_]*\.py)")
+#: 把 `--ignore-workspace` 当命令参数给出的形态；`[\s#]` 跨过换行与注释续行符
+#: （skeleton.toml 注释曾把这条命令断在两行，逐行扫描因此漏检）。
+_IGNORE_WS_CMD_RE = re.compile(r"pnpm install[\s#]+--ignore-workspace")
+#: 同一 flag 的 .npmrc 配置形态：pnpm ≥11 不从 .npmrc 读它（实测 11.25.0 / 12.2.1
+#: `pnpm config get ignore-workspace` 恒 undefined），写了只会误导隔离机制的归属。
+_IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
+
+
+def _rel(f: Path) -> Path:
+    root = PIPELINE.parent
+    return f.relative_to(root) if f.is_relative_to(root) else f
+
+
+def user_facing_files() -> list[Path]:
+    """用户照做的文案面：机制脚本（门报错 / 脚手架提示）、规格与门面文档、模板
+    （含注释——scaffold 原样复制，新集作者会读）。"""
+    templates = sorted(
+        p
+        for p in TEMPLATES.rglob("*")
+        if p.is_file() and p.suffix in _TEMPLATE_TEXT and "node_modules" not in p.parts
+    )
+    return (
+        sorted(SCRIPTS.glob("*.py"))
+        + sorted(SKILLS.glob("*.md"))
+        + [README, SKILL_MD, RSI_MD, PLAYBOOK_MD]
+        + templates
+    )
+
+
+def test_script_references_resolve():
+    """文案里点名的 scripts/*.py 必须真实存在（RSI-006 幽灵脚本回归）。
+
+    分集侧薄包装（build_narration/tts/qa_frames）与 skill 同名，同样落在
+    pipeline/scripts/ 下，故判据统一为「该名在 skill 的 scripts 目录存在」。"""
+    have = {p.name for p in SCRIPTS.glob("*.py")}
+    missing = []
+    for f in user_facing_files():
+        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            for name in _SCRIPT_REF_RE.findall(line):
+                if name not in have:
+                    missing.append(f"{_rel(f)}:{lineno} → scripts/{name}")
+    assert not missing, "点名了不存在的脚本（用户会照着找）：\n  " + "\n  ".join(
+        missing
+    )
+
+
+def test_no_instruction_to_add_ignore_workspace():
+    """用户可见文案不得教人加 `--ignore-workspace`（RSI-005）。
+
+    分集 video/ 已入库 pnpm-workspace.yaml 自锚；pnpm ≥12 加该参数会把工程自身
+    workspace 一并忽略 → ERR_PNPM_IGNORED_BUILDS。允许「勿加 / 不要加」式的
+    警示说明，只拦把它当命令参数给出的形态（含跨行断开的注释），以及模板
+    .npmrc 里的同名死配置。"""
+    offenders = []
+    for f in user_facing_files():
+        text = f.read_text(encoding="utf-8")
+        for m in _IGNORE_WS_CMD_RE.finditer(text):
+            lineno = text.count("\n", 0, m.start()) + 1
+            offenders.append(f"{_rel(f)}:{lineno}")
+    for f in sorted(TEMPLATES.rglob(".npmrc")):
+        text = f.read_text(encoding="utf-8")
+        for m in _IGNORE_WS_NPMRC_RE.finditer(text):
+            offenders.append(f"{_rel(f)}:{text.count(chr(10), 0, m.start()) + 1}")
+    assert not offenders, "文案仍在教人加 --ignore-workspace：\n  " + "\n  ".join(
+        offenders
+    )

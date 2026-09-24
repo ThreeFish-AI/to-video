@@ -65,3 +65,47 @@
 **后续防范**：语言相关常数（音色/语速/长度单位/路径后缀）一律进 `langs.py` 或 `config.SCHEMA`，禁止在消费者内联；tts.py 受 paths.py 导入边界约束不得 import 同目录模块，其内联镜像表由一致性测试钉住；新增门遵循「先探针后成门」（英文读法陷阱须有 TextNormalizer 实测证据）。评审回归（2026-09-24）六条经验：① 失鲜锁不得「重建即刷新」——缺省 `build` 先 zh 后 en 会在 check 前抹掉信号，锁合并取 gettext fuzzy 语义（译句未动则主稿基线不前移，`--accept` 显式确认）；② 逐语言覆写值复用基础层同一校验（`config._is_window`），否则坏窗口只降级为跳门 WARN；③ status/doctor 这类容忍配置 FAIL 的诊断路径，对声明值须先滤非法项再派生路径；④ 分代原子性判定须把 `[[drift]]` 放行的旧文件计入组，否则半同步对 drift 集隐身；⑤ 跨引擎通用的一致性校验须在参数解析处统一执法，不得只挂在某个引擎分支的护栏里（`tts.py` 的 `--lang` / `--narration-lang` 冲突此前仅 edge 拦截，indextts 会以 ZH 归一化合成英文稿）；⑥ 从多个输入推断同一维度时，每个输入都须参与推断并互校（qa `--compare` 两路径曾被忽略，en 对拍静默取 zh 时间轴）。
 
 **同类问题影响**：`tts_progress.py` 秒/字基线与 `tts.py` `--plan` 4.2 s/句均为 zh 标定，en 侧只报不判（首集英文实测后校准）；series.json 标题仅 zh，`check_series` 他集标题互查与 `deliver` 英文命名暂以 zh 标题为事实源。
+
+## RSI-005 scaffold 结尾提示仍写 `pnpm install --ignore-workspace`，与 ISSUE-175 后的既定结论相悖
+
+**表因**：`scaffold.py` 的「接下来必须人工完成」结尾提示第 7 条仍打印 `cd video && pnpm install --ignore-workspace`。2026-09 结论反转后（各分集 video/ 已入库 pnpm-workspace.yaml 自锚 + allowBuilds esbuild，见 ISSUE-175），加 `--ignore-workspace` 会把分集自己的 workspace 一并忽略，install 以 ERR_PNPM_IGNORED_BUILDS 非零退出、node_modules 半残——新集首装即踩。
+
+**根因**：提示文案是 ISSUE-175 改造时唯一漏改的第四处声明（机制本体、README、06 规格命令闭环均已改裸 install）；scaffold 输出无人回归（新集脚手架是低频路径）。
+
+**定性**：低危高摩擦——失败形态可自愈（去掉 flag 重跑即过），但非零退出与半残 node_modules 会让首次使用者误判工程损坏。
+
+**处理方式**：scaffold.py:198 结尾提示改为裸 `pnpm install`，并在同句写明「勿加 --ignore-workspace」的理由；新增 `test_docs_paths::test_no_instruction_to_add_ignore_workspace`，在用户可见文案面（scripts/*.py、skills/*.md、README / SKILL.md / RSI.md / 建模手册、templates/ 文本文件）**整文件**匹配 `pnpm install[\s#]+--ignore-workspace` 的命令形态（允许「勿加」式警示散文）。回退修复后该测试点名 `scaffold.py:198` 为红。评审补漏：`templates/video-skeleton/skeleton.toml:13-14` 注释仍写「每集必须 `pnpm install --ignore-workspace` 独立可渲染」——命令被换行断成两行，逐行 grep 与初版逐行测试均漏检；注释已改为裸 install 口径，测试改为跨行匹配并纳入 templates/（修正前该测试点名 `skeleton.toml:13` 为红）。
+
+**后续防范**：命令提示文案与机制命令闭环同源漂移——改命令形态时全仓检索旧 flag，且须跨行检索（注释 / 散文会把命令断行）。
+
+**同类问题影响**：README quickstart、06 / 09 规格与 pipeline.py 机制本体已为裸 install 口径。同一 flag 的配置文件形态——frozen `video/.npmrc` 的 `ignore-workspace=true`——经探针确认为死配置：pnpm 11.25.0 / 12.2.1 下 `pnpm config get ignore-workspace` 恒为 undefined，同文件的 `registry` 照常生效（pnpm ≥11 只从 .npmrc 读认证 / registry 类配置），而它的注释还陈述已被推翻的隔离机制。处理：模板 `.npmrc` 改为只含说明（隔离由 pnpm-workspace.yaml 自锚承担）；已发布的 14 集登记 `[[generation]] npmrc-inert-key`（旧文件指纹 `b632c275ddae`）合法停在旧代，下次重渲时同步，negentropy 侧零改动；RSI-005 测试追加「模板 .npmrc 不得写 ignore-workspace」（旧模板为红）。核验真树骨架门时顺带清掉两处既有未登记漂移：jev 集整组停在 bilingual-i18n 旧代（6 文件指纹与 legacy 逐一相同）但漏入花名册，补入 roster；agent-skills 集 Main.tsx 归一化后与旧代仅差一个空行（regioned 指纹空行陷阱），按逃逸口登记带指纹的 `[[drift]]`。`TO_VIDEO_WORKSPACE=<negentropy-influence> verify_skeleton.py --strict` 由未登记 7 处转为 0 处。
+
+## RSI-006 覆盖门 WARN 的修复指引指向不存在的 scripts/archify_types.py
+
+**表因**：`check_archify_coverage.py` 对「sidecar 缺 type 字段」的 WARN 文案给出修复指引「用 scripts/archify_types.py 回填」，但 skill 仓 `pipeline/scripts/` 下并无该脚本（2026-09-24 实测）。录制器对 lifecycle / 无框 architecture 的指纹嗅探存在已知盲区（14/67 丢型先例），丢型后唯一的人工回填通道是个指向幽灵脚本的提示。jev-decision-model-video 实测 5/13 图丢型，手工改 sidecar JSON 的 type 字段后图型由「untyped 计 1 种」恢复为 5 种。
+
+**根因**：回填脚本从未落地（或曾以 ad-hoc 形态存在过、未随门文案一起入库）；门文案与工具面漂移。
+
+**定性**：低危高摩擦——数据面可手改，但指引失灵会让使用者先在错误路径上找工具。
+
+**处理方式**：方案比选取后者（最小干预）——不新增脚本：录制器已有 `--type` 参数、`record_archify_all.prior_type` 重录时会保住 sidecar 既有 type，缺的只是「丢型后怎么补」的真实指路。覆盖门 WARN、覆盖门注释、archify_manifest 注释三处改为如实指向「在 video/public/archify/<slug>.json 顶层写回 type」；新增 `test_docs_paths::test_script_references_resolve`，用户可见文案面（同 RSI-005 受检面）点名的任何 `scripts/*.py` 必须真实存在。回退修复后该测试点名三处幽灵引用为红。评审补漏两处：① 初版正则以 `(?<![\w/])` 排除了 `$T/pipeline/scripts/x.py` 这一主流写法，scripts/*.py 的 68 处点名只查到 9 处，放宽为 `(?<!\w)` 并扩到文档与模板后受检面为 85 个文件 239 处、全部存在；② 初版 WARN 写「重录时自动保留」不准——只有 `record_archify_all.py` 经 `prior_type` 透传，单图 `record_archify.py` 不带 `--type` 重录会重新嗅探并覆盖（`record_archify.py` 的 `a.type or _sniff_diagram_type(src)`），WARN 与覆盖门注释已如实区分两条路径。
+
+**后续防范**：门文案里凡指名脚本的，加一条「脚本存在性」测试断言（抽取文案中的 scripts/*.py 名单对照文件面）。
+
+**同类问题影响**：与 RSI-005 同型——文案与机制面缺乏一致性执法。
+
+## RSI-007 画面文字逐字复述口播，与烧录字幕叠成上下两层相同文字
+
+**表因**：jev-decision-model-video 成片中，11 句口播在画面里另有一张逐字相同的文字卡（P6 收尾金句卡「当每一次判断都便宜到可以随手来一次——」、P6 用法清单四条、P1「打分不是每个选项各算各的」判词等），底部 frozen Subtitle 又逐句烧录同一句——观众看到上下两层同一句话。用户审片时指为严重问题。
+
+**复现**：对 jev-decision-model-video 修复前的场景代码跑 `check_script.py --project <集> --check-scenes`（本修复后的版本）→ `FAIL 11`，逐条点名文件行号与句 id。评审发现初版门在合入后的 jev 集（negentropy#1172）上报 0 是**假绿**：多行 JSX 文本全漏，残留 9 处（如 `P0Cost.tsx:76`「每个 Agent 系统里，都塞满了各种小判断」serif 33px 上屏）。修订版门在 negentropy 全部 14 集上的存量（初版 → 修订版）：self-improving 10→26、explained 8→9、experience-era 1→8、jev 0→9、agent-skills 5→7、concurrency 6→6、memory 5→6、multiagent 4→4、planning 2→2、context-layer 2→2、openviking 1→2、dream-rsi 0→1、self-evolving 0→3、horizon 0→0，合计 44→85（其中 2 处来自跨行续写拼接：self-evolving `P0Hook.tsx:338` 以 `<br />` 断行的 88px 标题、`P4Eval.tsx:297` 清单块）；抽检 16 条新增命中全部为上屏文字。
+
+**根因**：画面文字的职责没有写进任何规格——05 分镜只要求「写清画面主体与角标」，06 渲染红线查的是位置（字幕带避让）不是内容；自动 QA（qa_frames --check）只看黑帧、冻帧与安全区侵入，对文字是否与字幕重复完全失明。场景代理在「金句卡 / 清单 / 判词」这类装置上最自然的写法就是把口播原句放上屏。
+
+**定性**：内容质量缺陷，但属 Skill 缺陷类（规格缺条款 + 门缺判据，14 集中 13 集复发）——走 RSI。
+
+**处理方式**：`check_script.py` 新增 `check_caption_duplication`，**缺省执法**（不依赖 `--check-scenes`：`pipeline.py check`、`all` 与 ⑨ 重渲前的 check 步骤都会跑到，忘带 flag = 检查面静默缩小，同 ISSUE-168），zh / en 完整门各自对本语言字幕面执法（en 版 `<L en>` 与英文字幕同样会叠层），`--pre-tts` 不跑。提取面：场景代码中的引号 / 反引号字符串、同行 JSX 标签间文本、整行裸文本，以及相邻裸文本行（同一 JSX 文本节点的续写，`<br />` 不断段）的拼接段，归一化（NFKC 后只留字母数字与汉字）后与口播句（narration.json 的 text，即字幕面）比对——整句相等（≥4 字）、≥10 字且覆盖该句 ≥70% 的子串、或 ≥10 字的整句落在字面量内，任一即 FAIL 并点名行号与句 id。覆盖率判据而非裸子串：截去句首「所以」的复述照样拦，「选项之间 ⇄ 互相牵动」这类关键词锚点不误伤。Pn 前缀场景文件只比本幕句子（别幕回扣同句时字幕不在屏上），注释行跳过；章节标题卡、同幕跨镜回扣等刻意复述，在命中行或上一行注 `caption-dup-ok: <理由>` 逐处豁免（理由必填），降为 WARN 留痕——逃逸口必须存在且必须被记录（同 [[drift]] 立场）。05 分镜规格加一条「画面文字不复述口播」指向该门，`--check-scenes` 帮助文案同步改正（此前写「WARN-only」，实际含 ISSUE-190 与本门两类 FAIL）。回归测试 5 组（失败形态含缺省执法 / 七种字面量写法参数化 / 锚点·注释·跨幕回扣不误伤 / 豁免须写理由 / en 字幕面）。
+
+**后续防范**：画面文字只放字幕给不了的信息（关键词 / 数字 / 标签 / 结构）；金句卡若必须存在，与口播措辞拉开（口播完整句、画面关键词）。评审回归（2026-09-24）三条经验：① 源码扫描门的红绿对照必须覆盖该源码的**主流写法**（这里是 JSX 文本独占一行），只拿单行构造样例验证，「修复后 0」会是假绿；② 正则提取成对定界符时不能设长度下限，否则短匹配失败后错位配对会吞掉后文（`at('p0-01')` 后的正文）；③ FAIL 级判据须贴合缺陷的物理条件（同屏）：别幕回扣与注释都不构成两层重复，误报会逼人绕门。
+
+**同类问题影响**：negentropy 13 集有存量（合计 85 处，见复现），均为已发布成片，本 PR 不改其内容。本门缺省执法后，这些集在 `pipeline.py check` / `all` 上会红，重渲前必须先修（或逐处以 `caption-dup-ok` 说明）；jev 集是本缺陷的发现集，残留 9 处须优先修。

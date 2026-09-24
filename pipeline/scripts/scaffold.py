@@ -195,7 +195,7 @@ def main() -> int:
         "  6. 登记到 series.json（漏登无阻塞门：verify_skeleton.py 会点名警告孤儿目录）"
     )
     print(
-        "  7. cd video && pnpm install --ignore-workspace（装完核对根 lockfile 零变更）"
+        "  7. cd video && pnpm install（裸 install——分集 pnpm-workspace.yaml 已自锚；勿加 --ignore-workspace，会连本工程 workspace 一并忽略致 ERR_PNPM_IGNORED_BUILDS。装完核对根 lockfile 零变更）"
     )
     print(
         f"\n  冻结档位与漂移判据见 {TEMPLATE / 'skeleton.toml'}"

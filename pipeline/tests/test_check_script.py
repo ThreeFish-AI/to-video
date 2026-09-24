@@ -403,6 +403,155 @@ def test_scene_anchor_unknown_id_fails(project):
     assert "at()/dur()" not in out, out
 
 
+DUP_BOARD = (
+    "| 镜 | 句区间 | 画面 | 动效 |\n|---|---|---|---|\n| 0-A | p0-01..02 | 卡 | y |\n"
+)
+
+
+def dup_lines(out: str) -> list[str]:
+    return [line for line in out.splitlines() if "逐字复述口播" in line]
+
+
+def test_caption_duplication_fails(project):
+    """RSI-007：画面文字逐字复述口播 → FAIL（烧录字幕已逐句上屏，同屏两层重复）。
+
+    钉实测形态：整句照抄、去掉句首连接词的复述（覆盖率判据）、带发音标注的
+    口播句（比对字幕面 text——build 期已剥标注，ttsText 不参与）、短于覆盖率
+    长度门的短句整句照抄；非幕文件（无 Pn 前缀）回落全片句子比对。缺省执法：
+    不带 --check-scenes 也跑（忘带 flag = 检查面静默缩小，all / check 同此）。"""
+    write_board(project, DUP_BOARD)
+    write_config(project, CFG_OK)
+    write_narration(
+        project,
+        [
+            "所以打分不是每个选项各算各的，选项之间会互相影响。",
+            "名字叫Jev，官方管这类模型叫系统一模型。",
+            "你会拿它，去量什么？",
+            BENIGN,
+        ],
+    )
+    nj = project / "script" / "narration.json"
+    items = json.loads(nj.read_text(encoding="utf-8"))
+    items[1]["ttsText"] = "名字叫<Jev|JH EH1 V>，官方管这类模型叫系统一模型。"
+    nj.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const a = at('p0-01');\n"
+        "<div>{'打分不是每个选项各算各的 —— 选项之间会互相影响'}</div>\n"
+        "<div>{'名字叫Jev，官方管这类模型叫系统一模型'}</div>\n",
+    )
+    write_scene(project, "P1Card.tsx", "<div>{'你会拿它，去量什么？'}</div>\n")
+    write_scene(
+        project, "Callouts.tsx", "<b>{'名字叫Jev，官方管这类模型叫系统一模型'}</b>\n"
+    )
+    rc, out = run_check(project)
+    dup = dup_lines(out)
+    assert rc == 1, out
+    # 截去句首「所以」照样拦
+    assert any("P0Card.tsx:2 " in line and "p0-01" in line for line in dup), out
+    # 标注句按字幕面比对
+    assert any("P0Card.tsx:3 " in line and "p0-02" in line for line in dup), out
+    # 短句整句照抄不受长度门豁免
+    assert any("P1Card.tsx:1 " in line and "p1-01" in line for line in dup), out
+    # 非幕文件回落全片
+    assert any("Callouts.tsx:1 " in line and "p0-02" in line for line in dup), out
+
+
+@pytest.mark.parametrize(
+    ("sentence", "scene_src"),
+    [
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "{show(at('p1-01')) && <Quote text='当每一次判断都便宜到可以随手来一次——' />}",
+            id="同行先有短句id-引号不错配",
+        ),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "<Quote text={`当每一次判断都便宜到可以随手来一次`} />",
+            id="模板字符串",
+        ),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "<div style={{fontSize: 33}}>\n  当每一次判断都便宜到可以随手来一次——\n</div>",
+            id="JSX文本独占一行",
+        ),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            '<L zh="结论：当每一次判断都便宜到可以随手来一次" en="x" />',
+            id="整句被包含-加前缀标签",
+        ),
+        pytest.param("就这么简单。", "<b>{'就这么简单'}</b>", id="4到5字短句整句照抄"),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "<div>\n  当每一次判断都便宜到\n  可以随手来一次——\n</div>",
+            id="同一文本节点跨行续写",
+        ),
+        pytest.param(
+            "当每一次判断都便宜到可以随手来一次——",
+            "<div>\n  当每一次判断，\n  <br />\n  都便宜到可以随手来一次\n</div>",
+            id="br换行不断段",
+        ),
+    ],
+)
+def test_caption_duplication_literal_shapes(project, sentence, scene_src):
+    """RSI-007 评审回归：场景代码的常见上屏写法都须被提取——此前多行 JSX 文本
+    全漏，已合入的 jev 集因此残留 9 处复述而门报 0。"""
+    write_board(project, DUP_BOARD)
+    write_config(project, CFG_OK)
+    write_narration(project, [BENIGN, BENIGN, BENIGN, sentence])
+    write_scene(project, "P1Quote.tsx", "const a = at('p1-01');\n" + scene_src + "\n")
+    _rc, out = run_check(project)
+    assert any("P1Quote.tsx" in line and "p1-02" in line for line in dup_lines(out)), (
+        out
+    )
+
+
+def test_caption_duplication_spares_keyword_anchors(project):
+    """RSI-007：关键词 / 数字 / 标签锚点、注释、跨幕回扣均不误伤——字幕只在该句
+    播出时上屏，别幕引用同句不构成同屏两层。"""
+    write_board(project, DUP_BOARD)
+    write_config(project, CFG_OK)
+    s = "所以打分不是每个选项各算各的，选项之间会互相影响。"
+    write_narration(project, [s, BENIGN, BENIGN, BENIGN])
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const a = at('p0-01');\n"
+        "<div>{'选项之间 ⇄ 互相牵动'}</div>\n"  # 关键词锚点（< DUP_MIN_CHARS）
+        "<div>{'13% 的答案跟着翻面 · 第三方实测'}</div>\n"  # 补充信息，非口播句
+        f"// 对应口播 '{s}'\n"
+        f'{{/* "{s}" */}}\n'
+        f' * 0-A："{s}"\n',
+    )
+    write_scene(project, "P1Ending.tsx", f"<div>{{'{s}'}}</div>\n")  # 片尾回扣 P0 句
+    _rc, out = run_check(project)
+    assert not dup_lines(out), out
+
+
+def test_caption_duplication_opt_out_needs_reason(project):
+    """RSI-007：刻意复述（章节标题卡、同幕跨镜回扣）以 `caption-dup-ok: <理由>`
+    逐处豁免——命中行或上一行注明，降为 WARN 留痕；无理由的标记不算豁免。"""
+    write_board(project, DUP_BOARD)
+    write_config(project, CFG_OK)
+    s = "所以打分不是每个选项各算各的，选项之间会互相影响。"
+    write_narration(project, [s, BENIGN, BENIGN, BENIGN])
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "{/* caption-dup-ok: 章节标题卡，口播即标题 */}\n"
+        f"<ChapterCard title='{s}' />\n"
+        f"<Recap text='{s}' /> // caption-dup-ok: 幕尾回扣\n"
+        "{/* caption-dup-ok: */}\n"
+        f"<Quote text='{s}' />\n",
+    )
+    _rc, out = run_check(project)
+    assert "P0Card.tsx:2 画面文字复述口播 p0-01（caption-dup-ok 豁免：章节标题卡" in out
+    assert "P0Card.tsx:3 画面文字复述口播 p0-01（caption-dup-ok 豁免：幕尾回扣" in out
+    assert [line for line in dup_lines(out) if "P0Card.tsx:5 " in line], out
+    assert len(dup_lines(out)) == 1, out
+
+
 # ---------------- --lang en：译稿门集（RSI-004）----------------
 #
 # fixture 的 zh narration.json 有 4 句（p0-01/02 · P0，p1-01/02 · P1），en 侧
@@ -612,6 +761,22 @@ def test_pre_tts_en_runs_text_gates_and_blocks_on_stale_lock(project):
     rc, out = run_check(project, "--pre-tts", "--lang", "en")
     assert rc == 1
     assert "基线锁失配" in out
+
+
+def test_caption_duplication_en_checks_english_subtitle_face(project):
+    """RSI-007 双语：en 版字幕是英文，`<L en>` 与英文字幕逐字相同同样叠层——en 门
+    缺省执法、对英文字幕面比对；中文画面文字不与英文字幕互判。"""
+    setup_en(project)
+    write_scene(
+        project,
+        "P1Quote.tsx",
+        '<L zh="结尾金句" en="A slightly longer closing line" />\n'
+        "<div>{'这是一句普通的中文口播'}</div>\n",
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1, out
+    assert any("P1Quote.tsx:1 " in line and "p1-02" in line for line in dup_lines(out))
+    assert not [line for line in dup_lines(out) if "P1Quote.tsx:2 " in line], out
 
 
 def test_check_scenes_en_reports_untranslated_literals(project):
