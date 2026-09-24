@@ -403,6 +403,65 @@ def test_scene_anchor_unknown_id_fails(project):
     assert "at()/dur()" not in out, out
 
 
+def test_caption_duplication_fails(project):
+    """RSI-007：画面文字逐字复述口播 → FAIL（烧录字幕已逐句上屏，同屏两层重复）。
+
+    钉四种实测形态：整句照抄、去掉句首连接词的复述（覆盖率判据）、含发音标注
+    的口播句（读音半边不参与比对）、短于覆盖率长度门的短句整句照抄。"""
+    board = "| 镜 | 句区间 | 画面 | 动效 |\n|---|---|---|---|\n| 0-A | p0-01..02 | 卡 | y |\n"
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    write_narration(
+        project,
+        [
+            "所以打分不是每个选项各算各的，选项之间会互相影响。",
+            "名字叫<Jev|JH EH1 V>，官方管这类模型叫系统一模型。",
+            "你会拿它，去量什么？",
+            BENIGN,
+        ],
+    )
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const a = at('p0-01');\n"
+        "<div>{'打分不是每个选项各算各的 —— 选项之间会互相影响'}</div>\n"
+        "<div>{'名字叫Jev，官方管这类模型叫系统一模型'}</div>\n"
+        "<div>{'你会拿它，去量什么？'}</div>\n",
+    )
+    rc, out = run_check(project, "--check-scenes")
+    dup = [line for line in out.splitlines() if "逐字复述口播" in line]
+    assert rc == 1, out
+    assert any("p0-01" in line and ":2 " in line for line in dup), (
+        out
+    )  # 截去句首「所以」照样拦
+    assert any("p0-02" in line and ":3 " in line for line in dup), (
+        out
+    )  # 发音标注剥读音后命中
+    assert any("p1-01" in line and ":4 " in line for line in dup), (
+        out
+    )  # 短句整句照抄不受长度门豁免
+
+
+def test_caption_duplication_spares_keyword_anchors(project):
+    """RSI-007：关键词 / 数字 / 标签锚点不误伤——画面文字补充字幕，不复述字幕。"""
+    board = "| 镜 | 句区间 | 画面 | 动效 |\n|---|---|---|---|\n| 0-A | p0-01..02 | 卡 | y |\n"
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    write_narration(
+        project,
+        ["所以打分不是每个选项各算各的，选项之间会互相影响。", BENIGN, BENIGN, BENIGN],
+    )
+    write_scene(
+        project,
+        "P0Card.tsx",
+        "const a = at('p0-01');\n"
+        "<div>{'选项之间 ⇄ 互相牵动'}</div>\n"  # 关键词锚点（< DUP_MIN_CHARS）
+        "<div>{'13% 的答案跟着翻面 · 第三方实测'}</div>\n",  # 补充信息，非口播句
+    )
+    _rc, out = run_check(project, "--check-scenes")
+    assert "逐字复述口播" not in out, out
+
+
 # ---------------- --lang en：译稿门集（RSI-004）----------------
 #
 # fixture 的 zh narration.json 有 4 句（p0-01/02 · P0，p1-01/02 · P1），en 侧

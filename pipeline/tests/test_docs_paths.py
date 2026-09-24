@@ -211,3 +211,57 @@ def test_relative_links_resolve():
     assert not offenders, (
         "相对链接目标不存在（skill 内链接须可跳转）：\n  " + "\n  ".join(offenders)
     )
+
+
+# ---- 用户可见文案 ↔ 工具面一致性（RSI-005 / RSI-006）----
+#
+# 门的报错指引与脚手架的「下一步」提示是用户照做的命令——它们与机制面漂移时，
+# 使用者先在错误路径上找工具。两类实测漂移：指引点名的脚本根本不存在
+# （RSI-006：scripts/archify_types.py），以及提示教人加一个会弄坏安装的参数
+# （RSI-005：--ignore-workspace，ISSUE-175 后已作废但 scaffold 结尾仍在打印）。
+
+SCRIPTS = PIPELINE / "scripts"
+#: 字符串字面量里的 `scripts/xxx.py` 指名（注释与字符串都算——都是给人看的指引）
+_SCRIPT_REF_RE = re.compile(r"(?<![\w/])scripts/([a-z_][a-z0-9_]*\.py)")
+
+
+def test_script_references_in_mechanism_resolve():
+    """机制代码里点名的 scripts/*.py 必须真实存在（RSI-006 幽灵脚本回归）。
+
+    只查 skill 仓自有脚本名：分集侧薄包装（build_narration/tts/qa_frames）与
+    skill 同名，同样落在 pipeline/scripts/ 下，故判据统一为「该名在 skill 的
+    scripts 目录存在」。"""
+    have = {p.name for p in SCRIPTS.glob("*.py")}
+    missing = []
+    for py in sorted(SCRIPTS.glob("*.py")):
+        for lineno, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
+            for name in _SCRIPT_REF_RE.findall(line):
+                if name not in have:
+                    missing.append(f"{py.name}:{lineno} → scripts/{name}")
+    assert not missing, "点名了不存在的脚本（用户会照着找）：\n  " + "\n  ".join(
+        missing
+    )
+
+
+def test_no_instruction_to_add_ignore_workspace():
+    """用户可见文案不得教人加 `--ignore-workspace`（RSI-005）。
+
+    分集 video/ 已入库 pnpm-workspace.yaml 自锚；pnpm ≥12 加该参数会把工程自身
+    workspace 一并忽略 → ERR_PNPM_IGNORED_BUILDS。允许「勿加 / 不要加」式的
+    警示说明，只拦把它当命令参数给出的形态（`pnpm install --ignore-workspace`）。"""
+    offenders = []
+    targets = (
+        sorted(SCRIPTS.glob("*.py"))
+        + sorted(SKILLS.glob("*.md"))
+        + [
+            PIPELINE / "README.md",
+            skill_root() / "SKILL.md",
+        ]
+    )
+    for f in targets:
+        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"pnpm install\s+--ignore-workspace", line):
+                offenders.append(f"{f.name}:{lineno}")
+    assert not offenders, "文案仍在教人加 --ignore-workspace：\n  " + "\n  ".join(
+        offenders
+    )

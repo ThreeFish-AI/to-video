@@ -21,7 +21,8 @@ words_per_min 对 narration.en.target_minutes 窗口（缺省点名跳过，不�
 t({zh, en}) 双语对的含汉字字面量，WARN-only）。
 
 可选 --check-scenes：从 video/src/scenes/*.tsx 提取 beatWindow/w('id','id')
-调用，与分镜表互比（WARN-only，TSX 正则本质近似）。
+调用，与分镜表互比（WARN-only，TSX 正则本质近似）；另查画面文字逐字复述口播
+（FAIL——烧录字幕已逐句上屏，同屏两层相同文字，RSI-007）。
 
 可选 --check-motion：分镜「动效」列的 @动词 标注 ↔ 场景代码运动模型调用互比
 （WARN-only）。动效列可写 `@enter:fall`、`@stagger`、`@draw` 等（动词表从本集
@@ -494,6 +495,65 @@ def check_fade_invariant(root: Path, msgs: list[str]) -> None:
         )
 
 
+#: 画面文字 ↔ 口播逐字重合判定的归一化：剥去标点空白与发音标注的读音半边，
+#: 只比汉字与字母数字——「选项之间会互相影响」与「选项之间，会互相影响。」同源。
+_DUP_STRIP_RE = re.compile(r"[\s　-〿＀-／：-＠·—–\-…,.!?:;'\"“”‘’()\[\]/|]")
+_PRON_RE = re.compile(r"<([^|>]+)\|[^>]+>")
+#: TSX 里可能上屏的字面量：单/双引号字符串，以及 JSX 标签间的裸文本。
+_SCENE_TEXT_RE = re.compile(r"'([^'\n]{6,})'|\"([^\"\n]{6,})\"|>([^<>{}\n]{6,})<")
+#: 「部分覆盖」判据的最短长度——短字面量作为子串天然会撞进长句（标签、单词级
+#: 锚点），不设门会误伤。
+DUP_MIN_CHARS = 10
+#: 「整句相等」判据的最短长度，远低于上者（短句照抄同样是两层重复）；只防单字/
+#: 双字字面量（「是」「对」）与极短口播句误配。
+DUP_EXACT_MIN_CHARS = 4
+#: 字面量覆盖口播句的比例达到此值即视为「整句复述」（截掉句首连接词的复述照样拦）。
+DUP_MIN_COVERAGE = 0.7
+
+
+def _dup_norm(s: str) -> str:
+    return _DUP_STRIP_RE.sub("", _PRON_RE.sub(r"\1", s))
+
+
+def check_caption_duplication(root: Path, items: list[dict], msgs: list[str]) -> None:
+    """画面文字逐字复述口播 → FAIL（烧录字幕已逐句上屏，同屏两层相同文字）。
+
+    Subtitle 是 frozen 全片 overlay，每句口播必然出现在底部字幕带；场景里再放
+    一张与该句逐字相同的文字卡（金句卡 / 清单条 / 判词条），观众看到的就是上下
+    两层同一句话。画面文字的职责是补充字幕给不了的信息（数字、标签、关键词、
+    结构），不是复述。判据取「归一化后整句相等（≥DUP_EXACT_MIN_CHARS 字，短句照抄
+    同样拦），或字面量 ≥DUP_MIN_CHARS 字且覆盖该句 ≥DUP_MIN_COVERAGE」——覆盖率
+    而非子串，截掉句首「所以」的复述照样拦，而「选项之间 ⇄ 互相牵动」这类关键词
+    锚点不误伤。
+    """
+    scenes_dir = root / "video" / "src" / "scenes"
+    if not scenes_dir.is_dir():
+        return
+    sents = [(it["id"], _dup_norm(it["text"])) for it in items]
+    for tsx in sorted(scenes_dir.glob("*.tsx")):
+        for lineno, line in enumerate(tsx.read_text(encoding="utf-8").splitlines(), 1):
+            for groups in _SCENE_TEXT_RE.findall(line):
+                lit = next(g for g in groups if g)
+                n = _dup_norm(lit)
+                if len(n) < DUP_EXACT_MIN_CHARS:
+                    continue
+                for sid, s in sents:
+                    exact = n == s
+                    partial = (
+                        len(n) >= DUP_MIN_CHARS
+                        and n in s
+                        and len(n) >= DUP_MIN_COVERAGE * len(s)
+                    )
+                    if s and (exact or partial):
+                        fail(
+                            msgs,
+                            f"{tsx.name}:{lineno} 画面文字逐字复述口播 {sid}"
+                            f"「{lit.strip()[:24]}」——字幕已烧录同句，同屏两层重复；"
+                            "画面文字改为关键词/数字/标签锚点",
+                        )
+                        break
+
+
 def check_scenes(
     root: Path,
     beats: list[tuple[str, str, str, str]],
@@ -687,6 +747,7 @@ def main() -> None:
         check_fade_invariant(root, msgs)
         if args.check_scenes:
             check_scenes(root, beats, msgs, known_ids={i["id"] for i in items})
+            check_caption_duplication(root, items, msgs)
         if args.check_motion:
             check_motion(root, msgs)
 

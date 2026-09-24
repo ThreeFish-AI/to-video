@@ -623,8 +623,9 @@ def main() -> None:
             infos.append(
                 "audio/manifest.json 或 timing.json 缺失——跳过 cue 密度门（先跑 tts）"
             )
-    # 图型多样性：sidecar 顶层 type（record_archify.py --type 落盘；旧 sidecar 由
-    # scripts/archify_types.py 回填）。缺 type 归 untyped 计 1 种——旧集默认恒过
+    # 图型多样性：sidecar 顶层 type（record_archify.py --type 落盘；嗅探盲区丢型时
+    # 手工写回 sidecar 的 type 字段，重录时 record_archify_all 的 prior_type 会保住它）。
+    # 缺 type 归 untyped 计 1 种——旧集默认恒过
     types_seen: set[str] = set()
     untyped: list[str] = []
     for f in sidecars:
@@ -647,7 +648,8 @@ def main() -> None:
         warns.append(
             f"{len(untyped)} 个 sidecar 缺 type 字段（归 untyped 计 1 种）："
             f"{'/'.join(untyped[:6])}{'…' if len(untyped) > 6 else ''}"
-            "——用 scripts/archify_types.py 回填"
+            '——在 video/public/archify/<slug>.json 顶层写回 "type"'
+            "（architecture/workflow/sequence/dataflow/lifecycle；重录时自动保留）"
         )
     # lead_sec 全 0 拦截：录制器恒写 0.0，漏跑 archify_lead.py 会把场记板白闪
     # 播进成片且此前**无门可拦**（ISSUE-193 审计补门）。**按图**判：增量重录

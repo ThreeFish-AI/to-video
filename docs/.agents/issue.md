@@ -65,3 +65,47 @@
 **后续防范**：语言相关常数（音色/语速/长度单位/路径后缀）一律进 `langs.py` 或 `config.SCHEMA`，禁止在消费者内联；tts.py 受 paths.py 导入边界约束不得 import 同目录模块，其内联镜像表由一致性测试钉住；新增门遵循「先探针后成门」（英文读法陷阱须有 TextNormalizer 实测证据）。评审回归（2026-09-24）六条经验：① 失鲜锁不得「重建即刷新」——缺省 `build` 先 zh 后 en 会在 check 前抹掉信号，锁合并取 gettext fuzzy 语义（译句未动则主稿基线不前移，`--accept` 显式确认）；② 逐语言覆写值复用基础层同一校验（`config._is_window`），否则坏窗口只降级为跳门 WARN；③ status/doctor 这类容忍配置 FAIL 的诊断路径，对声明值须先滤非法项再派生路径；④ 分代原子性判定须把 `[[drift]]` 放行的旧文件计入组，否则半同步对 drift 集隐身；⑤ 跨引擎通用的一致性校验须在参数解析处统一执法，不得只挂在某个引擎分支的护栏里（`tts.py` 的 `--lang` / `--narration-lang` 冲突此前仅 edge 拦截，indextts 会以 ZH 归一化合成英文稿）；⑥ 从多个输入推断同一维度时，每个输入都须参与推断并互校（qa `--compare` 两路径曾被忽略，en 对拍静默取 zh 时间轴）。
 
 **同类问题影响**：`tts_progress.py` 秒/字基线与 `tts.py` `--plan` 4.2 s/句均为 zh 标定，en 侧只报不判（首集英文实测后校准）；series.json 标题仅 zh，`check_series` 他集标题互查与 `deliver` 英文命名暂以 zh 标题为事实源。
+
+## RSI-005 scaffold 结尾提示仍写 `pnpm install --ignore-workspace`，与 ISSUE-175 后的既定结论相悖
+
+**表因**：`scaffold.py` 的「接下来必须人工完成」结尾提示第 7 条仍打印 `cd video && pnpm install --ignore-workspace`。2026-09 结论反转后（各分集 video/ 已入库 pnpm-workspace.yaml 自锚 + allowBuilds esbuild，见 ISSUE-175），加 `--ignore-workspace` 会把分集自己的 workspace 一并忽略，install 以 ERR_PNPM_IGNORED_BUILDS 非零退出、node_modules 半残——新集首装即踩。
+
+**根因**：提示文案是 ISSUE-175 改造时唯一漏改的第四处声明（机制本体、README、06 规格命令闭环均已改裸 install）；scaffold 输出无人回归（新集脚手架是低频路径）。
+
+**定性**：低危高摩擦——失败形态可自愈（去掉 flag 重跑即过），但非零退出与半残 node_modules 会让首次使用者误判工程损坏。
+
+**处理方式**：scaffold.py:198 结尾提示改为裸 `pnpm install`，并在同句写明「勿加 --ignore-workspace」的理由；新增 `test_docs_paths::test_no_instruction_to_add_ignore_workspace`，扫描 scripts/*.py、skills/*.md、pipeline/README.md、SKILL.md 中 `pnpm install --ignore-workspace` 的命令形态（允许「勿加」式警示散文）。回退修复后该测试点名 `scaffold.py:198` 为红。
+
+**后续防范**：命令提示文案与机制命令闭环同源漂移——改命令形态时 grep 全仓旧 flag（本次 `--ignore-workspace` 存量即此一处）。
+
+**同类问题影响**：README quickstart 与 06 规格已为裸 install 口径，无第二处。
+
+## RSI-006 覆盖门 WARN 的修复指引指向不存在的 scripts/archify_types.py
+
+**表因**：`check_archify_coverage.py` 对「sidecar 缺 type 字段」的 WARN 文案给出修复指引「用 scripts/archify_types.py 回填」，但 skill 仓 `pipeline/scripts/` 下并无该脚本（2026-09-24 实测）。录制器对 lifecycle / 无框 architecture 的指纹嗅探存在已知盲区（14/67 丢型先例），丢型后唯一的人工回填通道是个指向幽灵脚本的提示。jev-decision-model-video 实测 5/13 图丢型，手工改 sidecar JSON 的 type 字段后图型由「untyped 计 1 种」恢复为 5 种。
+
+**根因**：回填脚本从未落地（或曾以 ad-hoc 形态存在过、未随门文案一起入库）；门文案与工具面漂移。
+
+**定性**：低危高摩擦——数据面可手改，但指引失灵会让使用者先在错误路径上找工具。
+
+**处理方式**：方案比选取后者（最小干预）——不新增脚本：录制器已有 `--type` 参数、`record_archify_all.prior_type` 重录时会保住 sidecar 既有 type，缺的只是「丢型后怎么补」的真实指路。覆盖门 WARN、覆盖门注释、archify_manifest 注释三处改为如实指向「在 video/public/archify/<slug>.json 顶层写回 type」；新增 `test_docs_paths::test_script_references_in_mechanism_resolve`，机制代码里点名的任何 `scripts/*.py` 必须真实存在。回退修复后该测试点名三处幽灵引用为红。
+
+**后续防范**：门文案里凡指名脚本的，加一条「脚本存在性」测试断言（抽取文案中的 scripts/*.py 名单对照文件面）。
+
+**同类问题影响**：与 RSI-005 同型——文案与机制面缺乏一致性执法。
+
+## RSI-007 画面文字逐字复述口播，与烧录字幕叠成上下两层相同文字
+
+**表因**：jev-decision-model-video 成片中，11 句口播在画面里另有一张逐字相同的文字卡（P6 收尾金句卡「当每一次判断都便宜到可以随手来一次——」、P6 用法清单四条、P1「打分不是每个选项各算各的」判词等），底部 frozen Subtitle 又逐句烧录同一句——观众看到上下两层同一句话。用户审片时指为严重问题。
+
+**复现**：对 jev-decision-model-video 修复前的场景代码跑 `check_script.py --project <集> --check-scenes`（本修复后的版本）→ `FAIL 11`，逐条点名文件行号与句 id；同一门在既有集上：agent-skills-video 5 句、context-layer-video 2 句、openviking-video 1 句、horizon-context-video / dream-rsi-video 0 句（这三集已发布成片，本 PR 不改其内容）。
+
+**根因**：画面文字的职责没有写进任何规格——05 分镜只要求「写清画面主体与角标」，06 渲染红线查的是位置（字幕带避让）不是内容；自动 QA（qa_frames --check）只看黑帧、冻帧与安全区侵入，对文字是否与字幕重复完全失明。场景代理在「金句卡 / 清单 / 判词」这类装置上最自然的写法就是把口播原句放上屏。
+
+**定性**：内容质量缺陷，但属 Skill 缺陷类（规格缺条款 + 门缺判据，逐集复发且已在 3 集出现）——走 RSI。
+
+**处理方式**：`check_script.py --check-scenes` 新增 `check_caption_duplication`：场景代码中的字符串字面量与 JSX 裸文本，归一化（剥标点空白与发音标注读音半边）后与任一口播句整句相等（≥4 字），或 ≥10 字且覆盖该句 ≥70%，即 FAIL 并点名行号与句 id。覆盖率判据而非子串：截去句首「所以」的复述照样拦，而「选项之间 ⇄ 互相牵动」这类关键词锚点不误伤。05 分镜规格加一条「画面文字不复述口播」指向该门。回归测试 2 条（四种失败形态 + 关键词锚点不误伤）；在 jev 集修复前后代码上红绿对照：FAIL 11 → FAIL 0。
+
+**后续防范**：画面文字只放字幕给不了的信息（关键词 / 数字 / 标签 / 结构）；金句卡若必须存在，与口播措辞拉开（口播完整句、画面关键词）。
+
+**同类问题影响**：agent-skills-video（5 句）与 context-layer-video（2 句）、openviking-video（1 句）存量未改——它们是已发布成片，下次重渲时须先过本门。
