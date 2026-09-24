@@ -35,8 +35,9 @@ tests/test_config.py::test_machine_property_never_in_toml）——~/Documents/vi
     「看似合法版本」的半写文件。
 
 用法：
-  uv run --no-project $T/pipeline/scripts/deliver.py --project $P [--root <路径>] [--dry-run]
-  （经单入口等价：pipeline.py --project $P deliver [--root …] [--dry-run]）
+  uv run --no-project $T/pipeline/scripts/deliver.py --project $P [--lang zh|en]
+          [--root <路径>] [--dry-run]
+  （经单入口等价：pipeline.py --project $P deliver [--lang …] [--root …] [--dry-run]）
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import langs  # noqa: E402 - 后缀/命名规则的单一事实源（pipeline.py 家族）
 import paths  # noqa: E402 - 导入边界见 paths.py 文件头（pipeline.py 家族）
 
 #: 持久统一配置渠道（机器属性注册处 = SKILL.md env 表，同 TO_VIDEO_TTS_STORE）。
@@ -70,14 +72,16 @@ def sanitize(name: str) -> str:
     return _ILLEGAL.sub("-", name.strip())
 
 
-def scan_versions(names: list[str], title: str) -> list[tuple[int, str]]:
+def scan_versions(names: list[str], title: str, sfx: str = "") -> list[tuple[int, str]]:
     """→ [(版本号, 文件名)] 升序。全名 fullmatch + re.escape：
 
     - 标题自带「 v2」尾巴（如《X v2 时代的 Y》）不被计入自己的版本号；
     - 前缀重叠标题（"Y" vs "X Y"）互不抬号；
-    - 非匹配文件（.DS_Store、手工副本、"t v1 (fixed).mp4"）天然免疫。
+    - 非匹配文件（.DS_Store、手工副本、"t v1 (fixed).mp4"）天然免疫；
+    - sfx 为语言后缀（"" = 主语言 zh，".en" = 英文版）：fullmatch 使 zh/en 版本号
+      互不抬号（"T v1.en.mp4" 不是 "T" 的版本，反之亦然——各语言独立计号）。
     """
-    pat = re.compile(re.escape(title) + r" v(\d+)\.mp4")
+    pat = re.compile(re.escape(title) + r" v(\d+)" + re.escape(sfx) + r"\.mp4")
     return sorted((int(m.group(1)), n) for n in names if (m := pat.fullmatch(n)))
 
 
@@ -213,9 +217,17 @@ def warn_if_inside_workspace(root: Path) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="交付归档：out/final.mp4 → <根>/<系列id>/<集标题> vN.mp4（版本号自增）"
+        description="交付归档：out/final[.en].mp4 → <根>/<系列id>/<集标题> vN[.en].mp4"
+        "（版本号按语言独立自增）"
     )
     ap.add_argument("--project", required=True, help="分集工程根（含 out/final.mp4）")
+    ap.add_argument(
+        "--lang",
+        default=langs.PRIMARY,
+        choices=list(langs.LANGS),
+        help="语言版本（默认 zh；源 out/final{sfx}.mp4，命名 <标题> vN{sfx}.mp4，"
+        "版本号按语言独立计号）",
+    )
     ap.add_argument(
         "--root",
         help=f"交付归档根路径（一次性/prompt 指定；持久统一配置用 env {ENV_ROOT}）",
@@ -229,9 +241,13 @@ def main() -> int:
     root, via = resolve_root(args.root)
     series, ep = locate_episode(project)
 
-    src_mp4 = project / "out" / "final.mp4"
+    sfx = langs.suffix(args.lang)
+    src_mp4 = project / "out" / f"final{sfx}.mp4"
     if not src_mp4.is_file():
-        sys.exit(f"缺少终渲产物: {src_mp4}（先跑 pipeline.py render --final）")
+        sys.exit(
+            f"缺少终渲产物: {src_mp4}"
+            f"（先跑 pipeline.py render --final --lang {args.lang}）"
+        )
 
     sid = checked_name("系列 id", series.get("id"))
     title = checked_name("集标题", ep["title"])
@@ -246,7 +262,7 @@ def main() -> int:
             names = sorted(p.name for p in dest_dir.iterdir() if p.is_file())
         except OSError as e:
             sys.exit(f"版本目录列举失败: {e}")
-    versions = scan_versions(names, title)
+    versions = scan_versions(names, title, sfx)
     try:
         if versions and sha1_of(dest_dir / versions[-1][1]) == sha1_of(src_mp4):
             print(f">> 与最新版本字节一致，跳过（{versions[-1][1]}）——内容变化才会升号")
@@ -254,7 +270,7 @@ def main() -> int:
     except OSError as e:  # 并发删除/无读权限：比对不了就大声退出，不裸栈
         sys.exit(f"版本比对读取失败: {e}")
     nxt = versions[-1][0] + 1 if versions else 1
-    dest = dest_dir / f"{title} v{nxt}.mp4"
+    dest = dest_dir / f"{title} v{nxt}{sfx}.mp4"
 
     # 长度守卫以**实际创建的最长名**为准：copy2 先打开 .part 中转段（比终名多
     # 5 字节），只把关裸标题或终名会放行 244–248 字节标题到写入期才炸

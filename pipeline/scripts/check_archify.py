@@ -10,7 +10,7 @@
      并列清单 —— 把编排失衡提前到渲染前最便宜的时刻；
   3. 素材完整：webm / 末帧 PNG 存在且非空、逐章有效采集帧率 ≥ 18。
 
-用法（任意目录）：uv run --no-project $T/pipeline/scripts/check_archify.py --project $P
+用法（任意目录）：uv run --no-project $T/pipeline/scripts/check_archify.py --project $P [--lang zh|en]
 阈值 rate_min/rate_max/min_fps 走 pipeline.toml [archify]（config.py SCHEMA 默认值层）。
 """
 
@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config  # noqa: E402 - 同目录模块；阈值默认值层的单一事实源
+import langs  # noqa: E402 - 语言后缀/manifest 路径的单一事实源
 import timeline  # noqa: E402
 from check_archify_coverage import extract_cues  # noqa: E402  —— 单一 cue 提取器
 
@@ -47,15 +48,17 @@ def scene_cues(root: Path) -> list[tuple[str, str, str, str | None]]:
     return [(slug, cid, sid, fit) for _f, slug, cid, sid, fit in extract_cues(scenes)]
 
 
-def emit_stills(root: Path, audio: Path, man: dict, cues: list) -> None:
+def emit_stills(root: Path, audio: Path, man: dict, cues: list, lang: str) -> None:
     """打印每个 archify cue 的**边界帧**抽帧命令（K1 入场 / K4 退场）。
 
     刻意不用 qa_frames --stills-plan：它打的是每镜**中点**，而 archify 对位要看的
     恰恰是边界——「章节换了没有」「字幕跟着换了没有」只在边界帧上可判。
+    非主语言追加 --props：不传时旧代 Root 会丢弃语言选择、渲出中文画面（静默错版）。
     """
     items = json.loads(audio.read_text("utf-8"))
     c = timeline.load_constants(root)
     rows = {r["id"]: r for r in timeline.compute(items, c)}
+    props = "" if lang == langs.PRIMARY else f' --props \'{{"lang":"{lang}"}}\''
     print("# archify 对位抽帧（工程根 video/ 下执行）")
     for slug, cid, sid, _fit in cues:
         if slug not in man:
@@ -70,7 +73,7 @@ def emit_stills(root: Path, audio: Path, man: dict, cues: list) -> None:
             print(
                 f"./node_modules/.bin/remotion still src/index.ts Main "
                 f"out/k/{slug}--{cid}-{tag}-{fr}.png --frame={fr} --scale=0.5 "
-                f"--log=error   # 期望：{ch['label']} · 首拍 {ch['beatNodes'][0]} / "
+                f"--log=error{props}   # 期望：{ch['label']} · 首拍 {ch['beatNodes'][0]} / "
                 f"末拍 {ch['beatNodes'][-1]} · 字幕={sid}"
             )
 
@@ -78,11 +81,18 @@ def emit_stills(root: Path, audio: Path, man: dict, cues: list) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="archify 回放结构门")
     ap.add_argument("--project", default=".", help="视频工程根目录（含 pipeline.toml）")
+    ap.add_argument(
+        "--lang",
+        default=langs.PRIMARY,
+        choices=list(langs.LANGS),
+        help="语言版本（默认 zh；rate 预演读 audio[/lang]/manifest.json——英文锚句"
+        "时长不同，en 渲染前必跑本门）",
+    )
     ap.add_argument("--stills", action="store_true", help="只打印边界帧抽帧命令")
     args = ap.parse_args()
     root = Path(args.project).resolve()
     archify = root / "video/public/archify"
-    audio = root / "video/public/audio/manifest.json"
+    audio = langs.manifest(root, args.lang)
     # 阈值默认值在 config.py SCHEMA（机制常数），toml 只写偏离——与全管线同口径
     cfg, _origin, _fails, _warns = config.load(root, required=False)
     arc = cfg.get("archify", {})
@@ -142,15 +152,19 @@ def main() -> None:
 
     if args.stills:
         if not audio.is_file():
-            raise SystemExit("需要 audio/manifest.json（先跑 tts）")
-        emit_stills(root, audio, man, cues)
+            raise SystemExit(
+                f"需要 {audio.relative_to(root)}（先跑 tts --lang {args.lang}）"
+            )
+        emit_stills(root, audio, man, cues, args.lang)
         return
     # 显式写死 stretch 的 cue 由 scene_cues() 抽取——受越界门约束（ISSUE-187 防范 2）
     explicit_stretch = {(s, c, sid) for s, c, sid, fit in cues if fit == "stretch"}
     fitted = {"stretch": 0, "hold": 0, "trim": 0}
     holds: list[str] = []
     if not audio.is_file():
-        warns.append("audio/manifest.json 未生成——**跳过 rate 预演门**（合成后复跑）")
+        warns.append(
+            f"{audio.relative_to(root)} 未生成——**跳过 rate 预演门**（合成后复跑）"
+        )
     else:
         items = json.loads(audio.read_text("utf-8"))
         c = timeline.load_constants(root)

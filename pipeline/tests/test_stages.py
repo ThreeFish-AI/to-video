@@ -14,6 +14,9 @@
   5. skill 根 SKILL.md（路由壳）的九阶段速查表覆盖全部九个 skill 文档，
      且声明「关键不变量」节（**校验而非生成**：生成物会被手改，那是更隐蔽的
      第二事实源）
+
+另覆盖 pipeline.py 的语言维度（--lang 注册/转发/缺省语义/完成行/qa 推断/
+render 旧骨架预检）。
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import tomllib
 
 PIPELINE = Path(__file__).resolve().parents[1]
@@ -58,7 +62,7 @@ def test_skill_pointers_exist():
 def test_commands_are_registered_subcommands():
     """commands 不得声明 pipeline.py 里不存在的子命令（防声明与实现漂移）。"""
     src = PIPELINE_PY.read_text(encoding="utf-8")
-    registered = set(re.findall(r'add_parser\("([a-z-]+)"', src))
+    registered = set(re.findall(r'add_parser\(\s*"([a-z-]+)"', src))
     assert registered, "未能从 pipeline.py 解析出任何子命令——解析器该更新了"
     for st in stages():
         for c in st["commands"]:
@@ -104,7 +108,9 @@ def documented_subcommand_lists() -> list[tuple[str, set[str], bool]]:
 def test_documented_subcommand_lists_match_the_parser():
     """散文声明与 argparse 注册表对齐：穷举源逐项相等，路由壳提及即须真实。"""
     registered = set(
-        re.findall(r'add_parser\("([a-z-]+)"', PIPELINE_PY.read_text(encoding="utf-8"))
+        re.findall(
+            r'add_parser\(\s*"([a-z-]+)"', PIPELINE_PY.read_text(encoding="utf-8")
+        )
     )
     assert registered, "未能从 pipeline.py 解析出任何子命令——解析器该更新了"
     for where, listed, exhaustive in documented_subcommand_lists():
@@ -124,7 +130,7 @@ def test_documented_subcommand_lists_match_the_parser():
 
 def registered_subcommands() -> set[str]:
     src = PIPELINE_PY.read_text(encoding="utf-8")
-    return set(re.findall(r'add_parser\("([a-z-]+)"', src))
+    return set(re.findall(r'add_parser\(\s*"([a-z-]+)"', src))
 
 
 def fanout_ok() -> set[str]:
@@ -477,3 +483,462 @@ def test_doctor_offline_tts_server_is_warning_not_failure(
     assert rc == 0, out
     assert "⚠️  IndexTTS 服务未在线" in out and "按需拉起" in out, out
     assert "❌" not in out, out
+
+
+# ---------------- 语言维度（--lang：注册 / 转发 / 缺省语义 / 完成行 / 预检） ----------------
+
+#: 挂 --lang 的九个子命令（doctor/stages/clean-samples 刻意不挂）
+LANG_CMDS = (
+    "build",
+    "check",
+    "tts",
+    "captions",
+    "render",
+    "qa",
+    "deliver",
+    "status",
+    "all",
+)
+TMPL = SKILL_ROOT / "pipeline" / "templates" / "video-skeleton"
+
+
+@pytest.mark.parametrize("subcommand", LANG_CMDS)
+def test_cli_registers_lang_flag(subcommand):
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), subcommand, "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--lang" in result.stdout
+
+
+def test_cli_doctor_stages_clean_samples_have_no_lang_flag():
+    """doctor 打印全部声明语言（无需选择）、stages/clean-samples 与工程语言无关。"""
+    for subcommand in ("doctor", "stages", "clean-samples"):
+        result = subprocess.run(
+            [sys.executable, str(PIPELINE_PY), subcommand, "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "--lang" not in result.stdout
+
+
+def test_lang_default_policy_split_by_cost():
+    """缺省语义按命令代价分类：build/check/captions/status 全部声明语言；
+    tts/render/deliver/all 仅主语言，声明多语言而未指定时报错点名 --lang。"""
+    import pipeline
+
+    multi = {"narration": {"langs": ["zh", "en"]}}
+    single = {"narration": {"langs": ["zh"]}}
+    for cheap in ("build", "check", "captions", "status"):
+        assert pipeline.resolve_langs(cheap, None, multi) == ["zh", "en"]
+    for expensive in ("tts", "render", "deliver", "all"):
+        with pytest.raises(ValueError, match="--lang"):
+            pipeline.resolve_langs(expensive, None, multi)
+        assert pipeline.resolve_langs(expensive, None, single) == ["zh"]
+    # 显式给值恒优先（含昂贵命令的多值/all）
+    assert pipeline.resolve_langs("tts", "en", multi) == ["en"]
+    assert pipeline.resolve_langs("tts", "zh,en", multi) == ["zh", "en"]
+    assert pipeline.resolve_langs("tts", "all", multi) == ["zh", "en"]
+    with pytest.raises(ValueError, match="未在本集 narration.langs 声明"):
+        pipeline.resolve_langs("tts", "en", single)
+
+
+def test_expensive_multi_lang_errors_at_cli(tmp_path):
+    """端到端：声明多语言的集缺省跑 tts ⇒ argparse 报错退出、stderr 指点 --lang。"""
+    ep = tmp_path / "ep"
+    ep.mkdir()
+    (ep / "pipeline.toml").write_text(
+        '[episode]\nslug = "ep"\n[narration]\ntarget_minutes = [1.0, 2.0]\n'
+        'langs = ["zh", "en"]\n[tts]\nengine = "edge"\n',
+        encoding="utf-8",
+    )
+    r = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "--project", str(ep), "tts"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert r.returncode != 0
+    assert "--lang" in r.stderr
+
+
+def test_build_check_default_all_declared_langs(monkeypatch, tmp_path):
+    """build/check 缺省逐语言顺序执行（cfg mock 双语 ⇒ 两次调用、flag 逐语言）。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    cfg = {"narration": {"langs": ["zh", "en"]}}
+    pipeline.cmd_build(tmp_path, cfg)
+    seen = [c[c.index("--lang") + 1] for c in commands]
+    assert seen == ["zh", "en"]
+    pipeline.cmd_check(tmp_path, cfg)
+    # check_script 每语言一次 + archify 覆盖门一次（语言无关）
+    assert len(commands) == 5
+    assert all("build_narration.py" not in " ".join(c) for c in commands[2:])
+
+
+def test_tts_lang_en_forwards_narration_lang_not_lang(monkeypatch, tmp_path):
+    """tts --lang en：薄包装收 --narration-lang en，且**不再传 --lang**
+    （tts.py 自解析，zh digest 不变）。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    cfg = {"narration": {"langs": ["zh", "en"]}, "tts": {"engine": "edge"}}
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            cfg,
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+            langs=["en"],
+        )
+        == 0
+    )
+    cmd = commands[0]
+    assert cmd[cmd.index("--narration-lang") + 1] == "en"
+    assert "--lang" not in cmd
+
+
+def test_tts_en_engine_view_overrides(monkeypatch, tmp_path):
+    """en 的引擎/音色走 for_lang 覆写视图：edge→indextts 换档、voice 透传；
+    zh 无覆写时不传 --voice（命令 token 与现状一致）。"""
+    import pipeline
+
+    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+    (tmp_path / ".to-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
+    (tmp_path / "voices").mkdir()
+    (tmp_path / "voices" / "en.wav").write_bytes(b"ref")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    cfg = {
+        "narration": {"langs": ["zh", "en"]},
+        "tts": {
+            "engine": "edge",
+            "en": {
+                "engine": "indextts",
+                "ref": "voices/en.wav",
+                "ref_sha1": "abc123def456",
+                "style": "sunny",
+            },
+        },
+    }
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            cfg,
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+            langs=["en"],
+        )
+        == 0
+    )
+    en_cmd = commands[0]
+    assert en_cmd[en_cmd.index("--engine") + 1] == "indextts"
+    assert en_cmd[en_cmd.index("--ref") + 1] == str(tmp_path / "voices" / "en.wav")
+    assert en_cmd[en_cmd.index("--expect-ref-sha1") + 1] == "abc123def456"
+    assert en_cmd[en_cmd.index("--style") + 1] == "sunny"
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            cfg,
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+            langs=["zh"],
+        )
+        == 0
+    )
+    zh_cmd = commands[1]
+    assert zh_cmd[zh_cmd.index("--engine") + 1] == "edge"
+    assert "--voice" not in zh_cmd
+    assert "--ref" not in zh_cmd
+
+    cfg2 = {"tts": {"engine": "edge", "en": {"voice": "en-US-GuyNeural"}}}
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            cfg2,
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+            langs=["en"],
+        )
+        == 0
+    )
+    voice_cmd = commands[2]
+    assert voice_cmd[voice_cmd.index("--voice") + 1] == "en-US-GuyNeural"
+
+
+def test_render_zh_tokens_unchanged_en_gets_props(monkeypatch, tmp_path):
+    """zh 渲染命令 token 序列与单语言时代逐字一致（无 --props、draft.mp4）；
+    en 追加 --props '{"lang":"en"}' 且输出名 draft.en.mp4。"""
+    import pipeline
+
+    _renderable_lang_project(tmp_path)  # en 侧需过旧骨架预检
+    (tmp_path / "video" / "node_modules").mkdir(parents=True)  # 跳过 install 分支
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    pipeline.cmd_render(tmp_path, {"narration": {"langs": ["zh"]}}, final=False)
+    zh = commands[0]
+    assert "../out/draft.mp4" in zh
+    assert "--props" not in zh
+    pipeline.cmd_render(
+        tmp_path, {"narration": {"langs": ["zh", "en"]}}, final=True, langs=["en"]
+    )
+    en = commands[1]
+    assert "../out/final.en.mp4" in en
+    assert en[en.index("--props") + 1] == '{"lang":"en"}'
+
+
+def _renderable_lang_project(root: Path) -> None:
+    """构造能通过旧骨架预检的 en 渲染面：模板五文件 + i18n.tsx + 对齐句 id。"""
+    import json
+    import shutil
+
+    import pipeline
+
+    for rel in pipeline._SKELETON_I18N_FILES:
+        dst = root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(TMPL / rel, dst)
+    (root / "video" / "src" / "i18n.tsx").write_text(
+        "// i18n stub（预检只查存在）\n", encoding="utf-8"
+    )
+    items = [{"id": "p0-01", "scene": "P0", "text": "Hello.", "durationSec": 1.0}]
+    (root / "script").mkdir(exist_ok=True)
+    (root / "script" / "narration.en.json").write_text(
+        json.dumps(items), encoding="utf-8"
+    )
+    (root / "video" / "public" / "audio" / "en").mkdir(parents=True, exist_ok=True)
+    (root / "video" / "public" / "audio" / "en" / "manifest.json").write_text(
+        json.dumps(items), encoding="utf-8"
+    )
+
+
+def test_render_en_skeleton_preflight_missing_i18n(monkeypatch, tmp_path, capsys):
+    """旧骨架预检三态之一：缺 i18n.tsx ⇒ 大声失败、不启动渲染命令。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    rc = pipeline.cmd_render(
+        tmp_path, {"narration": {"langs": ["zh", "en"]}}, final=False, langs=["en"]
+    )
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "i18n.tsx" in out and "静默产出中文版" in out
+    assert not commands  # 预检失败 ⇒ 不进渲染
+
+
+def test_render_en_skeleton_preflight_fingerprint_mismatch(
+    monkeypatch, tmp_path, capsys
+):
+    """旧骨架预检三态之二：骨架文件与模板指纹不符（旧代集）⇒ 失败并点名文件。"""
+    import pipeline
+
+    _renderable_lang_project(tmp_path)
+    # 改动一个 frozen 文件的内容 ⇒ 指纹失配（模拟停在旧代的集）
+    sub = tmp_path / "video" / "src" / "components" / "Subtitle.tsx"
+    sub.write_text(
+        sub.read_text(encoding="utf-8") + "\n// local drift\n", encoding="utf-8"
+    )
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    rc = pipeline.cmd_render(
+        tmp_path, {"narration": {"langs": ["zh", "en"]}}, final=False, langs=["en"]
+    )
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Subtitle.tsx" in out and "指纹" in out
+    assert not commands
+
+
+def test_render_en_skeleton_preflight_passes(monkeypatch, tmp_path):
+    """旧骨架预检三态之三：新代骨架（模板一致 + 句 id 对齐）⇒ 放行进渲染。"""
+    import pipeline
+
+    _renderable_lang_project(tmp_path)
+    (tmp_path / "video" / "node_modules").mkdir(parents=True)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    assert (
+        pipeline.cmd_render(
+            tmp_path, {"narration": {"langs": ["zh", "en"]}}, final=False, langs=["en"]
+        )
+        == 0
+    )
+    assert commands and "--props" in commands[0]
+
+
+def test_resolve_qa_lang_infer_and_conflict():
+    """qa 恒单语言：显式优先；文件名 .<lang>.mp4 推断；推断与显式冲突即报错；
+    推断出的语言同样须已声明。"""
+    import pipeline
+
+    multi = {"narration": {"langs": ["zh", "en"]}}
+    assert pipeline.resolve_qa_lang(None, "out/draft.mp4", multi) == "zh"
+    assert pipeline.resolve_qa_lang(None, "out/draft.en.mp4", multi) == "en"
+    assert pipeline.resolve_qa_lang(None, None, multi) == "zh"
+    assert pipeline.resolve_qa_lang("en", "out/draft.mp4", multi) == "en"
+    with pytest.raises(ValueError, match="冲突"):
+        pipeline.resolve_qa_lang("zh", "out/draft.en.mp4", multi)
+    with pytest.raises(ValueError, match="恒单语言"):
+        pipeline.resolve_qa_lang("zh,en", None, multi)
+    with pytest.raises(ValueError, match="未在本集 narration.langs 声明"):
+        pipeline.resolve_qa_lang(
+            None, "out/draft.en.mp4", {"narration": {"langs": ["zh"]}}
+        )
+
+
+def test_qa_scale_inference_accepts_draft_en(monkeypatch, tmp_path):
+    """--check 的 scale 推断按 draft 前缀（兼容 draft.en.mp4），非全名相等。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    cfg = {"narration": {"langs": ["zh", "en"]}, "render": {"draft_scale": 0.5}}
+    pipeline.cmd_qa(
+        tmp_path, cfg, "out/draft.en.mp4", None, None, [], True, None, lang="en"
+    )
+    cmd = commands[0]
+    assert cmd[cmd.index("--scale") + 1] == "0.5"
+    assert cmd[cmd.index("--lang") + 1] == "en"
+
+
+def test_per_lang_completion_lines(monkeypatch, tmp_path, capsys):
+    """完成行按语言分打：多语言逐语言打 `>> <cmd> 完成（<lang>，…s）`；
+    单语言不打语言完成行（保持 main 总行的现状形态）。"""
+    import pipeline
+
+    monkeypatch.setattr(pipeline, "run", lambda cmd, cwd=None: 0)
+    cfg = {"narration": {"langs": ["zh", "en"]}}
+    assert pipeline.cmd_build(tmp_path, cfg) == 0
+    out = capsys.readouterr().out
+    assert ">> build 完成（zh，" in out
+    assert ">> build 完成（en，" in out
+    assert pipeline.cmd_build(tmp_path, {"narration": {"langs": ["zh"]}}) == 0
+    assert "完成（zh，" not in capsys.readouterr().out
+
+
+def test_per_lang_failure_names_language(monkeypatch, tmp_path, capsys):
+    """某语言失败：不打该语言完成行、即断不跑后续语言、点名失败语言与退出码。"""
+    import pipeline
+
+    calls: list[list[str]] = []
+
+    def flaky(cmd, cwd=None):
+        calls.append(cmd)
+        return 1 if len(calls) == 2 else 0  # en（第二次）失败
+
+    monkeypatch.setattr(pipeline, "run", flaky)
+    rc = pipeline.cmd_build(tmp_path, {"narration": {"langs": ["zh", "en"]}})
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "❌ build 语言 en 失败" in out
+    assert "完成（en" not in out
+    assert pipeline._FAILED_LANGS == ["en"]
+    assert len(calls) == 2  # 失败即断
+
+
+def test_main_summary_line_aggregates_languages(monkeypatch, tmp_path, capsys):
+    """main 总行 = 汇总：全部语言成功才 `>> <cmd> 完成`；失败语言点名 `未完成`。"""
+    import pipeline
+
+    monkeypatch.setattr(pipeline, "load_config", lambda root: ({}, {}))
+    monkeypatch.setattr(pipeline, "run", lambda cmd, cwd=None: 0)
+    monkeypatch.setattr(
+        sys, "argv", ["pipeline.py", "--project", str(tmp_path), "build"]
+    )
+    with pytest.raises(SystemExit) as ei:
+        pipeline.main()
+    assert ei.value.code == 0
+    out = capsys.readouterr().out
+    assert ">> build 完成（" in out and "未完成" not in out
+
+    monkeypatch.setattr(pipeline, "run", lambda cmd, cwd=None: 1)
+    monkeypatch.setattr(
+        sys, "argv", ["pipeline.py", "--project", str(tmp_path), "build"]
+    )
+    with pytest.raises(SystemExit) as ei2:
+        pipeline.main()
+    assert ei2.value.code == 1
+    out2 = capsys.readouterr().out
+    assert ">> build 未完成（失败语言：zh，" in out2
+
+
+def test_status_reports_per_language_and_lock(monkeypatch, tmp_path, capsys):
+    """status 按声明语言分行；en 加译稿基线锁新鲜度行（失配点名）。"""
+    import hashlib
+    import json
+
+    import pipeline
+
+    (tmp_path / "video" / "src").mkdir(parents=True)
+    (tmp_path / "video" / "src" / "timing.json").write_text(
+        json.dumps(
+            {
+                "fps": 30,
+                "sentenceGapSec": 0.32,
+                "sceneGapSec": 0.9,
+                "leadInSec": 0.6,
+                "tailSec": 2.0,
+                "sceneCrossFadeSec": 0.4,
+            }
+        ),
+        encoding="utf-8",
+    )
+    zh_items = [{"id": "p0-01", "scene": "P0", "text": "你好。"}]
+    (tmp_path / "script").mkdir()
+    (tmp_path / "script" / "narration.json").write_text(
+        json.dumps(zh_items), encoding="utf-8"
+    )
+    digest = hashlib.sha1("你好。".encode()).hexdigest()[:12]
+    # 锁与主稿一致 ⇒ ✅
+    (tmp_path / "script" / "narration.en.lock.json").write_text(
+        json.dumps({"p0-01": digest}), encoding="utf-8"
+    )
+    assert pipeline.cmd_status(tmp_path, {"narration": {"langs": ["zh", "en"]}}) == 0
+    out = capsys.readouterr().out
+    assert "阶段新鲜度（en，" in out  # 多语言标题带语言名
+    assert "与主稿一致" in out
+    assert "narration.en.json" in out and "audio/en/manifest.json" in out
+    # 主稿改稿 ⇒ 锁失配 ⇒ ⚠️ 点名
+    (tmp_path / "script" / "narration.json").write_text(
+        json.dumps([{"id": "p0-01", "scene": "P0", "text": "你好，改稿。"}]),
+        encoding="utf-8",
+    )
+    assert pipeline.cmd_status(tmp_path, {"narration": {"langs": ["zh", "en"]}}) == 0
+    assert "主稿已改" in capsys.readouterr().out

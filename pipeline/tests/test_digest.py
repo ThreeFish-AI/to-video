@@ -135,6 +135,41 @@ def test_digest_edge_golden():
     assert digest_edge("v", "r", "t") == hashlib.sha1(b"v|r|t").hexdigest()
 
 
+def test_digest_indextts_lang_participates():
+    """lang 参与摘要：同输入 ZH/EN 摘要不同——zh/en 槽位天然隔离、互不覆盖缓存
+    的依据（双语改造的 digest 硬约束：zh 值逐字节不变，见上方黄金）。"""
+    vec = (0.95, 0, 0, 0, 0, 0, 0.02, 0.03)
+    zh = digest_indextts(
+        "3ed0d9d60d4b",
+        "sunny",
+        vec,
+        0.35,
+        0.95,
+        "ZH",
+        "indextts",
+        "测试句。",
+        1,
+        None,
+        None,
+    )
+    en = digest_indextts(
+        "3ed0d9d60d4b",
+        "sunny",
+        vec,
+        0.35,
+        0.95,
+        "EN",
+        "indextts",
+        "测试句。",
+        1,
+        None,
+        None,
+    )
+    assert zh == "4fd5b37d1eae790297e25abc850dd72470b8ba9e", zh  # zh 黄金钉死
+    assert en == "1f6d6b11f904c47a14a9b89f26d663648f07e6e2", en
+    assert en != zh
+
+
 # ---------------- 采样参数族：同一条「未使用即省略」规则 ----------------
 
 

@@ -17,7 +17,7 @@
 
 用法：
   edge：    uv run --no-project --with edge-tts --with mutagen $T/pipeline/scripts/tts.py \
-                --project $P [--voice zh-CN-YunxiNeural] [--rate +4%] [--force]
+                --project $P [--narration-lang zh] [--voice zh-CN-YunxiNeural] [--rate +4%] [--force]
   indextts：uv run --no-project --with mutagen $T/pipeline/scripts/tts.py \
                 --project $P --engine indextts --ref <参考样本.wav> \
                 [--style passionate] [--server http://127.0.0.1:8766] [--force]
@@ -47,6 +47,17 @@ from pathlib import Path
 
 DEFAULT_VOICE = "zh-CN-YunxiNeural"
 DEFAULT_RATE = "+4%"
+
+#: 语言镜像表：narration-lang → (IndexTTS infer lang 码, edge 缺省音色)。
+#: ⚠️ 内联而非 import langs——本文件会被拷进 ~/tools/index-tts 的 venv 单独运行
+#: （paths.py「导入边界」），同目录依赖会断掉那条拷出路径；与 pipeline/scripts/langs.py
+#: 的 LANGS 注册表的一致性由 tests/test_tts_lang_mirror.py 钉住（timing.json
+#: 「TS/Python 双语共读」的同构纪律）。路径后缀规则（zh 无后缀 / en 加 .en）
+#: 同理内联，与 langs.narration_json / langs.audio_dir 同构。
+LANG_MIRROR: dict[str, tuple[str, str]] = {
+    "zh": ("ZH", DEFAULT_VOICE),
+    "en": ("EN", "en-US-AndrewNeural"),
+}
 CONCURRENCY_EDGE = 6
 CONCURRENCY_INDEXTTS = 1  # 服务端串行锁推理；>1 会在锁后排队，排队时长计入客户端超时
 RETRIES = 4
@@ -249,13 +260,18 @@ SAMPLING_RANGES: dict[str, tuple[float, float]] = {
 }
 
 
-def tts_text(text: str) -> str:
+def tts_text(text: str, lang: str = "ZH") -> str:
     """口播文本微调：破折号换为逗号停顿，避免 TTS 念成怪音。
+
+    全角映射仅对主语言（ZH）生效：en 稿经 check_script 禁全角标点门，此处原样
+    透传是纵深防御——`——` 会被换成全角逗号混进英文文本。
 
     注意这是**唯一**的程序化文本预处理：数字/百分号/量词的读法由上游中文归一化
     （wetext）承担，多音字与英文专名读音由逐字稿里的发音标注 `<字|读音>` 承担。
     归一化的已知陷阱（4 位年份与「年」之间不能有空格）由 check_script.py 的写稿 lint 拦。
     """
+    if lang != "ZH":
+        return text
     return text.replace("——", "，").replace("……", "。")
 
 
@@ -480,6 +496,7 @@ async def synth_edge(
     voice: str,
     rate: str,
     out_dir: Path,
+    lang: str = "ZH",
 ) -> dict:
     import edge_tts  # 惰性导入：仅 edge 引擎需要
 
@@ -501,7 +518,9 @@ async def synth_edge(
             last_err: Exception | None = None
             for attempt in range(RETRIES):
                 try:
-                    communicate = edge_tts.Communicate(tts_text(text), voice, rate=rate)
+                    communicate = edge_tts.Communicate(
+                        tts_text(text, lang), voice, rate=rate
+                    )
                     await communicate.save(str(mp3))
                     if mp3.stat().st_size == 0:
                         raise RuntimeError("空音频文件")
@@ -835,7 +854,7 @@ async def synth_indextts(
                     audio, fmt = await asyncio.to_thread(
                         http_synthesize,
                         server,
-                        tts_text(text),
+                        tts_text(text, lang),
                         ref,
                         vec,
                         alpha,
@@ -890,7 +909,17 @@ async def main() -> None:
         "--project", default=".", help="视频工程根目录（含 script/ 与 video/）"
     )
     parser.add_argument(
-        "--voice", default=DEFAULT_VOICE, help="[edge] 语音（默认 zh-CN-YunxiNeural）"
+        "--narration-lang",
+        default="zh",
+        choices=list(LANG_MIRROR),
+        help="逐字稿语言：选输入 json（zh=script/narration.json、en=script/narration.en.json）"
+        "与输出目录（zh=video/public/audio/、en=…/audio/en/，含独立 manifest 与 .engine 签名）",
+    )
+    parser.add_argument(
+        "--voice",
+        default=None,
+        help="[edge] 语音（缺省按 --narration-lang 解析：zh→zh-CN-YunxiNeural、"
+        "en→en-US-AndrewNeural）",
     )
     parser.add_argument("--rate", default=DEFAULT_RATE, help="[edge] 语速（默认 +4%%）")
     parser.add_argument("--force", action="store_true", help="忽略缓存强制重合成")
@@ -957,7 +986,12 @@ async def main() -> None:
         type=float,
         help="[indextts] 语速 0.5–2.0（默认随风格）",
     )
-    idx.add_argument("--lang", default="ZH", help="[indextts] 语言（默认 ZH）")
+    idx.add_argument(
+        "--lang",
+        default=None,
+        help="[indextts] 语言（缺省按 --narration-lang 解析：zh→ZH、en→EN；"
+        "显式给值须与之一致，否则按克隆参数误用拦截）",
+    )
     idx.add_argument(
         "--num-beams",
         default=None,
@@ -1074,6 +1108,12 @@ async def main() -> None:
         "/"
     )  # 尾斜杠归一：health/synthesize 两处拼 URL 前收口
 
+    # 语言解析：--lang/--voice 未显式给出时按 --narration-lang 从镜像表取缺省——
+    # `--narration-lang en` 下绝不能静默回落 ZH/中文音色（digest 与音色都会错槽位）。
+    want_lang, want_voice = LANG_MIRROR[args.narration_lang]
+    tts_lang = args.lang if args.lang is not None else want_lang
+    voice = args.voice if args.voice is not None else want_voice
+
     if args.list_styles:
         print(
             "风格            说明      情感向量（happy,angry,sad,afraid,disgusted,melancholic,surprised,calm）"
@@ -1126,7 +1166,9 @@ async def main() -> None:
                 "--num-beams": args.num_beams is not None,
                 "--steady": args.steady,
                 "--style": args.style != "neutral",
-                "--lang": args.lang != "ZH",
+                # 显式给出且 ≠ 该 narration-lang 的镜像解析值才计——en 长跑里
+                # --narration-lang en 天然解析 EN，属正常路径而非克隆参数误用
+                "--lang": args.lang is not None and args.lang != want_lang,
                 # 采样参数族同属克隆专属：edge 不认这些旋钮，且两引擎摘要必然不同，
                 # 照跑同样会把整集克隆音频改写成 edge 预置音色 ⇒ 与上面同口径硬失败。
                 "--temperature": args.temperature is not None,
@@ -1165,22 +1207,31 @@ async def main() -> None:
             )
 
     root = Path(args.project).resolve()
-    src = root / "script" / "narration.json"
+    # 后缀规则内联（与 langs.narration_json / langs.audio_dir 同构，见 LANG_MIRROR 注）：
+    # 主语言 zh 路径逐字节等于旧版，非主语言加 .<lang> 后缀 / 子目录。
+    sfx = "" if args.narration_lang == "zh" else f".{args.narration_lang}"
+    src = root / "script" / f"narration{sfx}.json"
     if not src.is_file():
-        sys.exit(f"narration.json 不存在: {src} —— 先运行 build_narration.py 生成")
-    out_dir = root / "video" / "public" / "audio"
+        sys.exit(
+            f"narration{sfx}.json 不存在: {src}"
+            f" —— 先运行 build_narration.py --lang {args.narration_lang} 生成"
+        )
+    audio_base = root / "video" / "public" / "audio"
+    out_dir = (
+        audio_base if args.narration_lang == "zh" else audio_base / args.narration_lang
+    )
     items = json.loads(src.read_text(encoding="utf-8"))
     out_dir.mkdir(parents=True, exist_ok=True)
     store = store_root(args.no_store)
     slug = root.name
 
     if args.engine == "edge":
-        signature = f"edge|{args.voice}|{args.rate}"
+        signature = f"edge|{voice}|{args.rate}"
         check_voice_marker(out_dir, signature, args.allow_voice_switch)
         sem = asyncio.Semaphore(CONCURRENCY_EDGE)
         results = await asyncio.gather(
             *(
-                synth_edge(sem, i, args.force, args.voice, args.rate, out_dir)
+                synth_edge(sem, i, args.force, voice, args.rate, out_dir, tts_lang)
                 for i in items
             )
         )
@@ -1296,7 +1347,7 @@ async def main() -> None:
                     vec,
                     alpha,
                     df,
-                    args.lang,
+                    tts_lang,
                     args.engine_tag,
                     synth_source_text(i),
                     b,
@@ -1402,7 +1453,7 @@ async def main() -> None:
                     vec,
                     alpha,
                     df,
-                    args.lang,
+                    tts_lang,
                     args.engine_tag,
                     args.server,
                     out_dir,
