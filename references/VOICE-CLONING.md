@@ -2,7 +2,7 @@
 
 > **文档定位**：本文是公共视频管线声音克隆能力（用自己的声音配音 + 轻快/自信/正能量等风格控制）的**单一参考**——回答「怎么用现有能力做完一集」。
 > 上游能力面、机制循证与提升路线图见进阶篇 [INDEXTTS-2.5-ADVANCED.md](./INDEXTTS-2.5-ADVANCED.md)（不复制本文参数值，只做映射与解释）。
-> 管线总纲见 [README.md](./PIPELINE.md)；参考音色样本目录约定见 [templates/workspace/voices/README.md](../assets/workspace/voices/README.md)（工作区实例化后的 `$V/README.md`）；读音标注台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md)。
+> 管线总纲见 [PIPELINE.md](./PIPELINE.md)；参考音色样本目录约定见 [assets/workspace/voices/README.md](../assets/workspace/voices/README.md)（工作区实例化后的 `$V/README.md`）；读音标注台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md)。
 
 ## 目录
 

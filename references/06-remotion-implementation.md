@@ -13,7 +13,7 @@
 
 ## 骨架复制适配策略
 
-**复制源头有名字**：[templates/video-skeleton/](../assets/video-skeleton/)。新集用它实例化（`uv run --no-project $T/scripts/scaffold.py <slug>-video --title "…"`），**不要**再 `cp -r` 任一既有集——「任一」意味着 4 个同权真理声明者。冻结档位（frozen / overridable / regioned / structured / seeded）、分组语义与已登记漂移的**机器可读单一事实源**是 [skeleton.toml](../assets/video-skeleton/skeleton.toml)，判据由 `verify_skeleton.py` 执行：
+**复制源头有名字**：[assets/video-skeleton/](../assets/video-skeleton/)。新集用它实例化（`uv run --no-project $T/scripts/scaffold.py <slug>-video --title "…"`），**不要**再 `cp -r` 任一既有集——「任一」意味着 4 个同权真理声明者。冻结档位（frozen / overridable / regioned / structured / seeded）、分组语义与已登记漂移的**机器可读单一事实源**是 [skeleton.toml](../assets/video-skeleton/skeleton.toml)，判据由 `verify_skeleton.py` 执行：
 
 ```bash
 uv run --no-project $T/scripts/verify_skeleton.py          # 漂移报告
@@ -34,7 +34,7 @@ uv run --no-project $T/scripts/verify_skeleton.py --strict  # 有未登记漂移
 - 字体可复现性：三集用 macOS 系统字体栈（PingFang SC/Songti SC/SF Mono），未内嵌 CJK 字体——**渲染仅限 macOS 主机**。两个重启触发器：渲染迁 Linux/CI；Remotion 5.0 把 fitText 的 validateFontIsLoaded 默认翻 true（届时须内嵌子集字体，注意 pre-commit --maxkb=1024）。
 - 路径描画优先 `@remotion/paths`（evolvePath/getPointAtLength）——它是「pathLength 与 px 版 strokeDasharray 互斥」红线的官方正解；线型样式（虚线/点线）另置静态叠加路径，勿与描画动画挤在同一元素。
 
-复用边界的原则（见 [../README.md](PIPELINE.md) 第四节）：Python 脚本集中 SSOT；**Remotion 原语复制适配不共享**——共享 TS 包会把一集的视觉改动泄漏进其他集。
+复用边界的原则（见 [PIPELINE.md](./PIPELINE.md) 第四节）：Python 脚本集中 SSOT；**Remotion 原语复制适配不共享**——共享 TS 包会把一集的视觉改动泄漏进其他集。
 
 **A 档冻结的同步义务范围（多系列后必须显式化）**：「改任何一处须同步并验 md5 唯一」的义务
 **限于同一系列内**。新系列的首集从模板实例化后即**建立自己的基线**，此后与其他系列各自演进——

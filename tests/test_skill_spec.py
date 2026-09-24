@@ -56,6 +56,12 @@ SUBKEY_RE = re.compile(r"^  ([a-z][a-z0-9_-]*): (.*)$")
 DQ_RE = re.compile(r'^"((?:[^"\\]|\\.)*)"$')
 #: YAML 普通标量不得以这些指示符开头（否则被解析为序列/映射/锚点/块标量等）。
 PLAIN_BAD_START = set("-?:,[]{}#&*!|>'\"%@`")
+#: YAML 1.1 隐式类型字面量：PyYAML 读成布尔/空/数字，strictyaml 读成字符串——两边语义
+#: 分叉，普通标量里一律拒收（需要时加双引号）。
+IMPLICIT_TYPE_RE = re.compile(
+    r"^(?:true|false|yes|no|on|off|null|~|[-+]?(?:\d[\d_]*)?\.?\d+(?:e[-+]?\d+)?)$",
+    re.I,
+)
 
 
 def _scalar(raw: str, where: str) -> str:
@@ -69,6 +75,9 @@ def _scalar(raw: str, where: str) -> str:
     )
     assert ": " not in raw and " #" not in raw and not raw.endswith(":"), (
         f"{where}: 普通标量含 ASCII ': ' 或 ' #'（YAML 会误解析为映射或注释）"
+    )
+    assert not IMPLICIT_TYPE_RE.match(raw), (
+        f"{where}: 普通标量 {raw!r} 是 YAML 隐式类型字面量（布尔/空/数字），须加双引号"
     )
     return raw
 
@@ -131,6 +140,8 @@ def skill() -> tuple[dict, str]:
         ("name: x\ndescription: >\n  folded", "指示符"),
         ("name: x\nmetadata:\n  version: 1.0", "双引号"),
         ("name: x\nmetadata:\n\tversion: 1.0", "制表符"),
+        ("name: x\nlicense: 1.0", "隐式类型"),
+        ("name: x\ndescription: yes", "隐式类型"),
     ],
 )
 def test_parser_rejects_yaml_outside_subset(frontmatter, needle):

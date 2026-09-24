@@ -74,7 +74,7 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
 `voices/`（生物特征）与 `node_modules` 都不随 clone 走。因此**换一个 worktree/机器就要重建一次，
 这是常规操作而非异常路径**。按依赖序六步（TTS 可恢复时总量级 ≈ 1 小时，对比整集重合成 2 小时）：
 
-1. **装 skill**：clone 本仓并软链或设 `TO_VIDEO_HOME`（见 [README §路径变量约定](PIPELINE.md)）——
+1. **装 skill**：clone 本仓并软链或设 `TO_VIDEO_HOME`（见 [PIPELINE.md §路径变量约定](./PIPELINE.md)）——
    工作区/分集薄包装靠它解析机制，缺席是大声失败而非静默跳过。
 2. **`cd video && pnpm install`（裸 install，勿加 `--ignore-workspace`；必须先于 archify 录制）**：
    录制器要起 Remotion 打包浏览器，`node_modules` 半残会在录制中途裸 traceback。构建许可配在

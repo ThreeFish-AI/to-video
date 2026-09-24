@@ -396,17 +396,21 @@ def test_router_gates_match_stages():
     """
     section = _quick_reference_section(_router_text())
     by_file = {Path(st["skill"]).name: st for st in stages()}
-    drift = []
+    drift, checked = [], 0
     for ln in section.split("\n"):
         m = SKILL_LINK_RE.search(ln)
         if not (m and ln.lstrip().startswith("|")):
             continue
+        checked += 1
         cell = ln.strip().strip("|").split("|")[-1].strip()
         st = by_file[m.group(1)]
         if cell != st["gate"]:
             drift.append(
                 f"{st['ordinal']}: 速查表 {cell!r} ≠ stages.toml {st['gate']!r}"
             )
+    assert checked == len(by_file), (
+        f"只核到 {checked} 行（链接列形态变了？本门不得空转）"
+    )
     assert not drift, "速查表门列与 stages.toml 漂移：\n  " + "\n  ".join(drift)
 
 
