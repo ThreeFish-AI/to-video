@@ -28,6 +28,8 @@ scaffold 不把本文件复制进新集：场景是创作产物，抄骨架的�
     return (
       <AbsoluteFill>
         <Sequence {...bA} name="0-A 分镜标题（与 storyboard.md 镜号一致）">
+          {/* 双语画面文字：按需 import {L} from '../i18n'，en 缺省回落 zh（用法见 skills/06） */}
+          <L zh="上下文窗口" en="Context Window" />
           <YourOneOffComponent freezeAt={at('p0-03') - bA.from} />
         </Sequence>
       </AbsoluteFill>
