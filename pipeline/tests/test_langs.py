@@ -79,6 +79,10 @@ def test_length_units():
     assert langs.length("don't stop", "en") == 2  # 撇号内连：don't 计 1 词
     assert langs.length("state-of-the-art models", "en") == 2
     assert langs.length("Hello, world!", "en") == 2
+    # en/em dash 是断词标点（X—Y 为标准英文排版），只有连字符内连
+    assert langs.length("The loop—and the harness—matter.", "en") == 6
+    assert langs.length("3–5 steps", "en") == 3
+    assert langs.length("non‑breaking hy‐phen", "en") == 2  # U+2011 / U+2010
 
 
 def test_validate_unknown_lang_raises_with_registry():

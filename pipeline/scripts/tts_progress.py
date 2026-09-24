@@ -42,10 +42,11 @@ import statistics as st
 import sys
 from pathlib import Path
 
-#: en 词计数：字母数字串，允许撇号/连字符内连（don't / state-of-the-art 各计 1 词）。
+#: en 词计数：字母数字串，允许撇号/连字符内连（don't / state-of-the-art 各计 1 词；
+#: en/em dash 断词）。
 #: 与 pipeline/scripts/langs.py 的 _WORD_RE / length(en) 同构口径——内联而非 import，
 #: 监视器作为旁路工具保持零同目录依赖（同 tts.py 的 LANG_MIRROR 纪律）。
-_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’‐-―-][A-Za-z0-9]+)*")
+_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’‐‑-][A-Za-z0-9]+)*")
 
 #: 同机同档（sunny-steady，EP1 v3 B 遍 187 句）的历史实测折算，监视判据的分母。
 #: ⚠️ 该基线取自**机器空闲**时的长跑。分母是「空闲态」这件事必须记住：

@@ -68,7 +68,8 @@ LANGS: dict[str, LangSpec] = {
 PRIMARY = "zh"
 
 #: 英文词计数：字母数字串，允许撇号/连字符内连（don't / state-of-the-art 各计 1 词）。
-_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’‐-―-][A-Za-z0-9]+)*")
+#: 连字符只收 ASCII `-` 与 U+2010/U+2011；en/em dash（– —）是断词标点，`X—Y` 计 2 词。
+_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’‐‑-][A-Za-z0-9]+)*")
 
 
 def validate(lang: str) -> str:
