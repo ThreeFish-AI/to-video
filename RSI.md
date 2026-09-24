@@ -107,7 +107,8 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 **信号与角色**（Generator / Reflector / Curator 分权，防自评自改）：
 
 - **Generator = 制片主 Agent**：②⑤ 设计前读手册；分镜采用条目时标注〔M-xxx〕；收到显式信号当场往候选区追加一行 `- 〔±号来源〕<集目录名>#<镜号>：…`（`〔+用户〕` 认可 / `〔-用户〕` 否决 / `〔+主〕` 主 Agent 自评认可；主 Agent 不单独否决），不改条目。
-- **Reflector + Curator = 策展子代理**（fresh context）：默认在 ⑨ 交付后、候选区非空时启动一次（攒批）；逐条给出处置 ADD / EDIT / VOTE±1 / MERGE / DISCARD，策展后候选区清空。删并既有条目 ≥3 条或触发压缩时，另起独立核验子代理（同第三节分级）。
+- **Reflector + Curator = 策展子代理**（fresh context）：默认在 ⑨ 交付后、候选区非空时启动一次（攒批），同一时刻至多一个策展 PR 在途；逐条给出处置 ADD / EDIT / VOTE±1 / MERGE / DISCARD，提交态候选区恒为空。删并既有条目 ≥3 条或触发压缩时，另起独立核验子代理（同第三节分级）。
+- **交接**（每条信号只计一次）：候选行是 `$T` 主检出的未提交追加，建自 HEAD 的 worktree 看不到——主代理须把候选行**原文**随输入契约交给策展子代理；PR 合入前这些行留在主检出作在途记录（PR 被丢弃则顺延进下一批）；合入后 pull `$T` 前撤掉已交出的行（期间无新追加即 `git -C $T checkout -- pipeline/MODELING-PLAYBOOK.md`；有则先摘出新行、同法还原、pull 后原样追加回）。否则 pull 被本地改动拦住，或同一 VOTE 在下一批重复计入。
 - 信号强度：用户显式认可/否决为强信号；主 Agent 自评为弱信号，只能新增 w=1 的试行条目，不能单独推动晋升（存储的错误经验会被后续照抄放大）。
 
 **权重生命周期**：新条目 w=2（用户认可）或 w=1（仅主 Agent）；复用后被认可 +1、被否决或返工 −1；w≤0 必须移出。**晋升定式**须 w ≥ `PROMOTE_W`、证覆盖 ≥ `PROMOTE_EPISODES` 集（门执法），且含 ≥1 次用户信号（门不可见，由核验子代理对照条目去向表核对）。

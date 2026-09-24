@@ -74,11 +74,16 @@ def test_watermarks_are_ordered_hysteresis():
 
 
 def test_real_playbook_passes_and_stays_below_high():
-    """提交态须零 WARN：候选区策展后清空，越过 HIGH 就该在同一 PR 内压到 TARGET。"""
+    """提交态须零 WARN：越过 HIGH 就该在同一 PR 内压到 TARGET。
+
+    候选区恒空：候选只在 `$T` 主检出里在途、原文交接给策展子代理；一旦入库，
+    主检出还原后仍残留在 HEAD，下一批会把同一 VOTE 再计一次（RSI.md 第十节「交接」）。
+    """
     units, errors, warnings, counts = cp.check(cp.PLAYBOOK.read_text(encoding="utf-8"))
     assert (errors, warnings) == ([], [])
     assert units < cp.HIGH
     assert counts["建模方法"] >= 1
+    assert counts["候选区"] == 0, "候选不得入库：须经策展子代理消化（RSI.md 第十节）"
 
 
 def test_cli_exit_codes(tmp_path, capsys):
