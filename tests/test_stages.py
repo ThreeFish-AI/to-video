@@ -6,7 +6,7 @@
 （那只是便利），也不能砍这里。
 
 覆盖五条：
-  1. skill 指针全部真实存在（**skill 根相对**——stages.toml 与 skills/ 同住
+  1. skill 指针全部真实存在（**skill 根相对**——stages.toml 与阶段规格同住
      skill 仓，双锚点架构下不再有「子项目」这个锚）
   2. commands 每一项都是 pipeline.py 真实注册的子命令
   3. ordinal 恰好是 ①..⑨、无重无缺
@@ -386,6 +386,28 @@ def test_router_table_covers_every_skill():
         f"速查表链接与九篇规格不一一对应：缺 {sorted(want - set(names))} / "
         f"多 {sorted(set(names) - want)}"
     )
+
+
+def test_router_gates_match_stages():
+    """速查表「通过门」列与 stages.toml 的 gate 逐字相同（RSI-008：手抄件曾 6/9 行漂移）。
+
+    比末列整格而非「包含」：漂移当初就是从在门后追加注释、截短括注开始的。门列须
+    写纯文本（加反引号即不相等）。
+    """
+    section = _quick_reference_section(_router_text())
+    by_file = {Path(st["skill"]).name: st for st in stages()}
+    drift = []
+    for ln in section.split("\n"):
+        m = SKILL_LINK_RE.search(ln)
+        if not (m and ln.lstrip().startswith("|")):
+            continue
+        cell = ln.strip().strip("|").split("|")[-1].strip()
+        st = by_file[m.group(1)]
+        if cell != st["gate"]:
+            drift.append(
+                f"{st['ordinal']}: 速查表 {cell!r} ≠ stages.toml {st['gate']!r}"
+            )
+    assert not drift, "速查表门列与 stages.toml 漂移：\n  " + "\n  ".join(drift)
 
 
 def test_router_declares_key_invariants_section():

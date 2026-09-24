@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -241,6 +242,17 @@ _IGNORE_WS_CMD_RE = re.compile(r"pnpm install[\s#]+--ignore-workspace")
 _IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
 
 
+#: Remotion 工具经 npx 调用（06 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
+_NPX_TOOL_RE = re.compile(r"\bnpx\s+(?:tsc|remotion)\b")
+#: RSI-008 迁移后已不存在的旧路径（pipeline/scripts 是 ABI 软链、pipeline/README.md 是
+#: 迁移桩，二者仍真实存在故不在此列）；前一字符不许是词字符或 /，放过上游
+#: apps/negentropy-influence/pipeline/… 的历史外链。
+_LEGACY_PATH_RE = re.compile(
+    r"(?<![\w/-])(?:pipeline/(?:skills|templates|tests|stages\.toml|VOICE-CLONING"
+    r"|INDEXTTS|PRON-GLOSSARY|MODELING-PLAYBOOK)|docs/quickstart)"
+)
+
+
 def _rel(f: Path) -> Path:
     root = skill_root()
     return f.relative_to(root) if f.is_relative_to(root) else f
@@ -298,4 +310,44 @@ def test_no_instruction_to_add_ignore_workspace():
             offenders.append(f"{_rel(f)}:{text.count(chr(10), 0, m.start()) + 1}")
     assert not offenders, "文案仍在教人加 --ignore-workspace：\n  " + "\n  ".join(
         offenders
+    )
+
+
+def _frozen_templates() -> set[Path]:
+    """frozen 档文件改一字节即全集 checksum 漂移，注释里的旧路径刻意保留。"""
+    skel = tomllib.loads((TEMPLATES / "video-skeleton" / "skeleton.toml").read_text())
+    return {TEMPLATES / "video-skeleton" / r for r in skel["classes"]["frozen"]}
+
+
+def current_docs_and_code() -> list[Path]:
+    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README，减 frozen 档。"""
+    frozen = _frozen_templates()
+    files = {*user_facing_files(), *REFERENCES.glob("*.md"), skill_root() / "README.md"}
+    return sorted(f for f in files if f not in frozen)
+
+
+def test_no_npx_for_remotion_tools():
+    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 06 命令闭环矛盾。"""
+    offenders = [
+        f"{_rel(f)}:{no}"
+        for f in current_docs_and_code()
+        for no, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
+        if _NPX_TOOL_RE.search(line)
+    ]
+    assert not offenders, "文案教人用 npx 调 tsc/remotion：\n  " + "\n  ".join(
+        offenders
+    )
+
+
+def test_no_legacy_layout_paths():
+    """RSI-008 目录迁移后，现行文案不得再指向已不存在的旧 pipeline/ 子路径。"""
+    offenders = [
+        f"{_rel(f)}:{no} → {m.group(0)}"
+        for f in current_docs_and_code()
+        for no, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
+        for m in _LEGACY_PATH_RE.finditer(line)
+    ]
+    assert not offenders, (
+        "文案仍指向迁移前的旧路径（映射见 pipeline/README.md）：\n  "
+        + ("\n  ".join(offenders))
     )

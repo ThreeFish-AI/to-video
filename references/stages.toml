@@ -18,7 +18,7 @@
 #            不是 1:1」——authored 阶段本就不该有子命令。注意 ⑦ 虽在生产层，
 #            但每集 3000–8000 行场景代码是创作而非生成，故为 authored。
 #   commands 归属本阶段的 pipeline.py 子命令（空 = 该阶段不经单入口执行）
-#   gate     通过门（散文，与 skills 文档中的判据同源）
+#   gate     通过门（散文，与阶段规格中的判据同源；SKILL.md 速查表门列逐字抄录，测试执法）
 #
 # **刻意不含** DAG/prerequisites（顺序线性，唯一的非线性边只活在给人看的
 # mermaid 里，零工具消费）、inputs/outputs（同理），以及任何阶段状态字段。
@@ -89,7 +89,7 @@ name = "Remotion 场景实现"
 skill = "references/06-remotion-implementation.md"
 kind = "authored"
 commands = []
-gate = "tsc --noEmit 零错误 + 七条渲染红线"
+gate = "tsc --noEmit 零错误 + 七条渲染红线 + 运动层铁律"
 
 [[stage]]
 id = "render-qa"

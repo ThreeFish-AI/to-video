@@ -55,7 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import langs  # noqa: E402 - 后缀/命名规则的单一事实源（pipeline.py 家族）
 import paths  # noqa: E402 - 导入边界见 paths.py 文件头（pipeline.py 家族）
 
-#: 持久统一配置渠道（机器属性注册处 = SKILL.md env 表，同 TO_VIDEO_TTS_STORE）。
+#: 持久统一配置渠道（机器属性注册处 = references/PIPELINE.md「环境变量」节，同 TO_VIDEO_TTS_STORE）。
 ENV_ROOT = "TO_VIDEO_DELIVER_ROOT"
 
 #: 文件名/目录名禁用字符：/ 与 : 是 macOS 真实分隔符，\\ ? * " < > | 是迁往

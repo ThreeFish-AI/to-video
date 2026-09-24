@@ -3,19 +3,21 @@
 > 从「论文精读 → 逐字稿 → 配音 → 代码动画 → 终渲」全链路中沉淀的**可复用流水线机制**：抽取自 negentropy 仓，以 to-video 技能仓为家，安装在任意内容工作区上使用。
 > 首个建成的完整范例：《AI 如何自己变强？》（`$W/episodes/self-improving-agents-video/`；建成时间上的第一个，非系列首集，发布顺序见 `$W/series.json`）。
 
+**目录**：一、Pipeline 总览 · 路径变量约定（含环境变量） · 二、工程目录约定 · 三、公共脚本与编排入口（含 pipeline.toml 字段表、交付归档） · 四、复用边界 · 五、音画同步机制（含双语渲染） · 六、新集脚手架清单 · 七、工程模式 · 八、许可注意
+
 ## 一、Pipeline 总览（9 Stages）
 
 ![科普视频 Pipeline 九阶段双层流水线总览：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿 narration.md（单一事实源）→ ④ 双重校验 → ⑤ 分镜表；生产层（工具驱动）由 ③ 下行 ⑥ TTS 合成、⑤ 下行 ⑦ Remotion 场景实现，二者汇合后经 ⑧ 草渲+抽帧 QA 迭代修正，最终 ⑨ 终渲交付 1080p30。](../docs/assets/architecture/influence--pipeline-layers-dark.png)
 
 > 图源（可 diff 文本）：[`influence--pipeline-layers.mmd`](../docs/assets/mermaid/influence--pipeline-layers.mmd) · 交互版（下载到本地打开）：[`influence--pipeline-layers.html`](../docs/assets/architecture/influence--pipeline-layers.html)
 
-每个 Stage 的代理提示词规格见 [skills/](././)，可直接作为子代理 prompt；整仓即 to-video 技能本体，路由入口是 [SKILL.md](../SKILL.md)（skill 根）。
+每个 Stage 的代理提示词规格见本目录的 `01`–`09` 九篇规格（[01](./01-source-extraction.md) 起），可直接作为子代理 prompt；整仓即 to-video 技能本体，路由入口是 [SKILL.md](../SKILL.md)（skill 根）。
 
 **九阶段的声明源是 [stages.toml](./stages.toml)**（上图与下表都是它的人读视图）。执行 `uv run --no-project $T/scripts/pipeline.py stages` 打印全表。此前「有哪九个阶段」同时声明在四处（skills 散文标题 / `pipeline.py` 子命令 / 上面的 mermaid / [SKILL.md](../SKILL.md)（skill 根）速查表），四份可各自漂移且**已经漂移**——⚠️ **序号与文件号刻意不对齐**：Stage ⑥ 是 `07-tts-voice.md`、Stage ⑦ 是 `06-remotion-implementation.md`（入链 ≥5 处，重命名代价大于收益）。该错位现由 [tests/test_stages.py](../tests/test_stages.py) 连同 skill H1、子命令注册表、SKILL.md 覆盖面一起执法。
 
 ## 路径变量约定
 
-本文档、[skills/](././) 与各分集 README 中的**命令**统一用下面四个变量书写，使命令与两个位置事实解耦——skill 装在哪、工作区放在哪（换安装位置 / 搬工作区 / 多工作区并存零改动）；**散文里的链接保持 skill 内部的真实相对路径**：跨树引用（工作区里的文件）做不成相对链接，一律以变量写成纯文本，链接变量化则会造出任何机器都解不开的死链：
+本文档、九篇阶段规格与各分集 README 中的**命令**统一用下面四个变量书写，使命令与两个位置事实解耦——skill 装在哪、工作区放在哪（换安装位置 / 搬工作区 / 多工作区并存零改动）；**散文里的链接保持 skill 内部的真实相对路径**：跨树引用（工作区里的文件）做不成相对链接，一律以变量写成纯文本，链接变量化则会造出任何机器都解不开的死链：
 
 ```bash
 T=~/.claude/skills/to-video   # skill 根（机制的家 = 本仓；env TO_VIDEO_HOME 或任意 clone + 软链皆可）
@@ -26,9 +28,36 @@ V=$W/voices                   # 音色样本目录（整目录 gitignored，生�
 
 **$T 与 $W 物理分离**（机制住技能仓、内容住工作区），一条命令同时引用两者是常态（如 `$T/scripts/qa_frames.py $P/out/draft.mp4`）。skill 脚本定位工作区走「env `TO_VIDEO_WORKSPACE` > 自 CWD 向上找哨兵」，找不到即大声退出——故 $T 锚定的命令仍须**在工作区内（或其子目录）执行**。⚠️ 混锚禁令（反向）：$T 锚定的命令里不得出现工作区相对字面量（`voices/…`、`episodes/…`）——`pipeline.toml` 的 `tts.ref` 与 `series.json` 的 `path` 是**工作区根相对**（配置契约而非命令，由 `paths.WORKSPACE` 拼接），把那套写法搬进命令行会造出（skill 侧 tts_sample 配「裸 voices/ 前缀」样本参数）这类**在任何 CWD 下都不成立**的混锚命令——命令行里的样本路径一律走 `$V`。该纪律由 [tests/test_docs_paths.py](../tests/test_docs_paths.py) 执法。
 
+### 环境变量（机器属性注册处）
+
+机器属性（随主机而变的路径与服务地址）只走 env，**永不写进受版本控制的 toml**；新增此类 env 须在本表登记（消费者注释指向此处）。
+
+| env | 作用 | 缺省 |
+|---|---|---|
+| `TO_VIDEO_HOME` | skill 根（包装器解析首位；其后依次 `~/.claude/skills/to-video` → `~/.agents/skills/to-video`，未命中即大声退出） | 无（靠软链命中） |
+| `TO_VIDEO_WORKSPACE` | 工作区根显式指派（目录须含哨兵，防拼错静默锚错；工作区级包装器会用自身位置硬性覆写它） | 自 CWD 向上搜索哨兵 |
+| `TO_VIDEO_TTS_STORE` | TTS 音频版本库根（兼容读旧名 `NE_TTS_STORE`） | `~/Library/Application Support/to-video/tts-store`（旧默认目录存在则回退） |
+| `TO_VIDEO_INDEX_TTS_ROOT` | IndexTTS 服务仓（`tts_server` / `tts_bench` 的运行环境） | `~/tools/index-tts` |
+| `INDEXTTS_SERVER` | IndexTTS 服务地址，覆盖 `pipeline.toml` 的 `tts.server`（见下方字段表） | 无（回落 `tts.server` 缺省 `http://127.0.0.1:8766`） |
+| `TO_VIDEO_DELIVER_ROOT` | 交付归档根路径（`deliver` 子命令；`--root` 一次性优先于此） | 无（未配置时 deliver 大声退出并列两渠道） |
+| `TO_VIDEO_TEST_WORKSPACE` | 测试集成模式：指向真实内容工作区做真树回归 | 无（单测用 fixture） |
+
 ## 二、工程目录约定
 
-先看**工作区根** `$W/`（`scaffold.py --init-workspace` 落盘的骨架，也是机制与内容的物理分界线）：
+先看 **skill 根** `$T/`（本仓，按 [Agent Skills 规范](https://agentskills.io/specification)布局）：
+
+```
+$T/
+├── SKILL.md           # 路由壳（skill 根哨兵：脚本自 __file__ 向上找它）
+├── references/        # 九篇阶段规格 01–09、本文件、stages.toml、手册
+├── scripts/           # Python 工具链（全部实现的唯一住处）
+├── assets/            # video-skeleton / workspace 模板、quickstart 示例场景
+├── tests/             # pytest（运行命令见 pyproject.toml 顶部注释）
+├── evals/             # 输出质量与触发评测集
+└── pipeline/scripts   # → ../scripts 软链：已部署薄包装的 ABI，禁删（见 pipeline/README.md）
+```
+
+再看**工作区根** `$W/`（`scaffold.py --init-workspace` 落盘的骨架，也是机制与内容的物理分界线）：
 
 ```
 $W/
@@ -219,7 +248,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
    > `esbuild`，勿改回旧字段；缺失该许可会以 `ERR_PNPM_IGNORED_BUILDS` 中断安装并留下半残
    > `node_modules`。
 4. **登记到 `$W/series.json`**（阻塞门：`check_series.py` 规则 4 反向执法——未登记目录一旦写下 `script/narration.md` 即 FAIL；脚手架期为 WARN 分级）：顶层是 `seriesList[]`，新系列追加一个 series 对象（`id` / `title` / `sourceKind` / `rule` / `episodes`），既有系列的新集追加到其 `episodes`。同步 `$W/series.md` 的分节表格。**分级是刻意的**：脚手架期（还没写 `narration.md`）只报 WARN，否则「先登记要先定色板色值、先写要先登记」会把新集夹死在两条门之间；`narration.md` 一落盘即转 FAIL——那一刻规则 1 的反串线扫描才真正需要看见它。`verify_skeleton.py` 也会点名孤儿工程目录，但保持 WARN 不计入未登记漂移（`--strict` 不失败）：漂移门管骨架一致性，登记是清单问题，阻塞执法只放在 `check_series.py` 一处。
-5. 按 [skills/](././) 01→05 顺序走内容层，再进生产层。Stage ① 先判**信源型别**：论文型走 A 型（`paper_extract.py` + `paper-notes.md`），文档/代码/课程站点型走 B 型（`source_ledger.py` + `source-notes.md` + 证据三级），见 [references/01](./01-source-extraction.md)。
+5. 按阶段规格 01→05 顺序走内容层，再进生产层。Stage ① 先判**信源型别**：论文型走 A 型（`paper_extract.py` + `paper-notes.md`），文档/代码/课程站点型走 B 型（`source_ledger.py` + `source-notes.md` + 证据三级），见 [references/01](./01-source-extraction.md)。
 
 ## 七、工程模式
 

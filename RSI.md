@@ -1,6 +1,8 @@
 # RSI：递归自改进回路（Skill 自身缺陷与改进的协议）
 
-> RSI（Recursive Self-Improvement）是**元回路**：作用对象是本 Skill 仓自身（规格、脚本、模板、流程、制度），与九阶段视频流水线正交——视频内容的质量问题走 Stage ④/⑧ 既有 QA 回路，不进本协议；唯一的内容侧例外是**可跨集复用的建模经验**，走第十节「建模经验分支」沉淀进有界手册。本文件可直接作为 RSI 子代理的 prompt 底稿（同 skills/ 先例）；触发分流的一句话判据见 [SKILL.md](SKILL.md)「自改进回路（RSI）」节。
+> RSI（Recursive Self-Improvement）是**元回路**：作用对象是本 Skill 仓自身（规格、脚本、模板、流程、制度），与九阶段视频流水线正交——视频内容的质量问题走 Stage ④/⑧ 既有 QA 回路，不进本协议；唯一的内容侧例外是**可跨集复用的建模经验**，走第十节「建模经验分支」沉淀进有界手册。本文件可直接作为 RSI 子代理的 prompt 底稿（同阶段规格先例）；触发分流的一句话判据见 [SKILL.md](SKILL.md)「自改进回路（RSI）」节。
+
+**目录**：一、触发与分流 · 二、登记 · 三、子代理协议 · 四、四道门 · 五、两种处理模式 · 六、PR 规范 · 七、失败出路 · 八、降级路径 · 九、不变量保护清单 · 十、建模经验分支
 
 ## 一、触发与分流
 
@@ -49,7 +51,7 @@
 |---|---|---|---|
 | G1 | 问题属实 | 复现成立且命令 + 输出已留台账；排除环境特异（配置错 / 旧版本）；定性正确——内容问题误报退回 QA 回路 | 复现命令可重跑 |
 | G2 | 方案正确 | **方案比选**：充分且全面调研高标准候选——仓内先例 + 业界经典设计模式与最佳实践（必要时联网检索），列候选对比、评选最佳并论证；落在最小干预面（能改文档不改代码、能改一处不改两处）；不制造第二事实源（只加指针不复制正文）；触碰历史决策须引用原决策理由并论证推翻的成本收益 | [test_stages](tests/test_stages.py) / [test_docs_paths](tests/test_docs_paths.py) / test_config 全绿 |
-| G3 | 正向收益 | 收益可验证：缺陷类**必须新增回归测试**钉住失败形态；改进类给出可检验的收益声明（省多少步 / 拦住哪类事故 / 防什么复发） | pytest 全绿（命令见下） |
+| G3 | 正向收益 | 收益可验证：缺陷类**必须新增回归测试**钉住失败形态；改进类给出可检验的收益声明（省多少步 / 拦住哪类事故 / 防什么复发）；改动 SKILL.md 描述或路由时按 [evals/](evals/README.md) 做新旧对拍 | pytest 全绿（命令见下） |
 | G4 | 无损历史 | 第九节清单逐项三档核对：未触碰（过）/ 触碰但有显式权衡与同步方案（过，PR 描述须点名）/ 破坏且无论证（**阻断**） | 清单各条目自带的执法测试 |
 
 ```bash
@@ -91,14 +93,15 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 5. `timing.json` 时序 SSOT（TS/Python 双语共读），不得在任何一侧内联时序常数。
 6. 「复制不共享」边界：Python 实现只住 `$T/scripts/`，工作区 / 分集 scripts 只许薄包装。
 7. config SCHEMA 是默认值唯一来源，toml 只写偏离；机器属性永不进 toml。
-8. 九阶段 gates 与 [stages.toml](references/stages.toml) 同源；不新增阶段状态机。
+8. 九阶段 gates 与 [stages.toml](references/stages.toml) 同源（SKILL.md 速查表门列逐字抄录，执法：`test_router_gates_match_stages`）；不新增阶段状态机。
 9. `deliver` 刻意不串联 `render --final`、不入扇出白名单（完成行信号契约 + 破坏性命令显式执行）。
 10. 命令四变量锚定：`$T` 命令不混工作区字面量；变量定义只在 [references/PIPELINE.md](references/PIPELINE.md)（执法：`test_docs_paths.py`）。
-11. SKILL.md 路由壳纪律：只给指针与不变量、速查表恰 9 行、不复制正文。
+11. SKILL.md 路由壳纪律：只给路由、指针与不变量、速查表恰 9 行、不复制正文；frontmatter 只用 Agent Skills 规范六字段且须过官方校验器口径（执法：[test_skill_spec](tests/test_skill_spec.py)）。
 12. 双锚点：skill 根自 `__file__` 找 SKILL.md、工作区根由哨兵搜索；静默猜根被禁止。
 13. 声音样本生物特征纪律：不入库只存指纹；RSI 材料与示例不得引导样本路径进仓。
 14. 许可与依赖纪律：pyproject 刻意无 `[project]`（依赖走 `--with`）；不引入未审计第三方依赖或新许可冲突。
 15. 建模手册有界：预算与条目规则唯一实现于 [check_playbook.py](scripts/check_playbook.py)；超限只许按第十节压缩阶梯逐级压缩，禁整文件重写与「搬进规格正文腾预算」（执法：[test_modeling_playbook](tests/test_modeling_playbook.py)）。
+16. 包装器 ABI：`pipeline/scripts` → `scripts/` 软链是已部署 frozen 薄包装的定位路径，禁删；5 份包装器解析函数字节一致不改（执法：[test_wrapper_resolver](tests/test_wrapper_resolver.py)；迁移映射见 [pipeline/README.md](pipeline/README.md)）。
 
 ## 十、建模经验分支（有界经验库的策展协议）
 

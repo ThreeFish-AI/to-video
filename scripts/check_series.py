@@ -45,7 +45,7 @@
     ——实测真树 #4A9EFF（self-evolution）与 #4ADE80（claude-code 系）同处
     蓝/绿邻域；expand 的二维平行列表天然按系列分组，跨系列互不可见。
 
-用法：uv run --no-project <skill>/pipeline/scripts/check_series.py（自工作区内任意目录）
+用法：uv run --no-project <skill>/scripts/check_series.py（自工作区内任意目录）
 退出码：0 = 一致；1 = 有 FAIL。挂牌 pre-commit 后自动覆盖工作区相关提交。
 
 受检范围按根拆分（见 COVERED_GLOBS_INFLUENCE / PROJECT_GLOBS）：工作区侧

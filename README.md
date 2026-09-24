@@ -37,7 +37,7 @@
 | ④ 双重校验 | 真实性 + 易懂性双门（`check`）：RISKY=0 且 REWRITE=0 |
 | ⑤ 分镜表生成 | beat 覆盖率无缺句（`check`，含分镜↔代码互比） |
 | ⑥ TTS 配音 | 逐句 mp3 + 时长 manifest（`tts`，幂等续跑），`captions` 导出 srt/vtt |
-| ⑦ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 |
+| ⑦ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 + 运动层铁律 |
 | ⑧ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`）零 FAIL，含尾幕渐黑必查 |
 | ⑨ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径，实测时长落在预算窗内 |
 
@@ -73,12 +73,13 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 ```
 
 - **多宿主共享**：把同一 clone 再链到 `~/.agents/skills/to-video`，或设 `TO_VIDEO_HOME=<clone 根>` 指到任意安装位置——包装器按 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 顺序解析。
-- 其余环境变量（工作区指派、tts-store、IndexTTS 服务仓等）见 [SKILL.md](SKILL.md) 的 env 表。
+- 其余环境变量（工作区指派、tts-store、IndexTTS 服务等）见 [references/PIPELINE.md](references/PIPELINE.md)「环境变量」节。
+- 请保留 clone 内的 `pipeline/scripts` 软链（已部署分集包装器的定位路径）；复制式安装若丢失软链，旧分集包装器会找不到 skill，原因见 [pipeline/README.md](pipeline/README.md)。
 
 ### 验证安装
 
 - 宿主内：`/skills`（Claude Code / Codex）或 Skills 面板（Cursor）应列出 to-video；
-- CLI 冒烟：`uv run --no-project <clone 根>/pipeline/scripts/scaffold.py --help` 可正常打印。
+- CLI 冒烟：`uv run --no-project <clone 根>/scripts/scaffold.py --help` 可正常打印。
 
 ### 更新与卸载
 
@@ -153,16 +154,13 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 
 | 文档 | 内容 |
 | --- | --- |
-| [SKILL.md](SKILL.md) | Skill 路由壳：快速通道、九阶段速查、关键不变量、env 表 |
-| [references/PIPELINE.md](references/PIPELINE.md) | 机制 SSOT：脚本清单、pipeline.toml 字段表、路径变量约定、复用边界 |
-| [references/](references/) | 九阶段规格（`01`–`09` 每阶段一份，可直接作为子代理 prompt） |
-| [references/VOICE-CLONING.md](references/VOICE-CLONING.md) | 声音克隆操作与参数：部署、样本、风格档、合成、缓存、排障 |
-| [references/INDEXTTS-2.5-ADVANCED.md](references/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
-| [references/PRON-GLOSSARY.md](references/PRON-GLOSSARY.md) | 易错字台账：发音标注（`<原文\|读音>`）跨集复用表 |
+| [SKILL.md](SKILL.md) | Skill 路由壳：任务分流、工作流、九阶段速查、关键不变量、运行时陷阱、按需加载 |
+| [references/PIPELINE.md](references/PIPELINE.md) | 机制 SSOT：脚本清单、pipeline.toml 字段表、路径变量与环境变量、复用边界 |
+| [references/](references/) | 九阶段规格（`01`–`09` 每阶段一份，可直接作为子代理 prompt）与声音克隆、读音、建模等手册 |
 | [RSI.md](RSI.md) | RSI 自改进回路：Skill 缺陷/改进的台账登记、子代理协议、四道门核验与 PR 回流 |
-| [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md) | 动效画面建模手册：跨集复用的建模方法与反模式（字数有界，上限见 `check_playbook.py`；超限按压缩阶梯回收） |
-| [docs/research/modeling-experience-distillation.md](docs/research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本史与迁移记录 |
+
+全量文档索引（含手册、评测集、研究文档与资产目录）见 [docs/.agents/knowledge-map.md](docs/.agents/knowledge-map.md)。
 
 ## 六、相邻 Skill
 
