@@ -95,22 +95,38 @@ def resolve_langs(cmd: str, arg: str | None, cfg: dict) -> list[str]:
     return list(declared) if cmd in _ALL_LANGS_DEFAULT else [langs.PRIMARY]
 
 
-def resolve_qa_lang(explicit: str | None, video: str | None, cfg: dict) -> str:
-    """→ qa 的单语言。显式 --lang 优先；未给时从视频文件名推断（`.<lang>.mp4` 后缀
-    → 该语言，无后缀 → 主语言，同 langs.render_out 路径约定；推断出的语言同样须
-    已声明）；无视频再退主语言。推断与显式冲突即报错——两个信号指向两个语言时
-    静默取其一，抽帧会抽错语言的时间轴。"""
-    inferred: str | None = None
-    if video:
-        name = Path(video).name
-        inferred = next(
-            (
-                one
-                for one in langs.LANGS
-                if one != langs.PRIMARY and name.endswith(f".{one}.mp4")
-            ),
-            langs.PRIMARY,
+def _video_lang(video: str) -> str:
+    """视频文件名 → 语言：`.<lang>.mp4` 后缀 → 该语言，无后缀 → 主语言
+    （同 langs.render_out 路径约定）。"""
+    name = Path(video).name
+    return next(
+        (
+            one
+            for one in langs.LANGS
+            if one != langs.PRIMARY and name.endswith(f".{one}.mp4")
+        ),
+        langs.PRIMARY,
+    )
+
+
+def resolve_qa_lang(
+    explicit: str | None,
+    video: str | None,
+    cfg: dict,
+    compare: list[str] | None = None,
+) -> str:
+    """→ qa 的单语言。显式 --lang 优先；未给时从视频文件名推断（--video 与
+    --compare 两路径同等参与；推断出的语言同样须已声明）；无视频再退主语言。
+    推断与显式冲突、或多个视频互相冲突即报错——两个信号指向两个语言时静默
+    取其一，抽帧会抽错语言的时间轴（--compare 同帧号对拍，跨语言本就无意义）。"""
+    by_video = {v: _video_lang(v) for v in (video, *(compare or [])) if v}
+    if len(set(by_video.values())) > 1:
+        raise ValueError(
+            "视频文件名指向不同语言（"
+            + "、".join(f"{Path(v).name}→{g}" for v, g in by_video.items())
+            + "）——qa 恒单语言，同一次运行的视频须同属一个语言版本"
         )
+    video, inferred = next(iter(by_video.items()), (None, None))
     if explicit is not None:
         picked = langs.parse_selection(explicit, declared_langs(cfg))
         if len(picked) != 1:
@@ -1042,7 +1058,7 @@ def main() -> None:
     lang_arg = getattr(args, "lang", None)
     try:
         lang_list = (
-            [resolve_qa_lang(lang_arg, args.video, cfg)]
+            [resolve_qa_lang(lang_arg, args.video, cfg, args.compare)]
             if args.cmd == "qa"
             else resolve_langs(args.cmd, lang_arg, cfg)
         )

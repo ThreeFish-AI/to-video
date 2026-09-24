@@ -854,6 +854,14 @@ def test_resolve_qa_lang_infer_and_conflict():
         pipeline.resolve_qa_lang(
             None, "out/draft.en.mp4", {"narration": {"langs": ["zh"]}}
         )
+    # --compare 两路径同等参与推断：此前只看 --video，en 对拍会静默用 zh 时间轴
+    ab_en = ["out/final.en.mp4", "out/draft.en.mp4"]
+    assert pipeline.resolve_qa_lang(None, None, multi, ab_en) == "en"
+    assert pipeline.resolve_qa_lang("en", None, multi, ab_en) == "en"
+    with pytest.raises(ValueError, match="冲突"):
+        pipeline.resolve_qa_lang("zh", None, multi, ab_en)
+    with pytest.raises(ValueError, match="指向不同语言"):
+        pipeline.resolve_qa_lang(None, None, multi, ["out/final.mp4", ab_en[1]])
 
 
 def test_qa_scale_inference_accepts_draft_en(monkeypatch, tmp_path):

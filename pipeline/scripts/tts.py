@@ -990,7 +990,7 @@ async def main() -> None:
         "--lang",
         default=None,
         help="[indextts] 语言（缺省按 --narration-lang 解析：zh→ZH、en→EN；"
-        "显式给值须与之一致，否则按克隆参数误用拦截）",
+        "显式给值须与之一致，冲突即报错退出）",
     )
     idx.add_argument(
         "--num-beams",
@@ -1111,7 +1111,14 @@ async def main() -> None:
     # 语言解析：--lang/--voice 未显式给出时按 --narration-lang 从镜像表取缺省——
     # `--narration-lang en` 下绝不能静默回落 ZH/中文音色（digest 与音色都会错槽位）。
     want_lang, want_voice = LANG_MIRROR[args.narration_lang]
-    tts_lang = args.lang if args.lang is not None else want_lang
+    # 显式 --lang 与镜像解析值冲突即拦（两引擎统一）：错语言 take 的 digest 自洽，
+    # 后续会当缓存命中，事后只能靠听发现。
+    if args.lang is not None and args.lang != want_lang:
+        parser.error(
+            f"--lang {args.lang} 与 --narration-lang {args.narration_lang}"
+            f"（应为 {want_lang}）冲突——省略 --lang 即按逐字稿语言自动解析"
+        )
+    tts_lang = want_lang  # 冲突已拦：显式值若给出必与镜像解析值相等
     voice = args.voice if args.voice is not None else want_voice
 
     if args.list_styles:
@@ -1166,9 +1173,6 @@ async def main() -> None:
                 "--num-beams": args.num_beams is not None,
                 "--steady": args.steady,
                 "--style": args.style != "neutral",
-                # 显式给出且 ≠ 该 narration-lang 的镜像解析值才计——en 长跑里
-                # --narration-lang en 天然解析 EN，属正常路径而非克隆参数误用
-                "--lang": args.lang is not None and args.lang != want_lang,
                 # 采样参数族同属克隆专属：edge 不认这些旋钮，且两引擎摘要必然不同，
                 # 照跑同样会把整集克隆音频改写成 edge 预置音色 ⇒ 与上面同口径硬失败。
                 "--temperature": args.temperature is not None,

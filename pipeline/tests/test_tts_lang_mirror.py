@@ -12,6 +12,8 @@ import ast
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import langs  # noqa: E402
 import tts  # noqa: E402
@@ -62,52 +64,49 @@ def test_tts_text_mappings_are_zh_only():
     assert tts.tts_text("缺省即 ZH——不变") == "缺省即 ZH，不变"
 
 
+def _run_tts(*argv: str):
+    import subprocess
+
+    return subprocess.run(
+        [sys.executable, str(SCRIPTS / "tts.py"), *argv],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=SCRIPTS,
+    )
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("--narration-lang", "en", "--engine", "edge", "--lang", "ZH"),
+        # indextts 同样须拦：此前一致性只在 edge 的 clone_only 护栏里校验，
+        # indextts 会以 ZH 归一化合成英文稿写进 audio/en/
+        ("--narration-lang", "en", "--engine", "indextts", "--lang", "ZH"),
+        ("--narration-lang", "zh", "--engine", "indextts", "--lang", "EN"),
+    ],
+)
+def test_explicit_lang_conflict_rejected(argv):
+    """显式 --lang 与 --narration-lang 的镜像解析值冲突 ⇒ 两引擎统一 argparse
+    报错（exit 2），在读取工程文件之前拦下。"""
+    r = _run_tts(*argv, "--ref", "unused.wav")
+    assert r.returncode == 2
+    assert "冲突" in r.stderr
+
+
 def test_narration_lang_resolves_not_falls_back():
     """`--narration-lang en` 时未显式给 --lang/--voice ⇒ 解析 EN 与英文音色，
     绝不静默回落 ZH/中文音色（digest 与音色都会错槽位）。
 
-    经 subprocess 走 argparse 真路径：edge + 显式 --lang ZH 与镜像解析值不符
-    ⇒ clone_only 护栏拦截；--narration-lang en 不带 --lang 不拦（正常路径，
-    因缺工程文件退出，但消息不含克隆参数误用提示）。"""
-    import subprocess
-
-    r = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPTS / "tts.py"),
-            "--narration-lang",
-            "en",
-            "--engine",
-            "edge",
-            "--lang",
-            "ZH",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=SCRIPTS,
-    )
-    assert r.returncode != 0
-    assert "--engine indextts" in r.stderr + r.stdout  # 显式给值 ≠ 镜像解析 ⇒ 拦截
-
-    r2 = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPTS / "tts.py"),
-            "--narration-lang",
-            "en",
-            "--engine",
-            "edge",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=SCRIPTS,
-    )
-    assert r2.returncode != 0  # cwd=SCRIPTS 无 narration.en.json，大声退出
-    msg = r2.stderr + r2.stdout
-    assert "仅对 --engine indextts 生效" not in msg  # 不因缺省解析 EN 而误拦
-    assert "narration.en.json 不存在" in msg
+    经 subprocess 走 argparse 真路径：不带 --lang、或显式给出与镜像一致的值
+    都不拦（正常路径，因缺工程文件退出，消息不含冲突/克隆参数误用提示）。"""
+    for extra in ((), ("--lang", "EN")):
+        r = _run_tts("--narration-lang", "en", "--engine", "edge", *extra)
+        assert r.returncode != 0  # cwd=SCRIPTS 无 narration.en.json，大声退出
+        msg = r.stderr + r.stdout
+        assert "仅对 --engine indextts 生效" not in msg  # 不因解析 EN 而误拦
+        assert "冲突" not in msg
+        assert "narration.en.json 不存在" in msg
 
 
 def test_tts_inline_path_shapes_mirror_langs():
