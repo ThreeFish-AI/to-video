@@ -109,3 +109,19 @@
 **后续防范**：画面文字只放字幕给不了的信息（关键词 / 数字 / 标签 / 结构）；金句卡若必须存在，与口播措辞拉开（口播完整句、画面关键词）。评审回归（2026-09-24）三条经验：① 源码扫描门的红绿对照必须覆盖该源码的**主流写法**（这里是 JSX 文本独占一行），只拿单行构造样例验证，「修复后 0」会是假绿；② 正则提取成对定界符时不能设长度下限，否则短匹配失败后错位配对会吞掉后文（`at('p0-01')` 后的正文）；③ FAIL 级判据须贴合缺陷的物理条件（同屏）：别幕回扣与注释都不构成两层重复，误报会逼人绕门。
 
 **同类问题影响**：negentropy 13 集有存量（合计 85 处，见复现），均为已发布成片，本 PR 不改其内容。本门缺省执法后，这些集在 `pipeline.py check` / `all` 上会红，重渲前必须先修（或逐处以 `caption-dup-ok` 说明）。jev 集（发现集）的 9 处已于 [negentropy#1173](https://github.com/ThreeFish-AI/negentropy/pull/1173) 处理（2026-09-24）：改为关键词锚点、复述门 FAIL 0、重渲并交付 v3（内容侧记录见 negentropy ISSUE-199）；余 12 集 76 处待各自重渲前处理。
+
+## RSI-008 Skill 不合 Agent Skills 规范：frontmatter 被官方校验器拒收，路由壳缺渐进披露与条件加载，速查门列漂移
+
+**表因**：以 Agent Skills 规范（agentskills.io 规范、官方参考校验器 skills-ref、Anthropic skill authoring best practices）审计本 Skill，发现五类差距：① `skills-ref validate` 失败，报 `Found ugly disallowed JSONesque flow mapping`，位置在 SKILL.md:5 的 `metadata: {…}`；② `allowed-tools` 用逗号分隔（规范为空格分隔），缺 `compatibility`，description 里塞了 1080p30、`--root`、vN 等实现细节，缺英文触发词和负向边界；③ SKILL.md 九阶段速查的「通过门」列是 stages.toml `gate` 的手抄件，9 行里 6 行已漂移（③⑤⑥⑧⑨ 截短或改写，⑦ 内容不同）；④ 快速通道第 5 步教 `npx tsc --noEmit`，与 06 规格「工具一律 `./node_modules/.bin/` 直调」矛盾；⑤ 路由壳没有任务分流，也没说明何时读哪份文件（VOICE-CLONING 等手册要两跳才能到），env 表的 SSOT 放在每次激活都全量加载的 SKILL.md 里，超过 100 行的 5 份规格没有目录，仓内没有评测资产，目录也不合规范的 `scripts/ references/ assets/` 惯例。
+
+**复现**：`git archive <旧提交> | tar -x -C /tmp/x/to-video` 后执行 `uvx --from "git+https://github.com/agentskills/agentskills#subdirectory=skills-ref" skills-ref validate /tmp/x/to-video`，退出码 1。门列漂移逐行对比与 `grep -n "npx tsc" SKILL.md` 的输出留在 PR 描述中。新门在旧 SKILL.md 上会变红：`test_skill_spec` 9 项 ERROR（第 5 行 flow mapping），`test_router_gates_match_stages` 点名 6 行，`test_no_npx_for_remotion_tools` 点名 1 处。
+
+**根因**：SKILL.md 是从 negentropy 的 `.agent` 路由壳演化来的，写的时候对照的是仓内纪律（路由壳只给指针、速查表恰 9 行），没有对照 Agent Skills 规范。frontmatter 从没被任何校验器解析过，Claude Code 能宽容解析 flow style 和逗号分隔，缺陷因此一直不可见。门列只有「链接覆盖 9 篇规格」这一条执法，文本本身无人校验，于是逐步漂移。
+
+**定性**：非阻断改进，含两处缺陷：门列漂移、npx 命令矛盾。在其他宿主上，frontmatter 不合规会直接导致上传失败或触发失效。
+
+**处理方式**：分三次提交。① 用 `git mv` 迁到规范布局，`pipeline/scripts → ../scripts` 保留为软链。这条软链是已部署 frozen 薄包装的定位路径（ABI），5 份包装器的解析函数与全部 frozen 文件字节不变。`pipeline/README.md` 改为迁移桩，全仓 Markdown 链接按旧位置重算。② frontmatter 只保留规范六字段：metadata 改块式、allowed-tools 改空格分隔、新增 compatibility，description 改写为「做什么 + Use when + 不用于」。SKILL.md 重构为：任务分流 → 工作流（显式修复重跑循环）→ 速查（门列逐字等于 stages.toml，⑦ 的 gate 补上「运动层铁律」）→ 不变量（新增包装器 ABI）→ 运行时陷阱 → 按需加载。env 表迁入 PIPELINE.md 并补 `INDEXTTS_SERVER`，5 份长规格各加一行目录，新建 docs/.agents/knowledge-map.md。③ 新增 evals/（3 个输出评测、20 条触发评测，含近邻负例）；新增 `tests/test_skill_spec.py`（只用标准库，是比 strictyaml 更严的 frontmatter 子集解析器，并覆盖字段约束、正文预算、加载期标记、目录行、evals 结构、全仓链接网）；新增门列同源、npx、旧路径三条回归门，以及 ABI 软链两条执法。
+
+**后续防范**：改 frontmatter 后必须过 test_skill_spec，必要时一次性跑官方 skills-ref。不得为 Claude Code 专有能力引入规范外字段，否则牺牲可移植性，要引入须显式决策。SKILL.md 里任何与 stages.toml、PIPELINE.md 重复的文本，都必须挂逐字同源的执法，否则只留指针。不得删除 `pipeline/scripts` 软链，也不得修改包装器解析函数。改 description 前后，按 evals/README 做触发评测对拍。
+
+**同类问题影响**：已发布分集和工作区经软链零改动继续可用。它们 README 里的 `$T/pipeline/scripts/…` 命令仍然有效；GitHub blob 旧链接会落到迁移桩。frozen 文件注释里的旧路径（如 SceneFade 的 `pipeline/skills/06…`）有意保留，按迁移桩里的映射表换算。复制式安装（`npx skills add --copy`）如果丢失软链，旧分集包装器会失效，README 安装节已注明。
