@@ -431,16 +431,21 @@ def _zh_digest(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
-def fresh_lock(project: Path) -> dict[str, str]:
+def fresh_lock(project: Path) -> dict[str, dict[str, str]]:
+    """锁形态 {句id: {zh: 主稿 digest, en: 译句 digest}}（与 build_narration 同构）。"""
     zh = json.loads((project / "script" / "narration.json").read_text(encoding="utf-8"))
-    return {i["id"]: _zh_digest(i["text"]) for i in zh}
+    en = {i["id"]: i["text"] for i in EN_ITEMS_OK}
+    return {
+        i["id"]: {"zh": _zh_digest(i["text"]), "en": _zh_digest(en[i["id"]])}
+        for i in zh
+    }
 
 
 def setup_en(
     project: Path,
     items: list[dict] | None = None,
     *,
-    lock: dict[str, str] | None = None,
+    lock: dict[str, dict[str, str]] | None = None,
     toml: str = CFG_EN,
     with_lock: bool = True,
 ) -> None:
@@ -528,6 +533,21 @@ def test_en_missing_window_warns_and_skips(project):
     assert "跳过 en 时长预算门" in out and "不继承" in out
 
 
+def test_en_bad_window_fails_in_config_layer(project):
+    """en 窗口形状非法：config 层 FAIL（rc=1）——不再只剩一条跳门 WARN。"""
+    setup_en(
+        project,
+        toml=CFG_EN.replace(
+            "[narration.en]\ntarget_minutes = [0.0, 99.0]",
+            "[narration.en]\ntarget_minutes = 8",
+        ),
+    )
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 1
+    assert "narration.en.target_minutes 应为" in out
+    assert "narration.en.target_minutes 缺失或形状非法" in out  # 跳门 WARN 点对键名
+
+
 def test_en_lock_missing_warns(project):
     setup_en(project, with_lock=False)
     rc, out = run_check(project, "--lang", "en")
@@ -538,7 +558,7 @@ def test_en_lock_missing_warns(project):
 def test_en_lock_stale_fails(project):
     """锁与当前主稿 digest 不一致：点名改动句，提示重译后刷新锁。"""
     stale = fresh_lock(project)
-    stale["p1-02"] = "0" * 12
+    stale["p1-02"]["zh"] = "0" * 12
     setup_en(project, lock=stale)
     rc, out = run_check(project, "--lang", "en")
     assert rc == 1
@@ -587,7 +607,7 @@ def test_pre_tts_en_runs_text_gates_and_blocks_on_stale_lock(project):
     assert "pre-TTS" in out and "跳过覆盖性" in out
 
     stale = fresh_lock(project)
-    stale["p0-01"] = "f" * 12
+    stale["p0-01"]["zh"] = "f" * 12
     setup_en(project, lock=stale)
     rc, out = run_check(project, "--pre-tts", "--lang", "en")
     assert rc == 1
@@ -595,19 +615,27 @@ def test_pre_tts_en_runs_text_gates_and_blocks_on_stale_lock(project):
 
 
 def test_check_scenes_en_reports_untranslated_literals(project):
-    """--check-scenes --lang en：未翻译画面文字报告（WARN-only）；已走 <L / useL
-    通道的行豁免。"""
+    """--check-scenes --lang en：未翻译画面文字报告（WARN-only）。已翻译片段
+    （带 en 的 <L>、skills/06 的 t({zh, en}) 字面对）剥除后不报；缺 en 的 <L>
+    （回落中文）与 <Label> 之类同前缀标签照报。"""
     setup_en(project)
     write_scene(
         project,
         "P0Card.tsx",
-        "const t = '未翻译的标题';\n"
+        "const title = '未翻译的标题';\n"
         'const L1 = <L zh="已翻译" en="Translated"/>;\n'
-        "const l2 = useL('已走通道', 'via hook');\n",
+        "const t = useL();\n"
+        "const s = t({zh: '已走通道', en: 'Via hook'});\n"
+        'const L2 = <L zh="缺译回落" />;\n'
+        'const lb = <Label text="未翻译标签"/>;\n'
+        "const mix = t({zh: '甲', en: 'A'}) + '漏译';\n",
     )
     rc, out = run_check(project, "--check-scenes", "--lang", "en")
     assert rc == 0, out  # WARN-only 不改退出码
-    assert "英文版画面将显示中文" in out and "P0Card.tsx:1" in out
-    assert "P0Card.tsx:2" not in out and "P0Card.tsx:3" not in out
+    assert "英文版画面将显示中文" in out
+    for n in (1, 5, 6, 7):
+        assert f"P0Card.tsx:{n} " in out, (n, out)
+    for n in (2, 3, 4):
+        assert f"P0Card.tsx:{n} " not in out, (n, out)
     # en 模式下不再跑主稿的场景互比门（语言无关，主稿执法）
     assert "beatWindow" not in out

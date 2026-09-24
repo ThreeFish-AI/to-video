@@ -65,9 +65,13 @@ MANUAL = str(SCRIPTS.parent / "VOICE-CLONING.md")  # skill 内同目录文档（
 
 
 def declared_langs(cfg: dict) -> list[str]:
-    """→ 本集声明的语言清单（narration.langs；缺省走 config.default，不内联副本）。"""
+    """→ 本集声明的语言清单（narration.langs；缺省走 config.default，不内联副本）。
+
+    只保留已注册的语言码：非法声明已由 config.validate 报 FAIL，但 status/doctor
+    容忍配置 FAIL 继续跑，原样返回会让它们在路径派生处以 traceback 结束。"""
     got = cfg.get("narration", {}).get("langs")
-    return list(got) if got else list(config.default("narration.langs"))
+    ok = [x for x in got if x in langs.LANGS] if isinstance(got, list) else []
+    return ok or list(config.default("narration.langs"))
 
 
 #: 缺省跑**全部声明语言**的子命令（便宜、只读或派生物）。
@@ -92,14 +96,20 @@ def resolve_langs(cmd: str, arg: str | None, cfg: dict) -> list[str]:
 
 
 def resolve_qa_lang(explicit: str | None, video: str | None, cfg: dict) -> str:
-    """→ qa 的单语言。显式 --lang 优先；未给时从视频文件名 `.<lang>.mp4` 后缀推断
-    （推断出的语言同样须已声明）；再退主语言。推断与显式冲突即报错——两个信号
-    指向两个语言时静默取其一，抽帧会抽错语言的时间轴。"""
+    """→ qa 的单语言。显式 --lang 优先；未给时从视频文件名推断（`.<lang>.mp4` 后缀
+    → 该语言，无后缀 → 主语言，同 langs.render_out 路径约定；推断出的语言同样须
+    已声明）；无视频再退主语言。推断与显式冲突即报错——两个信号指向两个语言时
+    静默取其一，抽帧会抽错语言的时间轴。"""
     inferred: str | None = None
     if video:
         name = Path(video).name
         inferred = next(
-            (one for one in langs.LANGS if name.endswith(f".{one}.mp4")), None
+            (
+                one
+                for one in langs.LANGS
+                if one != langs.PRIMARY and name.endswith(f".{one}.mp4")
+            ),
+            langs.PRIMARY,
         )
     if explicit is not None:
         picked = langs.parse_selection(explicit, declared_langs(cfg))
@@ -108,9 +118,13 @@ def resolve_qa_lang(explicit: str | None, video: str | None, cfg: dict) -> str:
                 f"qa 恒单语言：--lang 只接受一个语言码（得到 {explicit!r}）"
             )
         if inferred is not None and inferred != picked[0]:
+            slot = (
+                "无语言后缀 = 主语言产物"
+                if inferred == langs.PRIMARY
+                else f"后缀 .{inferred}.mp4"
+            )
             raise ValueError(
-                f"--lang {picked[0]!r} 与视频文件名后缀 .{inferred}.mp4 冲突"
-                f"（{Path(video).name}）"
+                f"--lang {picked[0]!r} 与视频文件名冲突（{Path(video).name}：{slot}）"
             )
         return picked[0]
     if inferred is None:
@@ -194,7 +208,8 @@ def uv_no_project(
 def _lock_freshness(root: Path, lang: str) -> str:
     """非主语言的译稿基线锁新鲜度（锁 = 翻译时主稿句 digest 快照，gettext msgid 同构）。
     主稿事后改稿 ⇒ 锁失配可测，译稿不会沦为无信号的第二事实源。"""
-    import hashlib
+    # 惰性：读锁与失鲜判定口径唯一在 build_narration（同 check_script 的引用）
+    from build_narration import read_lock, stale_ids
 
     lp = langs.lock(root, lang)
     zh_json = langs.narration_json(root, langs.PRIMARY)
@@ -203,20 +218,20 @@ def _lock_freshness(root: Path, lang: str) -> str:
     if not zh_json.is_file():
         return "⚠️ 主稿缺失，无法比对"
     try:
-        recorded = json.loads(lp.read_text(encoding="utf-8"))
-        current = {
-            i["id"]: hashlib.sha1(i["text"].encode()).hexdigest()[:12]
-            for i in json.loads(zh_json.read_text(encoding="utf-8"))
-        }
-    except (json.JSONDecodeError, KeyError):
+        recorded = read_lock(lp)
+        zh_items = json.loads(zh_json.read_text(encoding="utf-8"))
+        moved = sorted(set(recorded) ^ {i["id"] for i in zh_items}) or stale_ids(
+            recorded, zh_items
+        )
+    except (json.JSONDecodeError, KeyError, ValueError):
         return f"⚠️ 基线锁损坏（非法 JSON/缺字段）: {lp.name}"
-    if recorded == current:
+    if not moved:
         return "✅ 与主稿一致"
-    moved = sorted(set(recorded) ^ set(current)) or [
-        k for k in current if k in recorded and recorded[k] != current[k]
-    ]
     head = "、".join(moved[:3]) + (" 等" if len(moved) > 3 else "")
-    return f"⚠️ 主稿已改（{head or '句集变化'}）——重译或重跑 build --lang {lang} 刷新锁"
+    return (
+        f"⚠️ 主稿已改（{head}）——重译后 build --lang {lang} 刷新锁"
+        "（译文无需改动时加 --accept <ids>）"
+    )
 
 
 def _status_lang(root: Path, lang: str, multi: bool) -> None:
@@ -370,12 +385,34 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
     return 0 if ok else 1
 
 
-def cmd_build(root: Path, _cfg: dict, langs: list[str] | None = None) -> int:
+def cmd_build(
+    root: Path,
+    _cfg: dict,
+    langs: list[str] | None = None,
+    accept: str | None = None,
+) -> int:
+    """③ 逐语言构建。--accept 只转发给译稿语言（主稿没有对齐对象）；选中语言全是
+    主语言时报错而非静默丢弃——parse 了却不生效的 flag 等于静默缩小操作面。"""
+    lang_list = langs or declared_langs(_cfg)
+    if accept is not None and all(x == LANG_PRIMARY for x in lang_list):
+        print(f"❌ --accept 只作用于译稿语言，本次选中 {lang_list}（加 --lang en）")
+        return 2
     return per_lang(
         "build",
-        langs or declared_langs(_cfg),
+        lang_list,
         lambda lang: run(
-            uv_no_project("build_narration.py", [], "--lang", lang, project=root)
+            uv_no_project(
+                "build_narration.py",
+                [],
+                "--lang",
+                lang,
+                *(
+                    ["--accept", accept]
+                    if accept is not None and lang != LANG_PRIMARY
+                    else []
+                ),
+                project=root,
+            )
         ),
     )
 
@@ -880,7 +917,13 @@ def main() -> None:
         "status", parents=[lang_flag], help="阶段新鲜度（实时派生，按声明语言分行）"
     )
     sub.add_parser("doctor", help="环境自检")
-    sub.add_parser("build", parents=[lang_flag], help="③ narration(.en).md → .json")
+    p = sub.add_parser("build", parents=[lang_flag], help="③ narration(.en).md → .json")
+    p.add_argument(
+        "--accept",
+        metavar="all|ID[,ID…]",
+        help="译稿基线锁：确认这些句的译文在主稿改稿后无需改动（重译过的句自动刷新，"
+        "无需点名）；只转发给译稿语言",
+    )
     p = sub.add_parser("check", parents=[lang_flag], help="④⑤ 内容门")
     p.add_argument(
         "--check-scenes",
@@ -1009,7 +1052,7 @@ def main() -> None:
     rc = {
         "status": lambda: cmd_status(root, cfg, lang_list),
         "doctor": lambda: cmd_doctor(root, cfg, origin),
-        "build": lambda: cmd_build(root, cfg, lang_list),
+        "build": lambda: cmd_build(root, cfg, lang_list, args.accept),
         "check": lambda: cmd_check(
             root, cfg, args.check_scenes, args.check_motion, lang_list
         ),

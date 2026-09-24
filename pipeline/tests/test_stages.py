@@ -585,6 +585,38 @@ def test_build_check_default_all_declared_langs(monkeypatch, tmp_path):
     assert all("build_narration.py" not in " ".join(c) for c in commands[2:])
 
 
+def test_build_accept_forwards_to_translation_langs_only(monkeypatch, tmp_path):
+    """build --accept 只转发给译稿语言；选中语言全是主语言时报错而非静默丢弃。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    cfg = {"narration": {"langs": ["zh", "en"]}}
+    assert pipeline.cmd_build(tmp_path, cfg, accept="p0-01") == 0
+    by_lang = {c[c.index("--lang") + 1]: c for c in commands}
+    assert "--accept" not in by_lang["zh"]
+    assert by_lang["en"][by_lang["en"].index("--accept") + 1] == "p0-01"
+    commands.clear()
+    assert pipeline.cmd_build(tmp_path, cfg, ["zh"], accept="all") != 0
+    assert commands == []
+
+
+def test_diagnostics_survive_unregistered_declared_lang(tmp_path, capsys):
+    """narration.langs 含未注册语言码：config FAIL 已报，status/doctor（配置有病
+    也必须能跑）不得在路径派生处以 traceback 结束——未注册码被滤除。"""
+    import pipeline
+
+    assert pipeline.declared_langs({"narration": {"langs": ["zh", "EN"]}}) == ["zh"]
+    assert pipeline.declared_langs({"narration": {"langs": "zh"}}) == ["zh"]
+    (tmp_path / "script").mkdir()
+    cfg = {"narration": {"langs": ["zh", "EN"]}, "tts": {"engine": "edge"}}
+    assert pipeline.cmd_status(tmp_path, cfg) == 0
+    pipeline.cmd_doctor(tmp_path, cfg)
+    assert "声明语言：zh（" in capsys.readouterr().out
+
+
 def test_tts_lang_en_forwards_narration_lang_not_lang(monkeypatch, tmp_path):
     """tts --lang en：薄包装收 --narration-lang en，且**不再传 --lang**
     （tts.py 自解析，zh digest 不变）。"""
@@ -802,15 +834,18 @@ def test_render_en_skeleton_preflight_passes(monkeypatch, tmp_path):
 
 
 def test_resolve_qa_lang_infer_and_conflict():
-    """qa 恒单语言：显式优先；文件名 .<lang>.mp4 推断；推断与显式冲突即报错；
-    推断出的语言同样须已声明。"""
+    """qa 恒单语言：显式优先；文件名 .<lang>.mp4 推断、无后缀 = 主语言产物；
+    推断与显式冲突即报错（含「--lang en + 无后缀的 zh 槽位」——en 时间轴抽 zh
+    视频会句边界静默错位）；推断出的语言同样须已声明。"""
     import pipeline
 
     multi = {"narration": {"langs": ["zh", "en"]}}
     assert pipeline.resolve_qa_lang(None, "out/draft.mp4", multi) == "zh"
     assert pipeline.resolve_qa_lang(None, "out/draft.en.mp4", multi) == "en"
     assert pipeline.resolve_qa_lang(None, None, multi) == "zh"
-    assert pipeline.resolve_qa_lang("en", "out/draft.mp4", multi) == "en"
+    assert pipeline.resolve_qa_lang("en", "out/draft.en.mp4", multi) == "en"
+    with pytest.raises(ValueError, match="无语言后缀"):
+        pipeline.resolve_qa_lang("en", "out/draft.mp4", multi)
     with pytest.raises(ValueError, match="冲突"):
         pipeline.resolve_qa_lang("zh", "out/draft.en.mp4", multi)
     with pytest.raises(ValueError, match="恒单语言"):
@@ -926,9 +961,9 @@ def test_status_reports_per_language_and_lock(monkeypatch, tmp_path, capsys):
         json.dumps(zh_items), encoding="utf-8"
     )
     digest = hashlib.sha1("你好。".encode()).hexdigest()[:12]
-    # 锁与主稿一致 ⇒ ✅
+    # 锁与主稿一致 ⇒ ✅（锁形态同 build_narration：{句id: {zh, en}}）
     (tmp_path / "script" / "narration.en.lock.json").write_text(
-        json.dumps({"p0-01": digest}), encoding="utf-8"
+        json.dumps({"p0-01": {"zh": digest, "en": "0" * 12}}), encoding="utf-8"
     )
     assert pipeline.cmd_status(tmp_path, {"narration": {"langs": ["zh", "en"]}}) == 0
     out = capsys.readouterr().out

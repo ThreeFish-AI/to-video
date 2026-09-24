@@ -17,8 +17,8 @@
 （译稿失鲜）、文本形态（禁汉字 / 必含拉丁字母 / 禁全角标点——防上游
 use_chinese() 的整句嗅探把英文句路由进中文归一化）、字幕溢出；预算按词数 /
 words_per_min 对 narration.en.target_minutes 窗口（缺省点名跳过，不继承 zh）。
---check-scenes --lang en 附未翻译画面文字报告（scenes/*.tsx 中 <L / useL 之外的
-含汉字字面量，WARN-only）。
+--check-scenes --lang en 附未翻译画面文字报告（scenes/*.tsx 中未走 <L zh en> /
+t({zh, en}) 双语对的含汉字字面量，WARN-only）。
 
 可选 --check-scenes：从 video/src/scenes/*.tsx 提取 beatWindow/w('id','id')
 调用，与分镜表互比（WARN-only，TSX 正则本质近似）。
@@ -55,7 +55,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
 import langs  # noqa: E402
-from build_narration import zh_digest  # noqa: E402
+from build_narration import read_lock, stale_ids  # noqa: E402
 from pron_marks import scan_candidates, validate  # noqa: E402
 from timeline import load_constants, total_duration_in_frames  # noqa: E402
 
@@ -191,9 +191,14 @@ def check_budget(
                 "（英文窗口独立声明，不继承 zh 窗口）",
             )
         else:
+            key = (
+                "narration.target_minutes"
+                if lang == langs.PRIMARY
+                else f"narration.{lang}.target_minutes"
+            )
             warn(
                 msgs,
-                f"narration.target_minutes 缺失或形状非法（{budget!r}）："
+                f"{key} 缺失或形状非法（{budget!r}）："
                 "**跳过时长预算门**（无 pipeline.toml？）",
             )
         lo, hi = 0, 999
@@ -332,6 +337,18 @@ EN_SUBTITLE_MAX_CHARS = 170
 LATIN_RE = re.compile(r"[A-Za-z]")
 #: 引号内夹汉字的字符串字面量（近似正则：一行内引号对之间含汉字即命中）
 HAN_LITERAL_RE = re.compile(r"['\"][^'\"]*[一-鿿][^'\"]*['\"]")
+#: 已走 i18n 通道的片段（扫描前剥除，其余字面量照常判定）：带 en 属性的 <L …>
+#: 标签（`<L zh=… />` 缺 en 会回落中文，不剥）；同行含 en 键时 `zh: '…'` 的值
+#: （`t({zh: '…', en: '…'})` 字面对）。`<Label`/`<Loop` 等不以 `<L\s` 开头，不剥。
+I18N_TAG_RE = re.compile(r"<L\s(?=[^>]*\ben\s*=)[^>]*>")
+I18N_ZH_VALUE_RE = re.compile(r"""\bzh\s*:\s*(['"`])(?:\\.|(?!\1).)*\1""")
+I18N_EN_KEY_RE = re.compile(r"\ben\s*:")
+
+
+def strip_translated(line: str) -> str:
+    """→ 剥除已翻译片段后的行（report_untranslated_scene_text 的判定面）。"""
+    line = I18N_TAG_RE.sub("", line)
+    return I18N_ZH_VALUE_RE.sub("", line) if I18N_EN_KEY_RE.search(line) else line
 
 
 def check_translation(
@@ -381,16 +398,21 @@ def check_translation(
                 f"未锁定翻译基线（缺 {lock_path.name}）——先 build --lang en 生成锁",
             )
         else:
-            lock = json.loads(lock_path.read_text(encoding="utf-8"))
-            current = {i["id"]: zh_digest(i["text"]) for i in zh_items}
-            if stale := sorted(
-                sid for sid, d in lock.items() if sid in current and current[sid] != d
-            ):
+            try:
+                stale = stale_ids(read_lock(lock_path), zh_items)
+            except ValueError as e:
                 fail(
                     msgs,
-                    f"基线锁失配：主稿句 {' '.join(stale)} 在锁定后被改动——"
-                    "重译该些句后重跑 build --lang en 刷新锁",
+                    f"基线锁损坏：{e}——复核译稿后 build --lang {lang} --accept all 重建",
                 )
+            else:
+                if stale:
+                    fail(
+                        msgs,
+                        f"基线锁失配：主稿句 {' '.join(stale)} 在锁定后被改动——"
+                        f"重译这些句后重跑 build --lang {lang} 刷新锁（译文确实无需"
+                        f"改动时加 --accept {','.join(stale)}）",
+                    )
     # 文本形态 + 字幕溢出（不依赖主稿，逐句自判）
     n_han = n_latin = n_fw = n_over = 0
     for it in items:
@@ -430,25 +452,24 @@ def check_translation(
 
 
 def report_untranslated_scene_text(root: Path, msgs: list[str]) -> None:
-    """en 版未翻译画面文字报告（WARN-only）：scenes/*.tsx 中 `<L` / `useL(` 之外
-    的含汉字字符串字面量——英文版渲染时这些字会原样显示中文。
+    """en 版未翻译画面文字报告（WARN-only）：scenes/*.tsx 中未走 i18n 通道的
+    含汉字字符串字面量——英文版渲染时这些字会原样显示中文。
 
     近似扫描（TSX 正则本质近似，同 check_scenes 的既定口径），只提醒不拦：
-    逐行判定，行内已有 i18n 通道调用即整行豁免。"""
+    逐行判定，先剥除已翻译片段（见 strip_translated）再找含汉字字面量；跨行
+    书写的双语对按行各自判定。"""
     scenes_dir = root / "video" / "src" / "scenes"
     if not scenes_dir.is_dir():
         return
     hits = 0
     for tsx in sorted(scenes_dir.glob("*.tsx")):
         for lineno, line in enumerate(tsx.read_text(encoding="utf-8").splitlines(), 1):
-            if "<L" in line or "useL(" in line:
-                continue  # 已走 i18n 通道的行豁免（<L zh=… /> / useL(…)）
-            if HAN_LITERAL_RE.search(line):
+            if HAN_LITERAL_RE.search(strip_translated(line)):
                 hits += 1
                 warn(
                     msgs,
                     f"{tsx.name}:{lineno} 含汉字字符串字面量——英文版画面将显示中文"
-                    "（改用 <L zh=… en=…> / useL()）",
+                    "（改用 <L zh=… en=…> / t({zh, en})）",
                 )
     print(f"  画面 i18n 扫描：{hits} 处未翻译汉字字面量（WARN-only）")
 

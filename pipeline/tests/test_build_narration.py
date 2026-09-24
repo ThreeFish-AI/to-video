@@ -194,8 +194,11 @@ def test_en_build_happy_path_json_and_lock(tmp_path):
     ]
     # 各语言各槽位：en build 不改写主稿产物
     assert not (root / "script" / "narration.json").exists()
-    # 基线锁内容黄金：{句id: zh 句 text（pron 剥离口径）的 sha1[:12]}
-    want = {"p0-01": _zh_digest("第一句。"), "p0-02": _zh_digest("第二句。")}
+    # 基线锁内容黄金：{句id: {zh: 主稿句 digest, en: 译句 digest}}（pron 剥离口径）
+    want = {
+        "p0-01": {"zh": _zh_digest("第一句。"), "en": _zh_digest("First sentence.")},
+        "p0-02": {"zh": _zh_digest("第二句。"), "en": _zh_digest("Second sentence.")},
+    }
     lock_raw = (root / "script" / "narration.en.lock.json").read_text(encoding="utf-8")
     assert json.loads(lock_raw) == want
     assert lock_raw == json.dumps(want, ensure_ascii=False, indent=1) + "\n"
@@ -248,24 +251,96 @@ def test_en_build_requires_zh_master(tmp_path):
     assert "主稿" in (r2.stderr + r2.stdout) and "重复句 id" in (r2.stderr + r2.stdout)
 
 
-def test_lock_refreshes_after_zh_edit(tmp_path):
-    """锁跟随主稿刷新：同 id 换文本后重跑 build --lang en，改动句 digest 更新、
-    未动句保持——zh 事后改稿不会让旧锁永久失配。"""
+ZH_MD_EDITED = "## P0 开场\n- [p0-01] 第一句改。\n- [p0-02] 第二句。\n"
+CHECK = Path(__file__).resolve().parents[1] / "scripts" / "check_script.py"
+
+
+def _lock(root: Path) -> dict:
+    return json.loads(
+        (root / "script" / "narration.en.lock.json").read_text(encoding="utf-8")
+    )
+
+
+def test_lock_keeps_zh_baseline_until_retranslated(tmp_path):
+    """fuzzy 语义：主稿改稿后重建 en、译句未动 ⇒ 锁保留旧主稿 digest（失鲜持续
+    可测）并点名待复核；译句改写（重译）后自动刷新。缺省 build 先 zh 后 en，
+    若重建即刷新，check 之前失鲜信号就被抹掉。"""
     root = make_bi_project(tmp_path, ZH_MD, EN_MD_OK)
     assert run_build(root, "--lang", "en").returncode == 0
-    lock1 = json.loads(
-        (root / "script" / "narration.en.lock.json").read_text(encoding="utf-8")
+    lock1 = _lock(root)
+    (root / "script" / "narration.md").write_text(ZH_MD_EDITED, encoding="utf-8")
+
+    r = run_build(root, "--lang", "en")
+    assert r.returncode == 0, r.stderr
+    assert _lock(root) == lock1  # 译句未动：主稿基线不前移
+    assert "待复核 1 句" in r.stderr and "p0-01" in r.stderr and "--accept" in r.stderr
+
+    (root / "script" / "narration.en.md").write_text(
+        EN_MD_OK.replace("First sentence.", "First sentence, revised."),
+        encoding="utf-8",
     )
-    (root / "script" / "narration.md").write_text(
-        "## P0 开场\n- [p0-01] 第一句改。\n- [p0-02] 第二句。\n", encoding="utf-8"
-    )
+    r = run_build(root, "--lang", "en")
+    assert r.returncode == 0, r.stderr
+    lock3 = _lock(root)
+    assert lock3["p0-01"] == {
+        "zh": _zh_digest("第一句改。"),
+        "en": _zh_digest("First sentence, revised."),
+    }
+    assert lock3["p0-02"] == lock1["p0-02"]
+    assert "待复核" not in r.stderr
+
+
+def test_lock_accept_confirms_without_retranslation(tmp_path):
+    """--accept <ids> / all：确认译文无需改动，按当前主稿刷新基线；未知 id 与主稿
+    构建带 --accept 大声失败（parse 了却不生效的 flag 等于静默缩小操作面）。"""
+    root = make_bi_project(tmp_path, ZH_MD, EN_MD_OK)
     assert run_build(root, "--lang", "en").returncode == 0
-    lock2 = json.loads(
-        (root / "script" / "narration.en.lock.json").read_text(encoding="utf-8")
+    (root / "script" / "narration.md").write_text(ZH_MD_EDITED, encoding="utf-8")
+
+    bad = run_build(root, "--lang", "en", "--accept", "p9-99")
+    assert bad.returncode != 0 and "p9-99" in (bad.stderr + bad.stdout)
+    zh_bad = run_build(root, "--accept", "all")
+    assert zh_bad.returncode != 0 and "--accept" in zh_bad.stderr
+
+    r = run_build(root, "--lang", "en", "--accept", "p0-01")
+    assert r.returncode == 0, r.stderr
+    assert _lock(root)["p0-01"]["zh"] == _zh_digest("第一句改。")
+    assert "待复核" not in r.stderr
+
+
+def test_lock_corrupt_requires_explicit_accept_all(tmp_path):
+    """坏锁不静默重置为「全部已复核」：无 --accept all 即大声退出且不写任何产物。"""
+    root = make_bi_project(tmp_path, ZH_MD, EN_MD_OK)
+    lock_path = root / "script" / "narration.en.lock.json"
+    lock_path.write_text('{"p0-01": "legacy-flat"}\n', encoding="utf-8")
+
+    r = run_build(root, "--lang", "en")
+    assert r.returncode != 0 and "--accept all" in (r.stderr + r.stdout)
+    assert not (root / "script" / "narration.en.json").exists()
+
+    assert run_build(root, "--lang", "en", "--accept", "all").returncode == 0
+    assert _lock(root)["p0-01"]["zh"] == _zh_digest("第一句。")
+
+
+def test_stale_translation_survives_default_build_order(tmp_path):
+    """端到端回归：文档流程「改主稿 → build（先 zh 后 en）→ check --lang en」必须
+    FAIL 点名失配句——此前重建即刷新锁，check 永远放行旧译文。"""
+    root = make_bi_project(tmp_path, ZH_MD, EN_MD_OK, TOML_BI)
+    for lang in ("zh", "en"):
+        assert run_build(root, "--lang", lang).returncode == 0
+    (root / "script" / "narration.md").write_text(ZH_MD_EDITED, encoding="utf-8")
+    for lang in ("zh", "en"):
+        assert run_build(root, "--lang", lang).returncode == 0
+
+    r = subprocess.run(
+        [sys.executable, str(CHECK), "--project", str(root)]
+        + ["--pre-tts", "--lang", "en"],
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    assert lock2["p0-01"] != lock1["p0-01"]
-    assert lock2["p0-01"] == _zh_digest("第一句改。")
-    assert lock2["p0-02"] == lock1["p0-02"]
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "基线锁失配" in r.stdout and "p0-01" in r.stdout
 
 
 def test_chapters_i18n_emitted_when_declared_and_present(tmp_path):

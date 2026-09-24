@@ -538,6 +538,23 @@ def test_en_override_subkey_whitelist_with_typo_hint(tmp_path):
     assert any("tts.en.engin" in f and "engine" in f for f in fails), fails
 
 
+def test_en_window_shape_enforced_like_base(tmp_path):
+    """narration.en.target_minutes 与基础层同一形状执法：坏窗口在 config 层 FAIL，
+    而不是到 check 降级为 WARN 跳门（「你以为开着其实关着的门」）。"""
+    for i, bad in enumerate(("8", "[7]", '["5", "8"]', "[9, 7]")):
+        root = _bi_write(
+            tmp_path,
+            f"ep-win{i}-video",
+            _BI_BASE.format(
+                slug=f"ep-win{i}-video",
+                narr=f'langs = ["zh", "en"]\n[narration.en]\ntarget_minutes = {bad}',
+                tts="",
+            ),
+        )
+        _cfg, _o, fails, _w = config.load(root, required=True)
+        assert any("narration.en.target_minutes 应为" in f for f in fails), (bad, fails)
+
+
 def test_tts_en_ref_requires_sha1_either_own_or_inherited(tmp_path):
     """tts.en 给 ref 而无（自身或可继承的）ref_sha1 ⇒ FAIL；继承 [tts] 的
     ref_sha1 则过——zh/en 可共用同一样本换风格是合法形态。"""
@@ -648,6 +665,18 @@ def test_for_lang_empty_cfg_is_safe():
     assert view["narration"]["target_minutes"] is None
     assert view["episode"] == {}
     assert view["tts"]["lang"] == "EN"
+
+
+def test_for_lang_non_table_override_is_ignored():
+    """覆写表写成非表（validate 已报类型 FAIL）按空表处理：消费者不得在此崩溃，
+    否则 FAIL 清单一条也打不出来。"""
+    cfg = {
+        "narration": {"target_minutes": [1.0, 2.0], "en": [5, 8]},
+        "tts": {"engine": "edge", "en": "EN"},
+    }
+    view = config.for_lang(cfg, "en")
+    assert view["narration"]["target_minutes"] is None
+    assert view["tts"]["engine"] == "edge" and view["tts"]["lang"] == "EN"
 
 
 def test_for_lang_rejects_unknown_lang():

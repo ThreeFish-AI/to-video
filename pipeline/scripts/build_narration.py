@@ -11,8 +11,11 @@ narration.md 是单一事实源；本脚本是纯派生转换，不做任何内�
 narration.en.md（同一套 LINE_RE/SCENE_RE，字段同构）并过**硬对齐门**——句 id
 序列 / 幕归属 / 幕集合与主稿逐一相等（缺句 / 多句 / 乱序 / 换幕分别点名），
 1:1 对齐是复用分镜与场景代码的前提。en 构建成功即写**基线锁**
-narration.en.lock.json（`{句id: 主稿句 digest}`，gettext msgid 快照同构）：记录
+narration.en.lock.json（`{句id: {"zh": 主稿句 digest, "en": 译句 digest}}`）：记录
 「翻译时主稿长什么样」，主稿事后改稿 ⇒ check_script --lang en 可测出译稿失鲜。
+锁合并取 gettext msgmerge 的 fuzzy 语义（见 merge_lock）：重建**不会**自动接受
+改过的主稿——只有译句改过（重译）或 `--accept` 点名的句才刷新，否则缺省
+`build` 先 zh 后 en 的顺序会在 check 之前把失鲜信号抹掉。
 chapters.json 只有一份：zh / en 两种构建产出同一文件，en 幕标题在本集声明
 narration.langs 后附进条目 i18n 键（en 文件缺失/解析失败降级 WARN，zh 构建
 永不为 en 文件失败）。
@@ -132,13 +135,58 @@ def parse_md(
     return items, scene_titles, struct_errors, mark_errors, mark_warnings, marked
 
 
-def zh_digest(text: str) -> str:
-    """基线锁的句 digest：pron 剥离后 text 字段口径的 sha1 前 12 位。
+def sentence_digest(text: str) -> str:
+    """基线锁的句 digest：pron 剥离后 text 字段口径的 sha1 前 12 位（zh / en 同口径）。
 
-    build（写锁）与 check_script（读锁比对）共用此函数——译稿失鲜判定的单一
-    口径，勿在他处内联同形计算。
+    build（写锁）、check_script 与 pipeline status（读锁比对）共用此函数——译稿
+    失鲜判定的单一口径，勿在他处内联同形计算。
     """
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
+def read_lock(path: Path) -> dict[str, dict[str, str]]:
+    """→ {句id: {"zh": 锁定时主稿 digest, "en": 该句译文 digest}}；形状非法 → ValueError
+    （含非法 JSON），由调用方决定大声失败或降级提示。"""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not all(
+        isinstance(v, dict) and all(isinstance(v.get(k), str) for k in ("zh", "en"))
+        for v in raw.values()
+    ):
+        raise ValueError(f"{path.name} 形状非法：应为 {{句id: {{zh, en}}}}")
+    return raw
+
+
+def stale_ids(lock: dict[str, dict[str, str]], zh_items: list[dict]) -> list[str]:
+    """→ 锁定后主稿被改动、译文尚待复核的句 id（按主稿句序）。"""
+    return [
+        i["id"]
+        for i in zh_items
+        if i["id"] in lock and lock[i["id"]]["zh"] != sentence_digest(i["text"])
+    ]
+
+
+def merge_lock(
+    old: dict[str, dict[str, str]],
+    zh_items: list[dict],
+    en_items: list[dict],
+    accept: set[str] | None,
+) -> dict[str, dict[str, str]]:
+    """重建锁（gettext msgmerge 的 fuzzy 语义）：主稿改了而译句没动的句**保留旧主稿
+    digest**——失鲜持续可测，直到译句被改写（视为已重译）或被 accept 点名确认
+    （accept=None 表示全部接受）。新增句 / 无旧锁时以当前主稿为基线。"""
+    en_now = {i["id"]: sentence_digest(i["text"]) for i in en_items}
+    out: dict[str, dict[str, str]] = {}
+    for i in zh_items:
+        sid, prev = i["id"], old.get(i["id"])
+        take = (
+            prev is None
+            or prev.get("en") != en_now[sid]
+            or accept is None
+            or sid in accept
+        )
+        zh = sentence_digest(i["text"]) if take else prev["zh"]
+        out[sid] = {"zh": zh, "en": en_now[sid]}
+    return out
 
 
 def check_alignment(
@@ -211,17 +259,52 @@ def collect_scene_i18n(root: Path, declared: list[str]) -> dict[str, str] | None
     return titles
 
 
+def _old_lock(path: Path, accept: str | None) -> dict[str, dict[str, str]]:
+    """→ 既有基线锁（无锁 = 空表）。坏锁不静默重置为「全部已复核」：须显式
+    --accept all 才以当前主稿重建基线。"""
+    if not path.is_file():
+        return {}
+    try:
+        return read_lock(path)
+    except ValueError as e:
+        if accept is not None and accept.strip() == "all":
+            return {}
+        sys.exit(f"{e} —— 确认译稿全部复核后加 --accept all 重建基线锁")
+
+
+def _parse_accept(arg: str | None, zh_items: list[dict]) -> set[str] | None:
+    """--accept 取值 → merge_lock 的 accept（None = 全部接受；空集 = 不接受任何句）。"""
+    if arg is None:
+        return set()
+    if arg.strip() == "all":
+        return None
+    ids = {x.strip() for x in arg.split(",") if x.strip()}
+    if not ids:
+        sys.exit(f"--accept 取值非法：{arg!r}（可选 'all' 或逗号分隔句 id）")
+    if unknown := sorted(ids - {i["id"] for i in zh_items}):
+        sys.exit(f"--accept 含主稿不存在的句 id: {' '.join(unknown)}")
+    return ids
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="narration.md → narration.json")
     parser.add_argument("--project", default=".", help="视频工程根目录（含 script/）")
     parser.add_argument(
         "--lang", default=langs.PRIMARY, help="构建语言：zh 主稿（缺省）| en 译稿"
     )
+    parser.add_argument(
+        "--accept",
+        metavar="all|ID[,ID…]",
+        help="译稿构建：确认这些句的译文在主稿改稿后无需改动，按当前主稿刷新基线锁"
+        "（重译过的句无需点名，自动刷新）",
+    )
     args = parser.parse_args()
     try:
         lang = langs.validate(args.lang)
     except ValueError as e:
         parser.error(str(e))
+    if args.accept is not None and lang == langs.PRIMARY:
+        parser.error("--accept 只作用于译稿构建（--lang en）：主稿没有对齐对象")
 
     root = Path(args.project).resolve()
     src = langs.narration_md(root, lang)
@@ -264,6 +347,13 @@ def main() -> None:
                 print(f"FAIL  {e}", file=sys.stderr)
             sys.exit(f"主稿 {zh_src.name} 解析失败——先修复主稿再构建译稿")
         check_alignment(zh_items, items, zh_titles, scene_titles)
+        # 锁合并在任何写盘之前完成：坏锁 / 非法 --accept 大声退出时不留半套产物
+        new_lock = merge_lock(
+            _old_lock(langs.lock(root, lang), args.accept),
+            zh_items,
+            items,
+            _parse_accept(args.accept, zh_items),
+        )
 
     dst.write_text(
         json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -298,15 +388,17 @@ def main() -> None:
         # 基线锁：记录「翻译时主稿长什么样」——主稿事后改稿 ⇒ 译稿失鲜可测
         lock_path = langs.lock(root, lang)
         lock_path.write_text(
-            json.dumps(
-                {i["id"]: zh_digest(i["text"]) for i in zh_items},
-                ensure_ascii=False,
-                indent=1,
-            )
-            + "\n",
+            json.dumps(new_lock, ensure_ascii=False, indent=1) + "\n",
             encoding="utf-8",
         )
         print(f"基线锁: {len(zh_items)} 句主稿 digest → {lock_path.name}")
+        if pending := stale_ids(new_lock, zh_items):
+            print(
+                f"WARN  译稿待复核 {len(pending)} 句（主稿在锁定后改动、译句未动）:"
+                f" {' '.join(pending)} —— 重译这些句；译文确实无需改动时加"
+                f" --accept {','.join(pending)}（check --lang {lang} 在复核前保持 FAIL）",
+                file=sys.stderr,
+            )
     # chapters 以主稿标题为底（en 构建同样）：幕数对齐门已保证两稿同幕集
     print(f"章节标签: {len(zh_titles)} 幕 → video/src/chapters.json（顶部进度条）")
     emit_chapters(root, zh_titles, declared)

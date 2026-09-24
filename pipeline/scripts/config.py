@@ -259,6 +259,16 @@ def _set(cfg: dict, dotted: str, value) -> None:
     cfg.setdefault(sec, {})[key] = value
 
 
+def _is_window(tm) -> bool:
+    """[下限, 上限] 两元素数值且下限 ≤ 上限——target_minutes 基础层与逐语言覆写共用。"""
+    return (
+        isinstance(tm, list)
+        and len(tm) == 2
+        and all(isinstance(x, (int, float)) for x in tm)
+        and tm[0] <= tm[1]
+    )
+
+
 def _nearest(name: str, pool: set[str]) -> str | None:
     """给键名 typo 一个最近邻建议——typo 是最真实的失效模式。
 
@@ -366,11 +376,7 @@ def validate(
         return scope is None or dotted.split(".")[0] in scope
 
     tm = _get(cfg, "narration.target_minutes") if in_scope("narration.x") else None
-    if isinstance(tm, list) and (
-        len(tm) != 2
-        or not all(isinstance(x, (int, float)) for x in tm)
-        or tm[0] > tm[1]
-    ):
+    if isinstance(tm, list) and not _is_window(tm):
         fails.append(
             f"narration.target_minutes 应为 [下限, 上限] 且下限 ≤ 上限，实际 {tm}"
         )
@@ -461,6 +467,13 @@ def validate(
                     f"{dotted}.{key} 未知（允许 {'/'.join(sorted(allowed))}）"
                     + (f"，是否想写 {tip}？" if tip else "")
                 )
+        # 覆写窗口与基础层同一形状执法：否则坏窗口只在 check 降级为 WARN 跳门
+        if "target_minutes" in allowed and "target_minutes" in table:
+            if not _is_window(table["target_minutes"]):
+                fails.append(
+                    f"{dotted}.target_minutes 应为 [下限, 上限] 且下限 ≤ 上限，"
+                    f"实际 {table['target_minutes']!r}"
+                )
     en_tts = _get(cfg, "tts.en") if in_scope("tts.x") else None
     if isinstance(en_tts, dict):
         # 未录指纹的样本不得启用：给 ref 而无（自身或可继承的）ref_sha1 即 FAIL。
@@ -520,8 +533,10 @@ def for_lang(cfg: dict, lang: str) -> dict:
         return dict(cfg)
     base_n = cfg.get("narration", {})
     base_t = cfg.get("tts", {})
-    over_n = _get(cfg, f"narration.{lang}") or {}
-    over_t = _get(cfg, f"tts.{lang}") or {}
+    # 覆写表写成非表（validate 已报「类型应为 dict」）按空表处理：消费者在此崩溃
+    # 会让 FAIL 清单一条也打不出来
+    over_n = o if isinstance(o := _get(cfg, f"narration.{lang}"), dict) else {}
+    over_t = o if isinstance(o := _get(cfg, f"tts.{lang}"), dict) else {}
     return {
         "episode": cfg.get("episode", {}),
         "narration": {**base_n, "target_minutes": over_n.get("target_minutes")},
