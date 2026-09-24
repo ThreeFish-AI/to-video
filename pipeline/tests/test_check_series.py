@@ -786,6 +786,25 @@ def test_rule1_en_next_time_closing_passes(tmp_path):
     assert rc == 0, out
 
 
+def test_rule1_en_ordinal_word_boundaries(tmp_path):
+    """词边界 + 惯用法：`this series of …`（「这一连串」）放行；zh「上一集」最常见
+    的英文说法 last episode 命中。"""
+    ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
+    en_md = ep_root(ws, EP1) / "script/narration.en.md"
+    en_md.write_text(
+        "## P0\n\n- [p0-01] This series of commands builds the index.\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 0, out
+    en_md.write_text(
+        "## P0\n\n- [p0-01] In the last episode we built the index.\n",
+        encoding="utf-8",
+    )
+    rc, out = run_check(ws)
+    assert rc == 1 and "规则1" in out and "last episode" in out
+
+
 def test_rule7_en_narration_in_audience_globs(tmp_path):
     """AUDIENCE_GLOBS 增 narration.en.md：英文稿里的站点标识同样进门（ASCII
     章号在英文稿更易顺手写出）；他集标题互查对 en 跳过（标题仅 zh，已知边界）。"""

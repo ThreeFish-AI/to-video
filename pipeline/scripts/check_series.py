@@ -86,9 +86,12 @@ ORDINAL_WORDS = re.compile(
 )
 #: en 译稿（narration.en.md）的顺序词。白名单：`next time` / `see you next time`
 #: 收尾语——与 zh「下期」同一先例（顺序无关的告别语，改序仍成立），故只收
-#: next episode 而不收裸 next；大小写不敏感（英文句首大写是常态）。
+#: next episode 而不收裸 next；大小写不敏感（英文句首大写是常态）。词边界防子串
+#: 误命中；`this series of …`（「这一连串」）是惯用法而非系列指代，放行。RL 语境
+#: 的 next episode 同样命中——宁严勿漏，改写措辞（如 a new episode）。
 EN_ORDINAL_WORDS = re.compile(
-    r"previous episode|next episode|episode \d+|this series", re.I
+    r"\b(?:previous|next|last) episode\b|\bepisode \d+\b|\bthis series\b(?!\s+of\b)",
+    re.I,
 )
 SPOKEN_LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$", re.M)
 REL_LINK_RE = re.compile(r"\]\((\.{1,2}/[^)#?]+)\)")
