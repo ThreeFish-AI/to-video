@@ -34,6 +34,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from paths import skill_root  # noqa: E402
 
@@ -245,10 +247,12 @@ _IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
 #: Remotion 工具经 npx 调用（06 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
 _NPX_TOOL_RE = re.compile(r"\bnpx\s+(?:tsc|remotion)\b")
 #: RSI-008 迁移后已不存在的旧路径（pipeline/scripts 是 ABI 软链、pipeline/README.md 是
-#: 迁移桩，二者仍真实存在故不在此列）；前一字符不许是词字符或 /，放过上游
+#: 迁移桩，二者仍真实存在故不在此列）；前一字符不许是词字符或 -，但**不排除 /**
+#: （`$T/…` 命令与本仓 blob 外链都以 / 起头），只放过上游
 #: apps/negentropy-influence/pipeline/… 的历史外链。
 _LEGACY_PATH_RE = re.compile(
-    r"(?<![\w/-])(?:pipeline/(?:skills|templates|tests|stages\.toml|VOICE-CLONING"
+    r"(?<![\w-])(?<!negentropy-influence/)"
+    r"(?:pipeline/(?:skills|templates|tests|stages\.toml|VOICE-CLONING"
     r"|INDEXTTS|PRON-GLOSSARY|MODELING-PLAYBOOK)|docs/quickstart)"
 )
 
@@ -337,6 +341,24 @@ def test_no_npx_for_remotion_tools():
     assert not offenders, "文案教人用 npx 调 tsc/remotion：\n  " + "\n  ".join(
         offenders
     )
+
+
+@pytest.mark.parametrize(
+    ("line", "legacy"),
+    [
+        ("见 pipeline/skills/06", True),
+        ("`$T/pipeline/VOICE-CLONING.md` §3.3", True),
+        ("[x](https://github.com/o/to-video/blob/main/pipeline/templates/x)", True),
+        ("cp $T/docs/quickstart/P0.tsx", True),
+        ("[x](../pipeline/stages.toml)", True),
+        ("apps/negentropy-influence/pipeline/skills/06-x.md", False),
+        ("$T/pipeline/scripts/tts.py", False),
+        ("映射见 pipeline/README.md", False),
+    ],
+)
+def test_legacy_path_detector_forms(line, legacy):
+    """检测器自检：`/` 起头的 `$T` 命令与本仓 blob 外链曾被整体漏检（RSI-008 复核）。"""
+    assert bool(_LEGACY_PATH_RE.search(line)) is legacy
 
 
 def test_no_legacy_layout_paths():

@@ -74,7 +74,7 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 
 - **多宿主共享**：把同一 clone 再链到 `~/.agents/skills/to-video`，或设 `TO_VIDEO_HOME=<clone 根>` 指到任意安装位置——包装器按 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 顺序解析。
 - 其余环境变量（工作区指派、tts-store、IndexTTS 服务等）见 [references/PIPELINE.md](references/PIPELINE.md)「环境变量」节。
-- 请保留 clone 内的 `pipeline/scripts` 软链（已部署分集包装器的定位路径）；复制式安装若丢失软链，旧分集包装器会找不到 skill，原因见 [pipeline/README.md](pipeline/README.md)。
+- 请保留 clone 内的 `pipeline/scripts` 软链（全部分集与工作区包装器的定位路径，含新 scaffold 的）；复制式安装若丢失软链，所有包装器都会找不到 skill，原因见 [pipeline/README.md](pipeline/README.md)。
 
 ### 验证安装
 
