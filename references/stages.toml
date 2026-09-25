@@ -65,11 +65,11 @@ id = "prose-refinement"
 ordinal = "⑤"
 name = "成文优化"
 # 与 ④ 正交：④ 判「对不对、懂不懂」，⑤ 只改表达（结构 / 衔接 / 句子 / 词汇四层 pass），
-#   事实与句 id 集合冻结；改动句回跑 ④A 复核（RSI-011）。刻意不设机器门（用户决策）。
+#   事实与句 id 集合冻结；独立子代理成文评审 + 改动句回跑 ④A 复核（RSI-011）。刻意不设机器门（用户决策）。
 skill = "references/05-prose-refinement.md"
 kind = "authored"
 commands = []
-gate = "成文评审 REWRITE=0 且改动句复核 RISKY=0"
+gate = "成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0"
 
 [[stage]]
 id = "storyboard"

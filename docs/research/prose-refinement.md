@@ -1,12 +1,12 @@
 # 成文优化：病灶取证、理论依据与方案比选
 
-> **结论先行**：AI 稿件「断断续续、不像人写」的病灶在**篇章结构层**，不在词汇层。流水线在 ④ 双重校验之后新增正式阶段 **⑤ 成文优化**，按编辑行业的四层分工（结构 → 衔接 → 句子 → 词句）自顶向下改稿，只改表达、不改事实；改过的句子回 ④A 复核兜底。规则正文在 [references/05-prose-refinement.md](../../references/05-prose-refinement.md)，本文只存设计依据（台账：[RSI-011](../.agents/issue.md)）。
+> **结论先行**：AI 稿件「断断续续、不像人写」的病灶在**篇章结构层**，不在词汇层。流水线在 ④ 双重校验之后新增正式阶段 **⑤ 成文优化**，按编辑行业的四层分工（结构 → 衔接 → 句子 → 词句）自顶向下改稿，只改表达、不改事实；改完交独立子代理做成文评审，改过的句子再回 ④A 复核兜底。规则正文在 [references/05-prose-refinement.md](../../references/05-prose-refinement.md)，本文只存设计依据（台账：[RSI-011](../.agents/issue.md)）。
 
 **目录**：一、病灶取证 · 二、根因 · 三、理论依据 · 四、方案比选 · 五、与相邻机制的关系 · 六、撤销条件 · 参考文献
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/prose-refinement--passes-dark.png">
-  <img src="../assets/architecture/prose-refinement--passes-light.png" alt="Stage ⑤ 成文优化：已过 ④ 的四稿依次经过 L1 结构、L2 衔接、L3 句子、L4 词句四层 pass，改动经 diff 进入改动表，只对改动句重跑 ④A 复核；判 RISKY 即回退原句，RISKY=0 时定稿，build 与 check 零 FAIL 后文稿冻结。">
+  <img src="../assets/architecture/prose-refinement--passes-light.png" alt="Stage ⑤ 成文优化：已过 ④ 的四稿依次经过 L1 结构、L2 衔接、L3 句子、L4 词句四层 pass，改动经 diff 进入改动表，交独立子代理按具名规则成文评审、REWRITE 回改至清零，再只对改动句重跑 ④A 复核、判 RISKY 即回退原句；评审与复核清零后定稿，build 与 check 零 FAIL 后文稿冻结。">
 </picture>
 
 > 图源：[`prose-refinement--passes.mmd`](../assets/mermaid/prose-refinement--passes.mmd) · 交互版：[`prose-refinement--passes.html`](../assets/architecture/prose-refinement--passes.html)

@@ -35,7 +35,7 @@
 | ② 策划案生成 | planning.md 六节齐 |
 | ③ 逐字稿写作 | narration.md（全片单一事实源），`build` 派生 narration.json |
 | ④ 双重校验 | 真实性 + 易懂性双门（`check`）：RISKY=0 且 REWRITE=0 |
-| ⑤ 成文优化 | 研究笔记 / 策划案 / 逐字稿 / 分镜按「结构 → 衔接 → 句子 → 词句」四层改成人写模样，只改表达不改事实：成文评审 REWRITE=0 且改动句复核 RISKY=0 |
+| ⑤ 成文优化 | 研究笔记 / 策划案 / 逐字稿 / 分镜按「结构 → 衔接 → 句子 → 词句」四层改成人写模样，只改表达不改事实：成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0 |
 | ⑥ 分镜表生成 | beat 覆盖率无缺句（`check`，含分镜↔代码互比） |
 | ⑦ TTS 配音 | 逐句 mp3 + 时长 manifest（`tts`，幂等续跑），`captions` 导出 srt/vtt |
 | ⑧ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 + 运动层铁律 |

@@ -2,16 +2,17 @@
 %% slug: prose-refinement--passes
 %% type: workflow
 %% derived: authored for RSI-011（archify JSON 源不入库，本文件是可 diff 的拓扑事实）
+%% fix: RSI-011 评审回归——补「成文评审」节点；门改为评审 REWRITE=0 且复核 RISKY=0、REWRITE=0；回退并入复核节点
 flowchart LR
     subgraph PASS["改稿（只改表达）"]
         IN[(已过 ④ 的四稿<br/>笔记 · 策划 · 逐字稿 · 分镜)] --> L1[L1 结构<br/>骨架 · beat 分段 · 补「转」]
         L1 --> L2[L2 衔接<br/>段间桥 · 已知→新知]
         L2 --> L3[L3 句子<br/>长短交替 · 意合]
         L3 --> L4[L4 词句<br/>去机器味 · 朗读测试]
-        L4 -->|RISKY=0| GATE[(定稿<br/>build + check 零 FAIL · 文稿冻结)]
+        L4 -->|评审 + 复核清零| GATE[(定稿<br/>build + check 零 FAIL · 文稿冻结)]
     end
     subgraph GUARD["护栏与复核"]
-        AUDIT[改动表<br/>句 id · 规则编号 · 理由] --> RECHECK{④A 改动句复核<br/>只核改动句}
-        RECHECK -->|RISKY| ROLLBACK[回退原句]
+        AUDIT[改动表<br/>句 id · 规则编号 · 理由] --> REVIEW[成文评审 · 独立子代理<br/>具名规则 · REWRITE 回改至零]
+        REVIEW -->|REWRITE=0| RECHECK{④A 改动句复核<br/>RISKY 即回退原句}
     end
     L4 -.->|diff| AUDIT
