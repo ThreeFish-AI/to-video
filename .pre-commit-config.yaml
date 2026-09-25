@@ -7,7 +7,7 @@ repos:
       - id: ruff
         name: ruff lint (to-video)
         args: [--fix]
-        files: ^(scripts|tests)/
+        files: ^(scripts|tests|assets)/
       - id: ruff-format
         name: ruff format (to-video)
-        files: ^(scripts|tests)/
+        files: ^(scripts|tests|assets)/
