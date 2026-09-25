@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""骨架漂移门——把 references/06 的纸面义务变成秒级机器判据。
+"""骨架漂移门——把 references/07 的纸面义务变成秒级机器判据。
 
 此前「A 档改任何一处须同步并验 md5 唯一」是散文规范，**从未被执行过一次**：
 实测 Main.tsx 有注释/换行漂移（两旧集落后于两新集）、cards.tsx 裂成 3-vs-1，
 都是在无人察觉中发生的。
 
-两条不变量（依据 references/06 的「义务限于同一系列内」）：
+两条不变量（依据 references/07 的「义务限于同一系列内」）：
   I1 系列内一致：同一 series 的各集，frozen 文件哈希必须唯一
   I2 模板不过期：baselineOf 指定的系列必须与 assets/video-skeleton 一致
       —— 单集系列的 I1 是空条件（无比较对象），故 I2 不可省

@@ -1,4 +1,4 @@
-# Stage ⑦ Remotion 场景实现（skill 规格 · 06）
+# Stage ⑦ Remotion 场景实现（skill 规格 · 07）
 
 > Stage ⑦：把 `script/storyboard.md` 的分镜规格实现为 `video/src/scenes/` 场景组件，直至草渲抽帧 QA 通过、终渲出片。
 > 本文件是实现代理的提示词规格，与 references/01–05（内容层）衔接。

@@ -2,8 +2,8 @@
 #
 # 此前「有哪九个阶段」同时声明在四处：references/01–09 的散文标题、pipeline.py 的
 # 子命令、README §一 的 mermaid 图、以及 .agent 路由壳的速查表。四份声明可以
-# 各自漂移，且已经漂移——文件 06 是第 ⑦ 阶段、文件 07 是第 ⑥ 阶段，这个错位
-# 此前只能靠读者自己撞见。本文件把它变成显式数据，由 tests/test_stages.py 执法。
+# 各自漂移，且已经漂移。本文件把它变成显式数据（文件号与阶段序号一一对齐，
+# RSI-009 起由 tests/test_stages.py 执法），不再靠读者自己撞见。
 #
 # 与 series.json 刻意分开：那是**内容**事实源（有哪些集、什么顺序、什么色板），
 # 随每集发布变化；本文件是**机制**事实源，一年动一次。放在一起会诱导出
@@ -74,8 +74,7 @@ gate = "beat 覆盖率无缺句（--check-scenes 分镜↔代码互比）"
 id = "tts-voice"
 ordinal = "⑥"
 name = "TTS 配音：声音克隆决策树"
-# ★ 序号 ⑥ ↔ 文件 07：错位在此显式化，勿据序号猜文件名
-skill = "references/07-tts-voice.md"
+skill = "references/06-tts-voice.md"
 kind = "tooled"
 commands = ["tts", "captions"]
 gate = "refs 指纹门 + 试听定档 + ETA 排期"
@@ -84,9 +83,9 @@ gate = "refs 指纹门 + 试听定档 + ETA 排期"
 id = "remotion-scenes"
 ordinal = "⑦"
 name = "Remotion 场景实现"
-# ★ 序号 ⑦ ↔ 文件 06：同上。commands 为空是实情——tsc 与 remotion 均直调
-#   ./node_modules/.bin/（防污染根 workspace），不经 pipeline.py。
-skill = "references/06-remotion-implementation.md"
+# commands 为空是实情——tsc 与 remotion 均直调 ./node_modules/.bin/
+#   （防污染根 workspace），不经 pipeline.py。
+skill = "references/07-remotion-implementation.md"
 kind = "authored"
 commands = []
 gate = "tsc --noEmit 零错误 + 七条渲染红线 + 运动层铁律"

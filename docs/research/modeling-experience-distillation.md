@@ -4,7 +4,7 @@
 
 ## 一、问题：为什么需要「有界」
 
-- **经验在蒸发**：被用户认可的建模方法（如 LoopRing「恒定视觉锚」、「以静写闷」）此前只能以散文偶然埋进 [references/06](../../references/06-remotion-implementation.md) 母题表与 [references/08](../../references/08-render-qa.md) 缺陷表，无结构化入口、无认可强度、无淘汰机制。
+- **经验在蒸发**：被用户认可的建模方法（如 LoopRing「恒定视觉锚」、「以静写闷」）此前只能以散文偶然埋进 [references/06](../../references/07-remotion-implementation.md) 母题表与 [references/08](../../references/08-render-qa.md) 缺陷表，无结构化入口、无认可强度、无淘汰机制。
 - **无界即膨胀**：经验逐集回流天然单调增长。skills/06 已约 6150 字（全仓最大），继续追加会把新经验埋进中段——长上下文的中段利用率显著下降 [13]、输入越长模型越退化 [12]。
 - **全仓无先例**：此前没有任何文档体量执法，本机制是第一个。
 

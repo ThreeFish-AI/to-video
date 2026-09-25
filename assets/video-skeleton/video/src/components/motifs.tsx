@@ -9,7 +9,7 @@
  *  刻意**不进模板**的是创作性母题（Terminal / LoopRing / DispatchTable /
  *  GateRouter / SlotRing）：它们承载各集的叙事隐喻，属于每集的创作产物。
  *  需要时从 claude-code-explained-video 的 motifs.tsx 复制对应段落后裁剪、
- *  追加到本文件；母题目录与适用场景见 references/06 的母题表。
+ *  追加到本文件；母题目录与适用场景见 references/07 的母题表。
  */
 import React from 'react';
 import {interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
@@ -37,7 +37,7 @@ export const Panel: React.FC<{
   </div>
 );
 
-/** 底部角标——统一压在 bottom ≥ 150（避让字幕条，references/06 红线二） */
+/** 底部角标——统一压在 bottom ≥ 150（避让字幕条，references/07 红线二） */
 export const Footnote: React.FC<{children: React.ReactNode; delay?: number}> = ({
   children,
   delay = 0,

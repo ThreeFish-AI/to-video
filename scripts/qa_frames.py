@@ -23,14 +23,14 @@ A/B 对拍（有帧时 advisory；零匹配帧硬失败，供重制/重构回归
 自动体检（--check，惰性依赖 pillow+numpy）：
     黑帧/早渐黑    帧平均相对亮度 < 0.02 → FAIL（仅末 beat 且分镜末行写「渐黑」时豁免）
     字幕区侵入     字幕框**上方**的安全带（y∈[H-160, H-132)）内出现宽度 ≥24px 的亮块
-                   → WARN（对应 references/06 渲染缺陷清单第 2 条「角标 bottom ≥ 150」）
+                   → WARN（对应 references/07 渲染缺陷清单第 2 条「角标 bottom ≥ 150」）
     冻帧           同幕相邻采样帧 16×16 灰度均值哈希 Hamming 距离 0 → WARN
                    （beat 窗口错位/未覆盖句区间渲染空白）
     字幕缺失       字幕带内无任何像素达文字亮度 → WARN（单句字幕渲染失败）
 
 主题对比度（--check-theme，零依赖、不需要视频）：
     解析 video/src/design/theme.ts 的 #RRGGBB，按 WCAG 2.x 相对亮度对比
-    theme.bg；概念色 < 4.5:1 → FAIL（此前只能肉眼估，见 references/06 清单）。
+    theme.bg；概念色 < 4.5:1 → FAIL（此前只能肉眼估，见 references/07 清单）。
 
 抽帧计划（--stills-plan，零依赖、不需要视频）：
     TTS 长跑中途的分幕复检排期器（references/08 ★节步骤 2–3 的机械化）：读部分
@@ -321,7 +321,7 @@ def check_theme(root: Path, msgs: list[str]) -> None:
         print(f"  {mark} {key:<10} {val}  对 bg 对比度 {ratio:.2f}:1")
         if ratio < CONTRAST_MIN:
             msgs.append(
-                f"FAIL {key} {val} 对 bg 对比度 {ratio:.2f}:1 < {CONTRAST_MIN}（references/06 视觉契约：概念色须 ≥4.5:1）"
+                f"FAIL {key} {val} 对 bg 对比度 {ratio:.2f}:1 < {CONTRAST_MIN}（references/07 视觉契约：概念色须 ≥4.5:1）"
             )
 
 

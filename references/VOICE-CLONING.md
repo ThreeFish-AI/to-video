@@ -86,7 +86,7 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 
 ### 2.5 服务生命周期：按需启停，用完即关
 
-服务端按需拉起、用完即关，**不要保持常驻**：常驻占用 10 GiB 量级 MPS 显存，且长跑累积服务态（健康端点不反映的劣化，见 §七「合成全 500 而 health 假绿」）；重启即最干净的状态复位，冷启动仅 ~1–2 分钟。制作 Agent 的执行纪律（含同机多 Agent 互斥判据）见 [references/07-tts-voice.md](./07-tts-voice.md)「服务生命周期」；要点：
+服务端按需拉起、用完即关，**不要保持常驻**：常驻占用 10 GiB 量级 MPS 显存，且长跑累积服务态（健康端点不反映的劣化，见 §七「合成全 500 而 health 假绿」）；重启即最干净的状态复位，冷启动仅 ~1–2 分钟。制作 Agent 的执行纪律（含同机多 Agent 互斥判据）见 [references/06-tts-voice.md](./06-tts-voice.md)「服务生命周期」；要点：
 
 ```bash
 # 判在用（两查皆空才可关）：他人连接 or 他人合成进程

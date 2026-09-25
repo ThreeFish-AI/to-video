@@ -7,13 +7,13 @@
 
 ## 一、Pipeline 总览（9 Stages）
 
-![科普视频 Pipeline 九阶段双层流水线总览：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿 narration.md（单一事实源）→ ④ 双重校验 → ⑤ 分镜表；生产层（工具驱动）由 ③ 下行 ⑥ TTS 合成、⑤ 下行 ⑦ Remotion 场景实现，二者汇合后经 ⑧ 草渲+抽帧 QA 迭代修正，最终 ⑨ 终渲交付 1080p30。](../docs/assets/architecture/influence--pipeline-layers-dark.png)
+![科普视频 Pipeline 九阶段双层流水线总览：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿 narration.md（单一事实源）→ ④ 双重校验 → ⑤ 分镜表；生产层（工具驱动）由 ③ 下行 ⑥ TTS 合成、⑤ 下行 ⑦ Remotion 场景实现，二者汇合后经 ⑧ 草渲+抽帧 QA 迭代修正，最终 ⑨ 终渲交付 1080p30。](../docs/assets/architecture/pipeline-layers-dark.png)
 
-> 图源（可 diff 文本）：[`influence--pipeline-layers.mmd`](../docs/assets/mermaid/influence--pipeline-layers.mmd) · 交互版（下载到本地打开）：[`influence--pipeline-layers.html`](../docs/assets/architecture/influence--pipeline-layers.html)
+> 图源（可 diff 文本）：[`pipeline-layers.mmd`](../docs/assets/mermaid/pipeline-layers.mmd) · 交互版（下载到本地打开）：[`pipeline-layers.html`](../docs/assets/architecture/pipeline-layers.html)
 
 每个 Stage 的代理提示词规格见本目录的 `01`–`09` 九篇规格（[01](./01-source-extraction.md) 起），可直接作为子代理 prompt；整仓即 to-video 技能本体，路由入口是 [SKILL.md](../SKILL.md)（skill 根）。
 
-**九阶段的声明源是 [stages.toml](./stages.toml)**（上图与下表都是它的人读视图）。执行 `uv run --no-project $T/scripts/pipeline.py stages` 打印全表。此前「有哪九个阶段」同时声明在四处（skills 散文标题 / `pipeline.py` 子命令 / 上面的 mermaid / [SKILL.md](../SKILL.md)（skill 根）速查表），四份可各自漂移且**已经漂移**——⚠️ **序号与文件号刻意不对齐**：Stage ⑥ 是 `07-tts-voice.md`、Stage ⑦ 是 `06-remotion-implementation.md`（入链 ≥5 处，重命名代价大于收益）。该错位现由 [tests/test_stages.py](../tests/test_stages.py) 连同 skill H1、子命令注册表、SKILL.md 覆盖面一起执法。
+**九阶段的声明源是 [stages.toml](./stages.toml)**（上图与下表都是它的人读视图）。执行 `uv run --no-project $T/scripts/pipeline.py stages` 打印全表。此前「有哪九个阶段」同时声明在四处（skills 散文标题 / `pipeline.py` 子命令 / 上面的 mermaid / [SKILL.md](../SKILL.md)（skill 根）速查表），四份可各自漂移且**已经漂移**。序号与文件号一一对齐（⑥=`06-tts-voice.md`、⑦=`07-remotion-implementation.md`；历史上的错位已随 RSI-009 废除），由 [tests/test_stages.py](../tests/test_stages.py) 连同 skill H1、子命令注册表、SKILL.md 覆盖面一起执法。
 
 ## 路径变量约定
 
@@ -199,17 +199,17 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 - **Python 脚本：集中共享（SSOT）**——共享载体是 skill 仓（`$T/scripts/`），机制工具跨集零差异，中心化防 split-brain；工作区与分集工程只持薄包装（复制「转发」而非「实现」）。
 - **Remotion 工程原语：复制适配，不做共享包**——`timing.ts` / `Subtitle` / `cards.tsx` / `theme.ts` 等每集复制后按本集视觉契约修改。理由：每集工程须保持 pnpm **独立可渲染**（嵌套 workspace 自锚隔离 + Remotion 版本自由），共享 TS 包会把「一集的视觉改动」泄漏进其他集。**复制源头是 [assets/video-skeleton/](../assets/video-skeleton/)**（随 skill 分发于 $T，不随内容工作区；frozen 文件清单以 skeleton.toml 为准，勿在文档里维护数字），新集用 `scaffold.py` 实例化、「改任何一处须同步」由 `verify_skeleton.py` 机器执法——此前「以任一既有集为模板」的说法等于给 391 行冻结基建 4 个同权真理声明者，且纸面义务从未被执行过（详见 skeleton.toml 内注）。同类做法：`go mod vendor` + `go mod verify`（物理副本 + 校验门）、Copier（模板 + 应答记录）。
 - **每集视觉契约独立设计**（色彩语义映射到本集核心概念），但底层规范复用：深色底 `#0E1116` 系、警示红 `#FF5C5C`、确认绿 `#7ED321`、金句卡衬线体、公式只作角标彩蛋。
-- **运动层（`video/src/motion/`，frozen）：共享的是「怎么动」，不是「画什么」**——时长/缓动/弹簧/错峰/巡游等时序语汇跨集一致（同一只手感），theme/motifs/场景构图仍各集自由。2026-09 重制 EP1 时引入：令牌（Carbon 六档时长 + M3 缓动 + 实测弹簧手感）+ 窗口/编排纯函数 + 12 个运动模型 hooks + MotionGallery 评审面，规格与铁律见 [references/06 运动层](./06-remotion-implementation.md)。不读 theme token（两系列概念色名已分叉）是其可 frozen 的前提，由 tests/test_skeleton.py 执法。
+- **运动层（`video/src/motion/`，frozen）：共享的是「怎么动」，不是「画什么」**——时长/缓动/弹簧/错峰/巡游等时序语汇跨集一致（同一只手感），theme/motifs/场景构图仍各集自由。2026-09 重制 EP1 时引入：令牌（Carbon 六档时长 + M3 缓动 + 实测弹簧手感）+ 窗口/编排纯函数 + 12 个运动模型 hooks + MotionGallery 评审面，规格与铁律见 [references/07 运动层](./07-remotion-implementation.md)。不读 theme token（两系列概念色名已分叉）是其可 frozen 的前提，由 tests/test_skeleton.py 执法。
 
 ## 五、音画同步机制（零手工对轨）
 
 每句一段 MP3；`tts.py` 产出 `video/public/audio/manifest.json`（含每句实测时长）；Remotion `calculateMetadata` 读取 manifest 计算全片时间轴。**改稿后只需重跑：build → tts → render**。引擎可选 edge 预置音色或用自己的声音克隆（[VOICE-CLONING.md](./VOICE-CLONING.md)），两种引擎的 manifest 契约完全一致。
 
-**时序常数单一事实源** = 每集 `video/src/timing.json`（句间/幕间/片头/片尾/幕间淡入淡出）：`timing.ts` 经 `resolveJsonModule` 同步 import，Python 侧（qa_frames/captions/check_script）经 `timeline.py` 直读同一文件——改节奏只动 JSON，双语言镜像漂移结构性不存在。**渲染主机约束**：三集未内嵌 CJK 字体（PingFang SC/Songti SC/SF Mono 系统栈），渲染仅限 macOS；两个重启触发器见 [references/06 事实条](./06-remotion-implementation.md)。
+**时序常数单一事实源** = 每集 `video/src/timing.json`（句间/幕间/片头/片尾/幕间淡入淡出）：`timing.ts` 经 `resolveJsonModule` 同步 import，Python 侧（qa_frames/captions/check_script）经 `timeline.py` 直读同一文件——改节奏只动 JSON，双语言镜像漂移结构性不存在。**渲染主机约束**：三集未内嵌 CJK 字体（PingFang SC/Songti SC/SF Mono 系统栈），渲染仅限 macOS；两个重启触发器见 [references/07 事实条](./07-remotion-implementation.md)。
 
 ### 双语渲染（zh 主稿 + en 对齐译稿，可选）
 
-「语言」是与九阶段正交的维度，分三层（RSI-004；逐字稿对齐与译写规约见 [references/03](./03-narration.md)，画面文案 i18n 见 [references/06](./06-remotion-implementation.md)，配音决策见 [references/07](./07-tts-voice.md)）：
+「语言」是与九阶段正交的维度，分三层（RSI-004；逐字稿对齐与译写规约见 [references/03](./03-narration.md)，画面文案 i18n 见 [references/07](./07-remotion-implementation.md)，配音决策见 [references/06](./06-tts-voice.md)）：
 
 | 层 | 载体 | 职责 |
 | --- | --- | --- |

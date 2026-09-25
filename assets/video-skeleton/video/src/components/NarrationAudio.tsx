@@ -7,7 +7,7 @@ import type {TimedSentence} from '../types';
 /**
  * 预览期提前 1s 挂载缓冲；渲染期 Remotion 自动关闭 premount（active 含
  * !env.isRendering——收益只在 Studio 拖拽与 Player，渲染侧收益是 Mediabunny
- * 抽轨与官方声明的时间轴同步，不是渲染速度。见 skills/06 事实条）。
+ * 抽轨与官方声明的时间轴同步，不是渲染速度。见 references/07 事实条）。
  */
 const PREMOUNT_FRAMES = 30;
 

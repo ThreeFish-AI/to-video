@@ -1,12 +1,12 @@
 # 骨架冻结清单——机器可读的单一事实源。
 #
-# 此前这份清单是 references/06 里的散文枚举（「A 档逐字节保留 / B 档允许覆写 /
+# 此前这份清单是 references/07 里的散文枚举（「A 档逐字节保留 / B 档允许覆写 /
 # 每集改写」三段），**没有任何消费者**：「改任何一处须同步并验 md5 唯一」这条
 # 纸面义务从未被执行过一次。证据：Main.tsx 的注释/换行漂移让两个旧集落后于
 # 两个新集，cards.tsx 裂成 3-vs-1，两处都是在无人察觉中发生的。
 #
 # 消费者：scripts/scaffold.py（实例化）与 scripts/verify_skeleton.py（漂移门）。
-# references/06 现在链接本文件，不再枚举。
+# references/07 现在链接本文件，不再枚举。
 #
 # ## 为什么是「复制 + 命名源头 + 机器校验」而不是共享 npm 包
 #
@@ -40,7 +40,7 @@
 #
 # ## 分组语义（承重）
 #
-# references/06 明写：md5 同步义务**限于同一系列内**；新系列首集从既有集复制后即
+# references/07 明写：md5 同步义务**限于同一系列内**；新系列首集从既有集复制后即
 # 建立自己的基线，此后各自演进——否则「复制不共享」的隔离初衷会被一条跨系列的
 # 同步义务反向击穿。故 verify_skeleton 按 series.json 的 seriesList[] 分组核对。
 #
@@ -95,7 +95,7 @@ structured = ["video/package.json"]
 # motifs.tsx 只播种 chrome 层（Panel/Footnote/SceneTag/Counter/CodeCard/
 # NumberedCard/ease——通用排版机械，只读底座 token）；创作性母题（Terminal/
 # LoopRing/DispatchTable/GateRouter/SlotRing）不进模板，各集复制 ep1 的
-# motifs.tsx 后裁剪（目录见 references/06 母题表）。seeded=复制后自由，无门。
+# motifs.tsx 后裁剪（目录见 references/07 母题表）。seeded=复制后自由，无门。
 seeded = [
   "video/pnpm-lock.yaml",
   "video/src/design/theme.ts",

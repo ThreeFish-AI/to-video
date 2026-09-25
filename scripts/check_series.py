@@ -41,14 +41,14 @@
   - 规则 2/3/4 **按系列内判定**——两个系列的发布顺序互相无关，同一文件（知识
     索引 / CHANGELOG / series.md）同时提及多个系列属正常形态；episode 的
     `1..N` 连续性也只在系列内成立。撞色同理：色相错开是系列内视觉契约
-    （references/06「与已用色撞车」登记表按系列维护），**跨系列撞色是接受态**
+    （references/07「与已用色撞车」登记表按系列维护），**跨系列撞色是接受态**
     ——实测真树 #4A9EFF（self-evolution）与 #4ADE80（claude-code 系）同处
     蓝/绿邻域；expand 的二维平行列表天然按系列分组，跨系列互不可见。
 
 用法：uv run --no-project <skill>/scripts/check_series.py（自工作区内任意目录）
 退出码：0 = 一致；1 = 有 FAIL。挂牌 pre-commit 后自动覆盖工作区相关提交。
 
-受检范围按根拆分（见 COVERED_GLOBS_INFLUENCE / PROJECT_GLOBS）：工作区侧
+受检范围按根拆分（见 COVERED_GLOBS / PROJECT_GLOBS）：工作区侧
 用相对 glob，故本脚本内不出现任何「工作区在宿主仓库中的位置」字面量。
 """
 
@@ -146,9 +146,7 @@ CN_NUM = {
 #: **按根拆分**是刻意的：工作区侧写相对 glob，路径字面量便从本脚本彻底消失
 #: —— 于是「误把 `apps/negentropy-influence/**` 写宽成 `apps/**`」这个陷阱
 #: 结构性不可能发生（实测宽化会炸出 12 条其他子项目的既存死链假 FAIL）。
-#: 排除 templates/：模板是**机制**（与各集字面同源、由 verify_skeleton.py 执法），
-#: 不是内容——被规则 2/3 扫进结果集只会稀释信号。
-COVERED_GLOBS_INFLUENCE = (
+COVERED_GLOBS = (
     "**/*.md",
     "**/*.tsx",
     "**/*.ts",
@@ -182,17 +180,10 @@ def all_episodes(series_list: list[dict]) -> list[dict]:
 
 def covered_files() -> list[Path]:
     out: list[Path] = []
-    for base, globs in (
-        (WORKSPACE, COVERED_GLOBS_INFLUENCE),
-        (PROJECT, PROJECT_GLOBS),
-    ):
+    for base, globs in ((WORKSPACE, COVERED_GLOBS), (PROJECT, PROJECT_GLOBS)):
         for g in globs:
             out.extend(
-                p
-                for p in base.glob(g)
-                if p.is_file()
-                and "node_modules" not in p.parts
-                and "templates" not in p.parts  # 机制目录，非内容（见上方注释）
+                p for p in base.glob(g) if p.is_file() and "node_modules" not in p.parts
             )
     return sorted(set(out))
 
@@ -311,7 +302,7 @@ def rule_manifest_integrity(series_list: list[dict], msgs: list[str]) -> None:
     """规则 4：清单完整性——episode 连续性按系列内判定，slug 全局唯一。
 
     撞色只按系列内、且只认**精确同值**（不做色相邻近 WARN）：「色相与已用色
-    错开」是 references/06 定义的系列内视觉契约，references/06 的登记表也按系列维护；
+    错开」是 references/07 定义的系列内视觉契约，references/07 的登记表也按系列维护；
     跨系列撞色是接受态（见模块 docstring 多系列语义）。色相邻近则是弹性建议
     ——判据松一分就漏、紧一分就假报（蓝 #4A9EFF 与青 #2DD4BF 本就相邻共存），
     假报一多门就会被关掉（ISSUE-167 防范 3 的教训）。
@@ -357,7 +348,7 @@ def rule_manifest_integrity(series_list: list[dict], msgs: list[str]) -> None:
                 msgs.append(
                     f"FAIL 规则4：系列内撞色 {hexv} 同时出现在 {slugs[0]} 与 {slugs[1]}"
                 )
-        #: 供下一集选色参考（references/06 的「已用色」登记表在此机器化）；
+        #: 供下一集选色参考（references/07 的「已用色」登记表在此机器化）；
         #: 空系列不刷（无信息量的输出行只会稀释信噪比）。
         if by_hex:
             msgs.append(

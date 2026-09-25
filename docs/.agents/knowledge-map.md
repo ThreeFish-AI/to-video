@@ -17,7 +17,7 @@
 | [PIPELINE.md](../../references/PIPELINE.md) | 机制 SSOT：路径变量 `$T/$W/$P/$V` 唯一定义、环境变量注册表、目录约定、脚本清单、`pipeline.toml` 字段表、交付归档、复用边界、双语渲染、新集脚手架清单 |
 | [stages.toml](../../references/stages.toml) | 九阶段唯一机器可读声明（id / 序号 / 规格指针 / 子命令 / 通过门） |
 | [01](../../references/01-source-extraction.md) · [02](../../references/02-planning.md) · [03](../../references/03-narration.md) · [04](../../references/04-verification.md) · [05](../../references/05-storyboard.md) | 内容层阶段规格 ①–⑤：信源取证、策划、逐字稿、双重校验、分镜 |
-| [07](../../references/07-tts-voice.md) · [06](../../references/06-remotion-implementation.md) · [08](../../references/08-render-qa.md) · [09](../../references/09-final-render.md) | 生产层阶段规格 ⑥–⑨（⑥↔07、⑦↔06 刻意错位） |
+| [06](../../references/06-tts-voice.md) · [07](../../references/07-remotion-implementation.md) · [08](../../references/08-render-qa.md) · [09](../../references/09-final-render.md) | 生产层阶段规格 ⑥–⑨ |
 | [VOICE-CLONING.md](../../references/VOICE-CLONING.md) | 声音克隆操作手册：部署、样本、风格档、合成、缓存、排障 |
 | [INDEXTTS-2.5-ADVANCED.md](../../references/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
 | [PRON-GLOSSARY.md](../../references/PRON-GLOSSARY.md) | 易错字台账：发音标注跨集复用表 |

@@ -1,12 +1,11 @@
 """pipeline 测试公共夹具。
 
-落位说明：仓库根无 tests/；apps/negentropy 的 tests/conftest.py 是 session 级
-autouse 建 Postgres 夹具，pytest 只加载 rootdir→测试文件路径上的 conftest，
-本目录不在那条祖先链上——结构上不可能被拉起 DB。全部用例无网络、无 TTS、
-无 ffmpeg、无 Postgres，总时长秒级。
+落位说明：宿主仓若有 session 级 Postgres 夹具（tests/conftest.py autouse），pytest
+只加载 rootdir→测试文件路径上的 conftest，本目录不在那条祖先链上——结构上不可能
+被拉起 DB。全部用例无网络、无 TTS、无 ffmpeg、无 Postgres，总时长秒级。
 
 真集锚定是 **env 门控** 的（双锚点架构的必然）：本仓是 skill 仓，机制与内容
-物理分离后这里**没有** episodes/；真集只存在于 negentropy 之类的内容工作区，
+物理分离后这里**没有** episodes/；真集只存在于 skill 之外的内容工作区，
 由 `TO_VIDEO_TEST_WORKSPACE` 指过来（集成模式）。若改为「自 CWD 向上找哨兵」，
 在 skill 仓里跑测试会静默锚到别处或 no-op 得不明不白——env 缺席即明确的
 「无真树可守」，不猜。

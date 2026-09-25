@@ -2,7 +2,7 @@
 编译范围，而模板目录里的文件没有对应的 node_modules）。
 
 scaffold 不把本文件复制进新集：场景是创作产物，抄骨架的过程本身有价值。
-写场景前先读 references/06-remotion-implementation.md（七条渲染红线）。
+写场景前先读 references/07-remotion-implementation.md（七条渲染红线）。
 
 ────────────────────────────────────────────────────────────────────────────
 固定 5 行 import 前导（27 个既有场景文件全部相同）：
@@ -28,7 +28,7 @@ scaffold 不把本文件复制进新集：场景是创作产物，抄骨架的�
     return (
       <AbsoluteFill>
         <Sequence {...bA} name="0-A 分镜标题（与 storyboard.md 镜号一致）">
-          {/* 双语画面文字：按需 import {L} from '../i18n'，en 缺省回落 zh（用法见 references/06） */}
+          {/* 双语画面文字：按需 import {L} from '../i18n'，en 缺省回落 zh（用法见 references/07） */}
           <L zh="上下文窗口" en="Context Window" />
           <YourOneOffComponent freezeAt={at('p0-03') - bA.from} />
         </Sequence>

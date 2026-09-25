@@ -86,7 +86,7 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 
 清单是**索引不是事实源**——每条一句话判由，正文 SSOT 各归其位（防第二事实源）：
 
-1. Stage⑥↔`07`、Stage⑦↔`06` 序号「刻意错位」，严禁顺手对齐（执法：`test_declared_misalignment_is_real`；入链 ≥5 处）。
+1. 阶段序号与规格文件号一一对齐（⑥↔`06`、⑦↔`07`；RSI-009 起废除历史错位），严禁再引入错位（执法：`test_stage_numbers_align_spec_files`）。
 2. `narration.md` 唯一 SSOT；narration.json / manifest.json / chapters.json 是派生物，不得开「直改派生物」的口子。
 3. frozen Remotion skeleton：改 frozen 文件 = 改模板 + 全集同步 + `verify_skeleton.py` 字节级过；不得只改某一集的复制件。
 4. 运动层 `video/src/motion/` frozen 且不读 theme token。
@@ -104,7 +104,7 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 
 ## 十、建模经验分支（有界经验库的策展协议）
 
-作用对象是 [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md)：沉淀「画什么、怎么隐喻」的策略层经验，与 references/06「怎么动」的机制层正交。设计依据与证据见 [研究文档](docs/research/modeling-experience-distillation.md)。
+作用对象是 [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md)：沉淀「画什么、怎么隐喻」的策略层经验，与 references/07「怎么动」的机制层正交。设计依据与证据见 [研究文档](docs/research/modeling-experience-distillation.md)。
 
 **信号与角色**（Generator / Reflector / Curator 分权，防自评自改）：
 
@@ -126,6 +126,6 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 5. **冷退**：试行、w 最低、最久未更新且**非唯一覆盖**其概念类型者移出（保能力删除：先删被包含者，唯一覆盖者最后动）；
 6. **措辞精简**：只压「非/据/证」等附属字段，「当/故/验」语义不得丢。
 
-**禁令**：整文件或整节重写（ACE 实测整体重写致上下文坍缩、准确率跌破无适应基线）；为腾预算把条目搬进 references/06 等规格正文（转移熵而非减熵）；删唯一覆盖或高 w 条目凑数。
+**禁令**：整文件或整节重写（ACE 实测整体重写致上下文坍缩、准确率跌破无适应基线）；为腾预算把条目搬进 references/07 等规格正文（转移熵而非减熵）；删唯一覆盖或高 w 条目凑数。
 
 **回潮信号**（递归纠偏）：被淘汰或归纳掉的条目，其同键候选再次出现 ⇒ 判为过度压缩，恢复原条目（w 重置为 2）并在 PR 点名——压缩阶梯本身也受经验反馈约束。

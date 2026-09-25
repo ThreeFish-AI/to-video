@@ -591,11 +591,11 @@ def test_template_theme_covers_frozen_component_tokens():
 # 的姊妹缺口：seeded↔seeded 同样无门。
 
 #: chrome 层应播种的导出（含一个值导出与一个纯函数）。ep1 的调用面证明了
-#: 这七个是跨集机械；清单变动 = 显式决策，须同步 references/06 母题节首段。
+#: 这七个是跨集机械；清单变动 = 显式决策，须同步 references/07 母题节首段。
 CHROME_EXPORTS = frozenset(
     {"Panel", "Footnote", "SceneTag", "Counter", "CodeCard", "NumberedCard", "ease"}
 )
-#: 刻意不进模板的创作性母题（ep1 拥有；借用方式=复制后裁剪，见 references/06 表）。
+#: 刻意不进模板的创作性母题（ep1 拥有；借用方式=复制后裁剪，见 references/07 表）。
 MOTIF_EXPORTS = frozenset(
     {"Terminal", "LoopRing", "DispatchTable", "GateRouter", "SlotRing", "useRingDot"}
 )

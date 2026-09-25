@@ -324,8 +324,7 @@ def test_kind_is_known_and_authored_stages_own_no_generation():
 def test_skill_h1_matches_declaration():
     """H1 形态统一为 `# Stage <序号> <名字>（skill 规格 · <NN>）`。
 
-    这一条把「文件 06 是第 ⑦ 阶段」从读者要自己撞见的陷阱，变成文件第一行就说、
-    且改错就红的事实。
+    这一条把文件号与阶段序号的对应变成文件第一行就说、且改错就红的事实。
     """
     for st in stages():
         p = SKILL_ROOT / st["skill"]
@@ -335,14 +334,16 @@ def test_skill_h1_matches_declaration():
         assert first == want, f"{p.name} H1 不符：\n  实际 {first!r}\n  期望 {want!r}"
 
 
-def test_declared_misalignment_is_real():
-    """守住那个反直觉事实本身：⑥↔07、⑦↔06。
+def test_stage_numbers_align_spec_files():
+    """守住编号对齐（RSI-009）：⑥↔06-tts-voice、⑦↔07-remotion-implementation。
 
-    若将来真去重命名文件，本条会红——那正是提醒：入链 ≥5 处需同步。
+    历史上两文件号与阶段序号错位（入链 ≥5 处曾因此保留），对齐后本条防再错位。
     """
     by_ord = {st["ordinal"]: Path(st["skill"]).name for st in stages()}
-    assert by_ord["⑥"].startswith("07-"), "⑥ 不再对应 07-*，请同步所有入链"
-    assert by_ord["⑦"].startswith("06-"), "⑦ 不再对应 06-*，请同步所有入链"
+    for ordinal, prefix in (("⑥", "06-"), ("⑦", "07-"), ("①", "01-"), ("②", "02-")):
+        assert by_ord[ordinal].startswith(prefix), (
+            f"{ordinal} 不再对应 {prefix}*，请同步所有入链"
+        )
 
 
 def _router_text() -> str:
@@ -504,7 +505,7 @@ def test_doctor_reports_deliver_root_presence(monkeypatch, tmp_path, capsys):
 def test_doctor_offline_tts_server_is_warning_not_failure(
     monkeypatch, tmp_path, capsys
 ):
-    """服务按需启停（references/07「服务生命周期」）：离线是常态，doctor 报 ⚠️ 不置失败。
+    """服务按需启停（references/06「服务生命周期」）：离线是常态，doctor 报 ⚠️ 不置失败。
 
     其余检查全绿时退出码必须为 0——离线计入失败会让 doctor 在正常关停态恒红，
     反过来诱导 Agent 预启动服务。

@@ -2,7 +2,7 @@
 
 sync/audit 用例同样无网络：抓取一律经 fake_http 打桩（与 fetch 用例同一姿势）。
 
-真树切分：仅末节三条读 negentropy 真内容（claude-code-explained 台账 + 系列
+真树切分：仅末节三条读真树内容（claude-code-explained 台账 + 系列
 地图 + series.json），按 env 门控（`real_tree` 标记：设 TO_VIDEO_TEST_WORKSPACE
 =<工作区根> 启用）；其余用例纯离线（tmp_path + fake_http 打桩），无门控常跑。"""
 
@@ -28,7 +28,7 @@ SHA2 = "67a9126c6435a8654ba7a6f68c0fd2130f00a462"
 _TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
 real_tree = pytest.mark.skipif(
     not _TEST_WS,
-    reason="读 negentropy 真内容树（claude-code-explained 台账 + source-map + "
+    reason="读真树内容（claude-code-explained 台账 + source-map + "
     "series.json）；集成模式设 TO_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
 )
 

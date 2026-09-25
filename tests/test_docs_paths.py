@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import re
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -301,23 +300,17 @@ def test_no_instruction_to_add_ignore_workspace():
     )
 
 
-def _frozen_templates() -> set[Path]:
-    """frozen 档文件改一字节即全集 checksum 漂移，注释里的旧路径刻意保留。"""
-    skel = tomllib.loads((TEMPLATES / "video-skeleton" / "skeleton.toml").read_text())
-    return {TEMPLATES / "video-skeleton" / r for r in skel["classes"]["frozen"]}
-
-
 def current_docs_and_code() -> list[Path]:
     """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + mermaid 图源
-    （首行 `%% source:` 指回文档章节），减 frozen 档。"""
-    frozen = _frozen_templates()
+    （首行 `%% source:` 指回文档章节）。frozen 档不再豁免：2.0.0 起模板即唯一
+    事实源（RSI-009），陈旧注释一律清到现行路径。"""
     files = {
         *user_facing_files(),
         *REFERENCES.glob("*.md"),
         skill_root() / "README.md",
         *(skill_root() / "docs" / "assets" / "mermaid").glob("*.mmd"),
     }
-    return sorted(f for f in files if f not in frozen)
+    return sorted(files)
 
 
 def test_no_npx_for_remotion_tools():

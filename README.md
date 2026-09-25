@@ -23,8 +23,8 @@
 ## 二、流水线总览
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture/influence--pipeline-layers-dark.png">
-  <img src="docs/assets/architecture/influence--pipeline-layers-light.png" alt="九阶段双层流水线：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿单一事实源 → ④ 双重校验 → ⑤ 分镜表；生产层（工具驱动）由 ③ 下行 ⑥ TTS 合成、由 ⑤ 下行 ⑦ Remotion 场景实现，二者汇合经 ⑧ 草渲 + 抽帧 QA 迭代修正，最终 ⑨ 终渲交付 1080p30">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture/pipeline-layers-dark.png">
+  <img src="docs/assets/architecture/pipeline-layers-light.png" alt="九阶段双层流水线：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿单一事实源 → ④ 双重校验 → ⑤ 分镜表；生产层（工具驱动）由 ③ 下行 ⑥ TTS 合成、由 ⑤ 下行 ⑦ Remotion 场景实现，二者汇合经 ⑧ 草渲 + 抽帧 QA 迭代修正，最终 ⑨ 终渲交付 1080p30">
 </picture>
 
 ①–⑤ 为**内容层**（写作产物，由人/代理撰写），⑥–⑨ 为**生产层**（由工具执行）：
@@ -128,7 +128,7 @@ EOF
 
 # 6) 放入两幕场景组件，并在 $P/video/src/Main.tsx 注册（加 import {P0} 与 {P1}；
 #    给刻意留空的 SCENE_COMPONENTS 表各填一行 `P0: P0,` / `P1: P1,`，键 = 幕名
-#    ——每幕必须注册，漏一幕渲染即报错；规格见 references/06）
+#    ——每幕必须注册，漏一幕渲染即报错；规格见 references/07）
 cp $T/assets/quickstart/P0.tsx $T/assets/quickstart/P1.tsx "$P/video/src/scenes/"
 
 # 7) ③④⑤ 内容流水线：逐字稿派生（narration.json + 章节标签 chapters.json）

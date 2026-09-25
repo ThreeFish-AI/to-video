@@ -25,7 +25,7 @@ import source_ledger as sl
 _TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
 pytestmark = pytest.mark.skipif(
     not _TEST_WS,
-    reason="整文件只断言 negentropy 真内容树（source-map + series.json + episodes "
+    reason="整文件只断言真树内容（source-map + series.json + episodes "
     "归档）；集成模式设 TO_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
 )
 

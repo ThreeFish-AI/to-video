@@ -1,4 +1,4 @@
-# Stage ⑥ TTS 配音：声音克隆决策树（skill 规格 · 07）
+# Stage ⑥ TTS 配音：声音克隆决策树（skill 规格 · 06）
 
 > 目标读者：执行配音阶段的代理/操作者。**参数与实测数据一律以 [VOICE-CLONING.md](VOICE-CLONING.md) §三–§六为准（链接非复制）**；本文件只承载操作顺序与决策点。
 > 上游能力面、机制循证与提升路线图见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md)；读音标注台账见 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)。

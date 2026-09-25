@@ -60,7 +60,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver
 - **配置渠道**：`--root ~/Documents/video`（一次性 / prompt 指定）或 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video`（持久统一配置，可写 shell profile / Claude Code settings env）。根路径是机器属性，不写进受版本控制的 toml（同 tts.server / tts-store 立场）；两渠道皆无时 deliver 大声退出并列出用法。
 - **agent 契约**：用户在 prompt 中给出目标路径时，`render --final` 成功后**显式**执行 `pipeline.py --project $P deliver --root <路径>`，并建议用户以 env 固化。`render --final` 刻意不自动串联 deliver——本规格把编排层 `>> render 完成` 标记钉为判完成唯一信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号。
 - 先 `deliver --dry-run` 预览目的地与下一版本号，确认后再实投。
-- **收尾关服务**：deliver 成功后，按 [07-tts-voice.md](./07-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时）——制片会话不留常驻服务。
+- **收尾关服务**：deliver 成功后，按 [06-tts-voice.md](./06-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时）——制片会话不留常驻服务。
 
 ## 平台合规（发布前自查）
 

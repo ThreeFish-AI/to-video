@@ -375,7 +375,7 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
                 f"  ✅ IndexTTS 服务: v{h.get('version')} {h.get('device')}/{h.get('dtype')}"
             )
         except (urllib.error.URLError, OSError) as e:
-            # 服务按需启停、用完即关（references/07「服务生命周期」）：离线是常态而非故障，
+            # 服务按需启停、用完即关（references/06「服务生命周期」）：离线是常态而非故障，
             # 不计入失败——计入则 doctor 在正常关停态恒红，反过来诱导预启动。
             print(
                 f"  ⚠️  IndexTTS 服务未在线: {e}"
@@ -811,10 +811,6 @@ def cmd_stages() -> int:
             f"  {st['ordinal']} {st['name']:<22} [{st['kind']:<8}] 命令 {cmds:<18} {st['skill']}"
         )
         print(f"      门：{st['gate']}")
-    print(
-        "\n  注：序号与文件号刻意不对齐 —— ⑥↔07-tts-voice、⑦↔06-remotion-implementation"
-        "（入链 ≥5 处，重命名代价大于收益；由 tests/test_stages.py 守住）"
-    )
     return 0
 
 

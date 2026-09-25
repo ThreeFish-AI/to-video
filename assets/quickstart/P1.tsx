@@ -4,7 +4,7 @@
 // 全片总长按两幕 quickstart 的末幕恒等式推导，见组件体注释）。
 // 动效仍来自 frozen cards 原语（FadeUp 错峰）；单句幕用 w('p1-01')——解析器
 // 契约见 P0.tsx 头注（check_script.py 的 SCENE_CALL_RE 第二参可选）。内容垂直
-// 居中 y≥56 起（顶部 y<56 安全带归章节进度条，references/06 红线 2b）。
+// 居中 y≥56 起（顶部 y<56 安全带归章节进度条，references/07 红线 2b）。
 import React from 'react';
 import {AbsoluteFill, Sequence, useCurrentFrame} from 'remotion';
 import {FadeUp, Pill} from '../components/cards';
