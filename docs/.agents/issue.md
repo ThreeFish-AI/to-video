@@ -130,23 +130,23 @@
 
 ## RSI-009 按 2.0.0 全新维护：移除全部历史兼容面（软链 ABI / 旧哨兵 / 旧 env 与缓存回退 / skeleton 历史登记 / 阶段编号错位）
 
-**表因**：RSI-008 迁移到 Agent Skills 规范布局时，为已部署的 ZenEntropy（原 negentropy）14 集薄包装保留了 `pipeline/scripts` 软链 ABI、旧哨兵 `.influence-root`、旧 env `NE_TTS_STORE` 与旧缓存目录回退、skeleton.toml 内 33 条 `[[drift]]` 与 2 组 `[[generation]]` 历史登记，以及「⑥↔07、⑦↔06 编号错位」（当初因入链 ≥5 处、改名代价大而保留）。这些兼容物使 skill 仓持续背着历史包袱：frozen 文件注释里的旧路径不能改、迁移桩与不变量 16 须永久维护、skeleton.toml 一半篇幅是别仓集名。
+**表因**：RSI-008 迁移到 Agent Skills 规范布局时，为已部署的 negentropy14 集薄包装保留了 `pipeline/scripts` 软链 ABI、旧哨兵 `.influence-root`、旧 env `NE_TTS_STORE` 与旧缓存目录回退、skeleton.toml 内 33 条 `[[drift]]` 与 2 组 `[[generation]]` 历史登记，以及「⑥↔07、⑦↔06 编号错位」（当初因入链 ≥5 处、改名代价大而保留）。这些兼容物使 skill 仓持续背着历史包袱：frozen 文件注释里的旧路径不能改、迁移桩与不变量 16 须永久维护、skeleton.toml 一半篇幅是别仓集名。
 
-**复现**：`grep -rn 'influence-root\|NE_TTS_STORE\|LEGACY_STORE' --exclude-dir=.git .` 命中 scripts/tests/assets/references 共 10 个文件；`awk '/^\[\[drift\]\]/{c++} END{print c}' assets/video-skeleton/skeleton.toml` = 33；`ls pipeline/` = 迁移桩 README + 软链。ZenEntropy 侧实测依赖面：14 集 61 个包装器探测 `pipeline/scripts`、pre-commit `series-consistency-check` 走工作区包装器、tts-store 65M/1815 句在旧目录。
+**复现**：`grep -rn 'influence-root\|NE_TTS_STORE\|LEGACY_STORE' --exclude-dir=.git .` 命中 scripts/tests/assets/references 共 10 个文件；`awk '/^\[\[drift\]\]/{c++} END{print c}' assets/video-skeleton/skeleton.toml` = 33；`ls pipeline/` = 迁移桩 README + 软链。negentropy 侧实测依赖面：14 集 61 个包装器探测 `pipeline/scripts`、pre-commit `series-consistency-check` 走工作区包装器、tts-store 65M/1815 句在旧目录。
 
 **根因**：RSI-008 的方案比选以「已部署包装器无法更新」为前提排除了「迁移但不留软链」。该前提是历史包袱的根源：兼容义务一旦背上就单调增长（软链→旧哨兵→旧 env→登记表→不可改的 frozen 注释），每次机制演进都要先问历史集答不答应。
 
-**定性**：破坏性改进（semver major，2.0.0）。ZenEntropy 侧破坏面已知且用户决策（2026-09-25）由其仓自行适配，不在本仓留任何迁移工程。
+**定性**：破坏性改进（semver major，2.0.0）。negentropy 侧破坏面已知且用户决策（2026-09-25）由其仓自行适配，不在本仓留任何迁移工程。
 
-**方案比选**：A 只删 pipeline/ 目录——不可行，包装器解析函数探测 `<skill>/pipeline/scripts/pipeline.py`，只删目录连新 scaffold 都找不到 skill；B 保留软链等兼容面、仅停止增长——与用户决策相悖，且兼容物维护成本（frozen 注释冻结、迁移桩、不变量执法）持续存在；C **兼容面整体移除 + 包装器探测改指 `scripts/`（采纳）**——推翻 RSI-008 对「迁移但不留软链」的否决，推翻依据：其前提「已部署包装器无法更新」被用户决策废除（ZenEntropy 自行适配）。ZenEntropy 侧适配三步（本仓不代做）：61 个包装器探测路径 `pipeline" / "scripts` → `scripts`（与模板字节同步）、补 `.to-video-root` 哨兵、`mv` tts-store 目录。
+**方案比选**：A 只删 pipeline/ 目录——不可行，包装器解析函数探测 `<skill>/pipeline/scripts/pipeline.py`，只删目录连新 scaffold 都找不到 skill；B 保留软链等兼容面、仅停止增长——与用户决策相悖，且兼容物维护成本（frozen 注释冻结、迁移桩、不变量执法）持续存在；C **兼容面整体移除 + 包装器探测改指 `scripts/`（采纳）**——推翻 RSI-008 对「迁移但不留软链」的否决，推翻依据：其前提「已部署包装器无法更新」被用户决策废除（negentropy 自行适配）。negentropy 侧适配三步（本仓不代做）：61 个包装器探测路径 `pipeline" / "scripts` → `scripts`（与模板字节同步）、补 `.to-video-root` 哨兵、`mv` tts-store 目录。
 
 **处理方式**：PR #16 内分两批提交。①兼容面移除：`git rm -r pipeline/`；5 份包装器探测路径与 docstring 改指 `scripts/`（test_wrapper_resolver 的 fake_skill 布局与 argv 锚同步，删 2 条 ABI 软链执法）；`WORKSPACE_MARKERS` 收敛为 `.to-video-root`（scaffold 去旧哨兵探测；test_paths/test_init_workspace/test_check_series 删旧哨兵用例）；tts.py 删 `NE_TTS_STORE` 兼容读与 `LEGACY_STORE` 回退（store_root 解析序收敛为 env → 默认目录；test_tts_store 删 2 条兼容用例）；test_docs_paths 删 `$I/$R` 旧锚门与 `COMMAND_SPAN_RE` 的 I/R 记号、`_LEGACY_PATH_RE` 收紧为 `pipeline/` 前缀整体入拦；skeleton.toml 清零 drift/generation 登记、删 `baselineOf` 与 `.npmrc` 占位（verify_skeleton 的 baseline 机制保留，面向将来多模板；test_skeleton 放宽分代表非空前提、删 baselineOf 点名正控）。②编号对齐与资产清理：06-tts-voice / 07-remotion-implementation 文件互换与全量引用同步、错位警示与 test_stages 错位执法反转为对齐执法；influence--* 资产更名 pipeline-layers；frozen 文件陈旧注释修正；SKILL.md version 2.0.0 与 CHANGELOG 破坏性条目。
 
 **后续防范**：兼容义务以「显式决策 + 台账 + 版本号」为界——新增任何兼容读/回退/别名前，先问「删除它的 major 版本在哪」，无删除计划就不许加。skeleton 登记表只登记「当前合法偏离」，别仓集名不得进本仓模板。skill 仓不携带任何指向具体内容工作区的名字（系列 id、集 slug、仓名）。
 
-**同类问题影响**：本仓 CHANGELOG/issue 台账中的历史叙述按记录保留，未随兼容面删除。破坏面与未兼容旧功能清单如下（待 ZenEntropy 侧适配后逐项验证关闭，2026-09-25 登记）：
+**同类问题影响**：本仓 CHANGELOG/issue 台账中的历史叙述按记录保留，未随兼容面删除。破坏面与未兼容旧功能清单如下（待 negentropy 侧适配后逐项验证关闭，2026-09-25 登记）：
 
-**A. ZenEntropy（apps/negentropy-influence，14 集）破坏面——按 2.0.0 CHANGELOG 三步适配后逐项验证**
+**A. negentropy（apps/negentropy-influence，14 集）破坏面——按 2.0.0 CHANGELOG 三步适配后逐项验证**
 
 | # | 破坏面 | 修复 | 验证 |
 |---|---|---|---|
@@ -157,7 +157,7 @@
 | A5 | skeleton 登记清零 + frozen 模板字节变更（包装器探测行、remotion.config.ts 与 frozen 组件注释、.npmrc 删除），旧集 `verify_skeleton --strict` 大量 STALE/DRIFT 红 | 逐集整组同步模板（拷齐再 `tsc --noEmit`）；不重渲的已发布集接受红、不跑该门 | 同步过的集 `--strict` rc=0 |
 | A6 | 已发布集 README/pipeline.toml 的 GitHub blob 外链 42 处（15 处本已 404 + 27 处指向已删迁移桩） | 批量改指 `references/…` 与 `assets/video-skeleton/skeleton.toml` | 抽检 5 处链接可达 |
 
-**B. 未兼容的旧版功能（2.0.0 有意不支持；用于后续「未回归」核对）**：`.influence-root` 哨兵识别；`NE_TTS_STORE` 旧 env 名与旧默认目录回退；`$T/pipeline/scripts/…` 命令路径与 `pipeline/README.md` 迁移桩；`baselineOf` 模板缺省值（机制保留、模板不设）；**跨仓 skeleton 登记**——旧版允许 skill 侧登记内容仓集名的 drift/generation，2.0.0 模板零登记，内容仓的合法漂移暂无机器登记面，若 ZenEntropy 需要恢复该能力须按 RSI 另立条目设计工作区侧登记（A5 的长期解）；模板 `.npmrc` 占位文件。
+**B. 未兼容的旧版功能（2.0.0 有意不支持；用于后续「未回归」核对）**：`.influence-root` 哨兵识别；`NE_TTS_STORE` 旧 env 名与旧默认目录回退；`$T/pipeline/scripts/…` 命令路径与 `pipeline/README.md` 迁移桩；`baselineOf` 模板缺省值（机制保留、模板不设）；**跨仓 skeleton 登记**——旧版允许 skill 侧登记内容仓集名的 drift/generation，2.0.0 模板零登记，内容仓的合法漂移暂无机器登记面，若 negentropy 需要恢复该能力须按 RSI 另立条目设计工作区侧登记（A5 的长期解）；模板 `.npmrc` 占位文件。
 
 **C. 本机其他依赖**：`to-video-e2e/mini-video` 测试工作区包装器失效（重建即可）；真树回归语料（`TO_VIDEO_TEST_WORKSPACE` 指 negentropy 树）待 A1/A3 完成后恢复——扫描类门（`--check-scenes` 等）的红绿对拍在此之前不可用，不得以单行构造样例替代（见 RSI-007 教训）。
 

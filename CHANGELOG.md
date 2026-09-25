@@ -4,14 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.0] - 2026-09-25
 
-### Breaking（移除全部历史兼容面，ZenEntropy 侧自行适配；RSI-009）
+### Breaking（移除全部历史兼容面，negentropy 侧自行适配；RSI-009）
 
 - 按「全新 skill」口径维护（用户决策 2026-09-25，推翻 RSI-008 保留软链的方案比选）：**删除 `pipeline/` 目录**（迁移桩 README 与 `scripts → ../scripts` 软链 ABI），5 份分集/工作区薄包装解析函数探测路径由 `<skill>/pipeline/scripts` 改指 `<skill>/scripts`（五份字节一致）。旧工作区包装器会报「找不到 to-video skill」——按新模板同步包装器探测行即可恢复。
 - 旧名兼容整体移除：工作区哨兵只认 `.to-video-root`（不再识别 `.influence-root`，旧工作区补一个同名空文件即可迁移）；tts-store 只读 `TO_VIDEO_TTS_STORE`（不再兼容 `NE_TTS_STORE`，不再回退 `negentropy-influence/tts-store` 旧目录——旧缓存 `mv` 到 `~/Library/Application Support/to-video/tts-store` 即零重合成迁移）；文档命令面删 `$I/$R` 旧锚回归门。
 - `skeleton.toml` 历史登记清零：33 条 `[[drift]]`、2 组 `[[generation]]`（均为旧仓集名）与 `baselineOf` 全部移除；`.npmrc` 纯注释占位文件删除。旧内容工作区的既有漂移须重新登记到各自工作区。
 - 阶段编号对齐（原 ⑥↔07、⑦↔06 错位废除）：`06-tts-voice.md` ↔ Stage ⑥、`07-remotion-implementation.md` ↔ Stage ⑦，stages.toml、SKILL.md 速查表、全部交叉引用与执法测试（`test_stage_numbers_align_spec_files`）同步。
 - 旧资产与叙述清理：`influence--pipeline-layers.*` 更名 `pipeline-layers.*`（HTML/PNG/mermaid + 链接与 slug）；frozen 文件内陈旧路径注释（`pipeline/skills/…` 等）修正为现行路径；`check_series.py` 的 `COVERED_GLOBS_INFLUENCE` 更名 `COVERED_GLOBS` 并删旧嵌套布局的 `templates/` 过滤；tests/模板中 negentropy 具名叙述改中性措辞（上游 ISSUE 与 blob 引证保留）。
-- ZenEntropy 侧自适配三步（本仓不提供迁移工程）：①61 个包装器探测行 `pipeline" / "scripts` → `scripts`（与模板字节同步，verify_skeleton 随之对齐）；②工作区根补 `.to-video-root` 哨兵；③`mv ~/Library/Application\ Support/negentropy-influence/tts-store ~/Library/Application\ Support/to-video/tts-store`。
+- negentropy 侧自适配三步（本仓不提供迁移工程）：①61 个包装器探测行 `pipeline" / "scripts` → `scripts`（与模板字节同步，verify_skeleton 随之对齐）；②工作区根补 `.to-video-root` 哨兵；③`mv ~/Library/Application\ Support/negentropy-influence/tts-store ~/Library/Application\ Support/to-video/tts-store`。
 
 ### Added
 
