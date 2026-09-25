@@ -103,8 +103,7 @@ def build_workspace(
 ) -> Path:
     """搭建平铺假工作区 → 返回工作区根。
 
-    - sentinel：两种哨兵都要覆盖（`.to-video-root` 新工作区 / `.influence-root`
-      negentropy 兼容名），find_upward 对二者等价取先命中。
+    - sentinel：`.to-video-root`。
     - git_host：True 时把工作区嵌进一个上层放 **.git 文件**（git worktree 指针
       形态，内容 `gitdir: …`）的宿主目录——PROJECT 锚到宿主层（negentropy 式
       嵌套工作区同款）；False 时 tmp 树内无任何 .git，PROJECT 回退工作区自身。
@@ -193,7 +192,7 @@ def run_check(ws: Path) -> tuple[int, str]:
     return r.returncode, r.stdout + r.stderr
 
 
-@pytest.mark.parametrize("sentinel", [".to-video-root", ".influence-root"])
+@pytest.mark.parametrize("sentinel", [".to-video-root"])
 def test_clean_repo_passes(tmp_path, sentinel):
     ws = build_workspace(
         tmp_path,
@@ -451,7 +450,7 @@ def test_project_anchors_to_git_file_pointer_above_workspace(tmp_path):
     锚到宿主层——`(p/".git").is_dir()` 式判据会在此形态失效，文件/目录皆认
     是 paths.project_root 的承重契约（negentropy 式嵌套工作区即此形态）。"""
     ws = build_workspace(
-        tmp_path, [S("t", EP1)], {}, sentinel=".influence-root", git_host=True
+        tmp_path, [S("t", EP1)], {}, sentinel=".to-video-root", git_host=True
     )
     (ep_root(ws, EP1) / "README.md").write_text(
         "# 甲集标题\n[死链](../../video-package/README.md)\n", encoding="utf-8"

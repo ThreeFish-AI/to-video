@@ -101,7 +101,6 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 13. 声音样本生物特征纪律：不入库只存指纹；RSI 材料与示例不得引导样本路径进仓。
 14. 许可与依赖纪律：pyproject 刻意无 `[project]`（依赖走 `--with`）；不引入未审计第三方依赖或新许可冲突。
 15. 建模手册有界：预算与条目规则唯一实现于 [check_playbook.py](scripts/check_playbook.py)；超限只许按第十节压缩阶梯逐级压缩，禁整文件重写与「搬进规格正文腾预算」（执法：[test_modeling_playbook](tests/test_modeling_playbook.py)）。
-16. 包装器 ABI：`pipeline/scripts` → `scripts/` 软链是已部署 frozen 薄包装的定位路径，禁删；5 份包装器解析函数字节一致不改（执法：[test_wrapper_resolver](tests/test_wrapper_resolver.py)；迁移映射见 [pipeline/README.md](pipeline/README.md)）。
 
 ## 十、建模经验分支（有界经验库的策展协议）
 

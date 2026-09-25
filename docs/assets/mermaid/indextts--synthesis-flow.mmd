@@ -2,7 +2,7 @@
 %% slug: apps/indextts--synthesis-flow
 %% type: workflow
 %% derived: byte-exact extraction of mermaid block #0
-%% fix: 节点/边全量对照本仓 pipeline/scripts 与上游 clone 4f8792f 核验一致，零修正——上游七步行号 :699/:701/:703-707/:711/:714/:719/:723 逐行比对全中；「预算 118 token」= min(120, capacity−2) − len(lang_prefix)（split_text_by_tokens :426-429）且 <|zh|> 确为注册特殊 token（tokenizer.py:203）故前缀恰 2 token
+%% fix: 节点/边全量对照本仓 scripts 与上游 clone 4f8792f 核验一致，零修正——上游七步行号 :699/:701/:703-707/:711/:714/:719/:723 逐行比对全中；「预算 118 token」= min(120, capacity−2) − len(lang_prefix)（split_text_by_tokens :426-429）且 <|zh|> 确为注册特殊 token（tokenizer.py:203）故前缀恰 2 token
 %% fix: 本仓侧实证：build_narration.py:91-94 text=strip_marks(text)、has_marks 才写 ttsText；tts.py:249 tts_text()=「——」→「，」「……」→「。」；tts.py:598 POST {server}/synthesize
 flowchart TD
     A["narration.md 逐字稿<br/>（含可选 &lt;原文｜读音&gt; 标注）"] --> B["build_narration.py<br/>剥离标注 → text ／ 保留 → ttsText"]

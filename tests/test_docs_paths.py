@@ -11,8 +11,7 @@
 本文件执法三类纪律（方向各不相同）：
   1. 变量定义 SSOT：$T/$W/$P/$V 各自在 references/PIPELINE.md 定义且仅定义一次；
      skills 与 SKILL.md 只引用不定义——重复定义意味着搬迁/改名时要同步 N 处。
-  2. 命令锚定：旧 $I/$R（apps/negentropy-influence 内锚）已作废，命令内出现
-     即回归；$T 锚定的命令行里不得混入工作区相对字面量（voices/、episodes/
+  2. 命令锚定：$T 锚定的命令行里不得混入工作区相对字面量（voices/、episodes/
      裸前缀）——$T 是 skill 根，配上工作区相对路径在任何安装位置都不成立
      （混锚）。$W/$P/$V 引用合法。注意 `to-video.toml` 的 tts.ref 与
      series.json 的 path 是工作区根相对的**配置契约**，不是命令，不在受检面。
@@ -50,12 +49,10 @@ PLAYBOOK_MD = REFERENCES / "MODELING-PLAYBOOK.md"
 FENCE_RE = re.compile(r"^```")
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 #: 行内代码跨算「命令」的判据：经典命令调用形态，或直接引用了任何路径变量——
-#: 把 $ 变量写进行内跨就意味着它在充当命令（references/07 的命令历史上就写成
+#: 把 $ 变量写进行内跨就意味着它在充当命令（references/06 的命令历史上就写成
 #: 行内跨而非围栏块，只扫围栏会漏）。
-COMMAND_SPAN_RE = re.compile(r"uv run|\.venv/bin/python|\$[TWPIR]\b")
+COMMAND_SPAN_RE = re.compile(r"uv run|\.venv/bin/python|\$[TWPV]\b")
 
-#: 旧锚点变量（apps/negentropy-influence 内锚）：抽取为独立 skill 时作废。
-OLD_ANCHOR_RE = re.compile(r"\$[IR]\b")
 #: 工作区相对字面量的**裸前缀**形态：前一字符是字母/数字/_/$/./-// 时，视为
 #: 更长路径的一部分（`$W/voices/…` 合法）；前是空白或引号才是从任何锚点都
 #: 拼不上的裸前缀。
@@ -174,20 +171,6 @@ def test_only_readme_defines_path_variables():
         )
 
 
-def test_no_old_anchor_vars_in_commands():
-    """判据 2a：命令内出现旧 $I/$R 字面量即回归。"""
-    offenders: list[str] = []
-    for p in scanned_docs():
-        for lineno, cmd in command_lines(p.read_text(encoding="utf-8")):
-            if OLD_ANCHOR_RE.search(cmd):
-                offenders.append(f"{p.name}:{lineno}  {cmd.strip()}")
-    assert not offenders, (
-        "命令内出现已作废的 $I/$R（apps/negentropy-influence 内锚），"
-        "一律改用 $T/$W/$P/$V（定义见 references/PIPELINE.md）：\n  "
-        + "\n  ".join(offenders)
-    )
-
-
 def test_t_anchored_commands_carry_no_workspace_literals():
     """判据 2b（混锚禁令·反向）：$T 锚定的命令不得带工作区相对字面量。
 
@@ -246,15 +229,14 @@ _IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
 
 #: Remotion 工具经 npx 调用（06 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
 _NPX_TOOL_RE = re.compile(r"\bnpx\s+(?:tsc|remotion)\b")
-#: RSI-008 迁移后已不存在的旧路径（pipeline/scripts 是 ABI 软链、pipeline/README.md 是
-#: 迁移桩，二者仍真实存在故不在此列）；前一字符不许是词字符或 -，但**不排除 /**
+#: 已不存在的旧布局路径（RSI-009 起 pipeline/ 目录整体移除，任何指回都是死路径；
+#: docs/quickstart 已迁 assets/）；前一字符不许是词字符或 -，但**不排除 /**
 #: （`$T/…` 命令与本仓 blob 外链都以 / 起头），只放过上游
 #: apps/negentropy-influence/pipeline/… 的历史外链。另拦省略 pipeline/ 前缀的
 #: `templates/<子目录>` 与 `skills/NN` 简写（脚本注释的惯用写法）。
 _LEGACY_PATH_RE = re.compile(
     r"(?<![\w-])(?<!negentropy-influence/)"
-    r"(?:pipeline/(?:skills|templates|tests|stages\.toml|VOICE-CLONING"
-    r"|INDEXTTS|PRON-GLOSSARY|MODELING-PLAYBOOK)|docs/quickstart)"
+    r"(?:pipeline/[A-Za-z0-9_.-]+|docs/quickstart)"
     r"|(?<![\w-])(?<!pipeline/)(?:templates/(?:video-skeleton|workspace)|skills/\d\d)"
 )
 
@@ -365,27 +347,26 @@ def test_no_npx_for_remotion_tools():
         ("见 skills/06 清单", True),
         ("apps/negentropy-influence/pipeline/skills/06-x.md", False),
         ("apps/negentropy-influence/pipeline/templates/workspace/x", False),
-        ("$T/pipeline/scripts/tts.py", False),
-        ("映射见 pipeline/README.md", False),
+        ("$T/pipeline/scripts/tts.py", True),
+        ("映射见 pipeline/README.md", True),
         ("assets/video-skeleton/skeleton.toml", False),
         ("ln -s <目录> ~/.claude/skills/to-video", False),
     ],
 )
 def test_legacy_path_detector_forms(line, legacy):
     """检测器自检：`/` 起头的 `$T` 命令与本仓 blob 外链、省略 pipeline/ 前缀的
-    简写曾被漏检（RSI-008 复核）。"""
+    简写曾被漏检（RSI-008 复核；RSI-009 起 pipeline/ 整体入拦）。"""
     assert bool(_LEGACY_PATH_RE.search(line)) is legacy
 
 
 def test_no_legacy_layout_paths():
-    """RSI-008 目录迁移后，现行文案不得再指向已不存在的旧 pipeline/ 子路径（含简写）。"""
+    """pipeline/ 布局已整体移除（RSI-009），现行文案不得再指向它（含简写）。"""
     offenders = [
         f"{_rel(f)}:{no} → {m.group(0)}"
         for f in current_docs_and_code()
         for no, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
         for m in _LEGACY_PATH_RE.finditer(line)
     ]
-    assert not offenders, (
-        "文案仍指向迁移前的旧路径（映射见 pipeline/README.md）：\n  "
-        + ("\n  ".join(offenders))
+    assert not offenders, "文案仍指向已删除的旧布局路径 pipeline/：\n  " + (
+        "\n  ".join(offenders)
     )

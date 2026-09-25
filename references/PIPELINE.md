@@ -21,7 +21,7 @@
 
 ```bash
 T=~/.claude/skills/to-video   # skill 根（机制的家 = 本仓；env TO_VIDEO_HOME 或任意 clone + 软链皆可）
-W=<内容工作区根>              # 含 .to-video-root 哨兵的目录（旧 .influence-root 兼容识别；env TO_VIDEO_WORKSPACE 显式指派）
+W=<内容工作区根>              # 含 .to-video-root 哨兵的目录（env TO_VIDEO_WORKSPACE 显式指派）
 P=$W/episodes/<slug>-video    # 目标分集工程（各集 README 里换成本集 slug）
 V=$W/voices                   # 音色样本目录（整目录 gitignored，生物特征）
 ```
@@ -36,7 +36,7 @@ V=$W/voices                   # 音色样本目录（整目录 gitignored，生�
 |---|---|---|
 | `TO_VIDEO_HOME` | skill 根（包装器解析首位；其后依次 `~/.claude/skills/to-video` → `~/.agents/skills/to-video`，未命中即大声退出） | 无（靠软链命中） |
 | `TO_VIDEO_WORKSPACE` | 工作区根显式指派（目录须含哨兵，防拼错静默锚错；工作区级包装器会用自身位置硬性覆写它） | 自 CWD 向上搜索哨兵 |
-| `TO_VIDEO_TTS_STORE` | TTS 音频版本库根（兼容读旧名 `NE_TTS_STORE`） | `~/Library/Application Support/to-video/tts-store`（旧默认目录存在则回退） |
+| `TO_VIDEO_TTS_STORE` | TTS 音频版本库根 | `~/Library/Application Support/to-video/tts-store` |
 | `TO_VIDEO_INDEX_TTS_ROOT` | IndexTTS 服务仓（`tts_server` / `tts_bench` 的运行环境） | `~/tools/index-tts` |
 | `INDEXTTS_SERVER` | IndexTTS 服务地址，覆盖 `pipeline.toml` 的 `tts.server`（见下方字段表） | 无（回落 `tts.server` 缺省 `http://127.0.0.1:8766`） |
 | `TO_VIDEO_DELIVER_ROOT` | 交付归档根路径（`deliver` 子命令；`--root` 一次性优先于此） | 无（未配置时 deliver 大声退出并列两渠道） |
@@ -54,7 +54,6 @@ $T/
 ├── assets/            # video-skeleton / workspace 模板、quickstart 示例场景
 ├── tests/             # pytest（运行命令见 pyproject.toml 顶部注释）
 ├── evals/             # 输出质量与触发评测集
-└── pipeline/scripts   # → ../scripts 软链：已部署薄包装的 ABI，禁删（见 pipeline/README.md）
 ```
 
 再看**工作区根** `$W/`（`scaffold.py --init-workspace` 落盘的骨架，也是机制与内容的物理分界线）：
@@ -229,7 +228,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
    ```bash
    uv run --no-project $T/scripts/scaffold.py --init-workspace <dir>
    ```
-   落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装；既有工作区（旧哨兵 `.influence-root`）兼容识别、零改动可用。（可选）`export TO_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
+   落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装。（可选）`export TO_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
 1. 实例化骨架（替代旧的「`cp -r` 任一既有集」——那句话给 391 行冻结基建留了 4 个同权真理声明者；建集模式自 CWD 锚定 `$W/episodes/`，须在工作区内执行）：
    ```bash
    uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题" \

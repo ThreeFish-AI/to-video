@@ -67,7 +67,7 @@ def child_env(**overrides: str) -> dict[str, str]:
 
 def fake_skill(tmp_path: Path) -> Path:
     """搭一个只够骗过解析器的假 skill：pipeline.py 兼任探测标记与目标脚本。"""
-    scripts = tmp_path / "fake-skill" / "pipeline" / "scripts"
+    scripts = tmp_path / "fake-skill" / "scripts"
     scripts.mkdir(parents=True)
     for name in ("pipeline.py", *EPISODE_WRAPPERS, *WORKSPACE_WRAPPERS):
         (scripts / name).write_text(PROBE, encoding="utf-8")
@@ -111,7 +111,7 @@ def test_episode_wrapper_forwards_project_from_own_location(tmp_path, name):
     assert r.returncode == 0, r.stdout + r.stderr
     data = json.loads(probe_out.read_text(encoding="utf-8"))
     assert data["argv"] == [
-        str(home / "pipeline" / "scripts" / name),
+        str(home / "scripts" / name),
         "--project",
         str(episode.resolve()),
         "--force",
@@ -147,7 +147,7 @@ def test_workspace_wrapper_anchors_env_from_own_location(tmp_path, name):
     assert r.returncode == 0, r.stdout + r.stderr
     data = json.loads(probe_out.read_text(encoding="utf-8"))
     assert data["argv"] == [
-        str(home / "pipeline" / "scripts" / name),
+        str(home / "scripts" / name),
         "status",
         "--series",
         "demo",
@@ -265,30 +265,3 @@ def test_resolver_function_is_shared_across_all_five():
     segments = {resolver(f) for f in files}
     assert None not in segments, "某包装器丢了 _skill_scripts（形态变了？）"
     assert len(segments) == 1, "解析器体已分叉：五份副本须单源维护"
-
-
-# ── 真 skill 的包装器 ABI：pipeline/scripts 软链（RSI-008 目录迁移兼容面）──────
-
-
-def test_real_skill_keeps_pipeline_scripts_abi_symlink():
-    """解析器按 `<skill>/pipeline/scripts/pipeline.py` 探测，且分集包装器是 frozen
-    档、已字节复制进全部已发布分集——解析器改不动，故真 skill 须保留指向
-    scripts/ 的软链；删除即所有已部署包装器「找不到 to-video skill」。"""
-    link = SKILL_ROOT / "pipeline" / "scripts"
-    assert link.is_symlink(), "pipeline/scripts 软链缺失：已部署包装器将全部失效"
-    assert link.resolve() == (SKILL_ROOT / "scripts").resolve()
-
-
-def test_workspace_wrapper_runs_real_skill_through_abi(tmp_path):
-    """端到端：工作区包装器 → 真 skill 的软链路径 → pipeline.py 按 resolve()
-    自定位（references/stages.toml 可达即证 skill 根解析未被软链带偏）。"""
-    ws = tmp_path / "ws"
-    (ws / "scripts").mkdir(parents=True)
-    (ws / paths.WORKSPACE_MARKERS[0]).write_text("", encoding="utf-8")
-    wrapper = ws / "scripts" / "pipeline.py"
-    shutil.copy2(WS_TMPL / "pipeline.py.tmpl", wrapper)
-    r = run_wrapper(
-        wrapper, "stages", env=child_env(TO_VIDEO_HOME=str(SKILL_ROOT)), cwd=tmp_path
-    )
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "①" in r.stdout and "⑨" in r.stdout

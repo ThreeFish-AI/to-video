@@ -91,7 +91,6 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，各居任意目录互不牵连。
 - **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 机制文件只读（例外仅两处仅追加的登记面：台账、建模手册候选区），禁止顺手改。
 - **双语对齐**（双语集）：`narration.en.md` 与主稿句 id 1:1（build/check 执法）+ 基线锁防译稿静默失鲜；语言常数只在 `scripts/langs.py`（tts.py 内联镜像由测试钉住）；tts/render/deliver 缺省只跑主语言、显式 `--lang` 才多版本（机制见 [references/PIPELINE.md §五「双语渲染」](references/PIPELINE.md)）。
-- **包装器 ABI**：`pipeline/scripts` 是指向 `scripts/` 的软链——已部署分集的 frozen 薄包装按该路径定位 skill，删除即全部失效（迁移映射见 [pipeline/README.md](pipeline/README.md)）。
 
 ## 运行时陷阱
 

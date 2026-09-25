@@ -31,7 +31,6 @@
 | [issue.md](./issue.md) | RSI 台账（`RSI-xxx`） |
 | [evals/README.md](../../evals/README.md) | 输出质量评测与触发评测的用法（`evals.json` / `trigger-evals.json`） |
 | [modeling-experience-distillation.md](../research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
-| [pipeline/README.md](../../pipeline/README.md) | 旧 `pipeline/` 布局 → 新布局映射表；`pipeline/scripts` 包装器 ABI 软链说明 |
 
 ## 资产
 

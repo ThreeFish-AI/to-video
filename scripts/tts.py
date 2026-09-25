@@ -11,8 +11,7 @@
 - 幂等：参数与文本未变则跳过（SHA1 摘要 sidecar 缓存）。
 - 版本库（indextts）：合成成功的句子按 digest 存入机器级持久库（默认
   ~/Library/Application Support/to-video/tts-store，环境变量 TO_VIDEO_TTS_STORE
-  覆盖（旧名 NE_TTS_STORE 兼容读取；旧默认目录存在时自动回退使用），
-  --no-store 禁用）；集内缓存未命中时先按 digest 回收——换 worktree / 清盘不再
+  覆盖，--no-store 禁用）；集内缓存未命中时先按 digest 回收——换 worktree / 清盘不再
   丢整集合成成果，改稿只重配变更句。历史版本按 digest 文件名并存，不互相覆盖。
 
 用法：
@@ -670,15 +669,13 @@ def digest_indextts(
 #   - 合成成功 → store_deposit 入库（同 digest 刷新为最新音频；不同 digest 并存=保留历史版本）；
 #   - 集内缓存未命中 → store_restore 按 digest 回收，命中即等价集内缓存命中；
 #   - 改稿/换风格 ⇒ 新 digest 自然 miss 重配，旧版本文件保留可回退。
-# 路径是机器属性：默认值在此 + TO_VIDEO_TTS_STORE 环境变量覆盖（旧名
-# NE_TTS_STORE 兼容读取，迁移期零配置失效），永不写进受版本控制的 toml（与
+# 路径是机器属性：默认值在此 + TO_VIDEO_TTS_STORE 环境变量覆盖，永不写进
+# 受版本控制的 toml（与
 # config.py 对 tts.server 的立场一致；tts.py 不 import paths.py 的边界也不变
 # ——默认值是纯字面量）。仅接 indextts：edge 预置音色免密钥秒级重合成，
 # 无 2 小时级资产可丢。
 #
-# 条目按内容寻址（<slug>/<sid>.<digest12>.mp3），库根迁移零失效：默认目录
-# 自 negentropy-influence 改名后，旧目录存在即回退使用（存量缓存原地命中），
-# CHANGELOG 1.0.0 条目提供可选的一次性合并命令。
+# 条目按内容寻址（<slug>/<sid>.<digest12>.mp3），库根整体搬迁零失效（mv 即迁移）。
 #
 # ⚠️ 继承是中性的：坏 take 同样按 digest 逐代继承（187/187 句恢复零重合成 =
 # 缺陷一并回来；换 worktree 重建继续继承，ISSUE-192）。撤销发音标注会使 digest
@@ -686,26 +683,19 @@ def digest_indextts(
 # （<sid>.<digest12>.mp3 → *.bad-<tag>，.sha 邻档同步），留档不删，恢复后抽检。
 
 DEFAULT_STORE = "~/Library/Application Support/to-video/tts-store"
-LEGACY_STORE = "~/Library/Application Support/negentropy-influence/tts-store"
 
 
 def store_root(disabled: bool) -> Path | None:
     """版本库根目录；--no-store 或 env 置空串时返回 None（全程直通不落盘）。
 
-    解析顺序：TO_VIDEO_TTS_STORE / NE_TTS_STORE（新名优先）→ 新默认目录
-    存在 → 旧默认目录存在（迁移回退）→ 新默认目录。"""
+    解析顺序：TO_VIDEO_TTS_STORE → 默认目录（不存在则原样返回，首存即建）。"""
     if disabled:
         return None
-    for var in ("TO_VIDEO_TTS_STORE", "NE_TTS_STORE"):
-        env = os.environ.get(var)
-        if env == "":
-            return None
-        if env:
-            return Path(env).expanduser()
-    for raw in (DEFAULT_STORE, LEGACY_STORE):
-        p = Path(raw).expanduser()
-        if p.is_dir():
-            return p
+    env = os.environ.get("TO_VIDEO_TTS_STORE")
+    if env == "":
+        return None
+    if env:
+        return Path(env).expanduser()
     return Path(DEFAULT_STORE).expanduser()
 
 

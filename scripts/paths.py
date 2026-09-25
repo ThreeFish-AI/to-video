@@ -20,8 +20,7 @@
 pre-commit 门整体失效、试听小样写错位置且 git status 不可见）。哨兵搜索对位置
 免疫（git 找 `.git`、uv/pytest 找 `pyproject.toml` 的同一惯例）。
 
-  - 新哨兵 `.to-video-root`；**兼容识别**旧哨兵 `.influence-root`（negentropy
-    工作区继续用旧名，零改动迁移）。
+  - 哨兵 `.to-video-root`。
   - 为什么不用 `.git` 当工作区哨兵：相关仓的 `.git` 可能是**文件**（git worktree），
     `(p / ".git").is_dir()` 当场失效；测试 fixture 无 `.git`；`~/tools/index-tts`
     是真 `.git` 目录会误锚。`.git` 只用于 `project_root`（且文件/目录皆认）。
@@ -62,9 +61,8 @@ from pathlib import Path
 #: skill 根哨兵：技能仓根目录的标志文件（Claude Code Skill 的装载单位）。
 SKILL_MARKER = "SKILL.md"
 
-#: 工作区根哨兵。新工作区用 `.to-video-root`；`.influence-root` 为 negentropy
-#: 工作区的旧名，兼容识别（同一目录同时存在两者时等价，取先命中）。
-WORKSPACE_MARKERS = (".to-video-root", ".influence-root")
+#: 工作区根哨兵。
+WORKSPACE_MARKERS = (".to-video-root",)
 
 #: 工作区显式指派（优先于哨兵搜索）；值为工作区根绝对或相对路径。
 ENV_WORKSPACE = "TO_VIDEO_WORKSPACE"

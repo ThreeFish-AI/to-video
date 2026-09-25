@@ -81,14 +81,11 @@ def init_workspace(ws: Path, force: bool) -> int:
     for d in ("episodes", "source-map"):
         (ws / d).mkdir(parents=True, exist_ok=True)
         (ws / d / ".gitkeep").touch()
-    legacy = (ws / ".influence-root").is_file()
     print(f">> 工作区 {ws}")
     print(
         f"   新建 {len(created)} 件 / 保留既有 {len(kept)} 件"
         + ("（--force 可覆盖）" if kept else "")
     )
-    if legacy:
-        print("   ℹ️ 检测到旧哨兵 .influence-root：skill 兼容识别，二者等价，无需删除")
     print("\n接下来**必须**人工完成的（脚手架刻意不代做）：")
     print("  1. series.json 登记第一个系列（id/title/sourceKind/rule/episodes）")
     print("  2. voices/：prospect_ref 选段 → prepare_ref 裁样 → 把指纹写进 refs.toml")

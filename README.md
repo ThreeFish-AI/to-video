@@ -74,7 +74,6 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 
 - **多宿主共享**：把同一 clone 再链到 `~/.agents/skills/to-video`，或设 `TO_VIDEO_HOME=<clone 根>` 指到任意安装位置——包装器按 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 顺序解析。
 - 其余环境变量（工作区指派、tts-store、IndexTTS 服务等）见 [references/PIPELINE.md](references/PIPELINE.md)「环境变量」节。
-- 请保留 clone 内的 `pipeline/scripts` 软链（全部分集与工作区包装器的定位路径，含新 scaffold 的）；复制式安装若丢失软链，所有包装器都会找不到 skill，原因见 [pipeline/README.md](pipeline/README.md)。
 
 ### 验证安装
 
@@ -85,7 +84,6 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 
 - 更新：clone 目录内 `git pull`（软链自动生效），或 `npx skills update`。
 - 卸载：`rm -r ~/.claude/skills/to-video`（软链形态只删软链、clone 保留；--copy 形态删的是副本目录），可选清理 `~/Library/Application Support/to-video/tts-store` 缓存。
-- 自 negentropy-influence 迁移：旧 tts-store 目录自动回退兼容、零配置；彻底搬走旧缓存的一次性命令见 [CHANGELOG.md](CHANGELOG.md) 1.0.0 条目。
 
 ## 四、快速上手（Quickstart）
 

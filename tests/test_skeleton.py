@@ -247,20 +247,9 @@ def test_baseline_series_exists():
             (Path(INTEGRATION_WS).resolve() / "series.json").read_text(encoding="utf-8")
         )["seriesList"]
     }
-    assert skel["baselineOf"] in ids, (
-        f"baselineOf={skel['baselineOf']!r} 不在 series.json"
-    )
-
-
-def test_baselineof_absent_series_warns(tmp_path):
-    """**正控（baselineOf 点名）**：空 seriesList 工作区（`--init-workspace` 后
-    的首跑形态）必须打出「模板时新性暂无担保」WARN——新工作区首集自建基线是
-    合法形态，但 I2 此刻无人担保，点名而非静默。真脚本 + 真模板，工作区是假的。
-    """
-    ws = flat_ws(tmp_path)
-    r = run(VERIFY, cwd=ws)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "baselineOf" in r.stdout and "不在本工作区 series.json" in r.stdout, r.stdout
+    baseline = skel.get("baselineOf")
+    if baseline is not None:
+        assert baseline in ids, f"baselineOf={baseline!r} 不在 series.json"
 
 
 def test_gate_actually_detects_drift(tmp_path):
@@ -791,7 +780,8 @@ def test_generation_registry_is_well_formed():
 
     skel = skeleton()
     gens = skel.get("generation", [])
-    assert gens, "模板缺 [[generation]]（分代机制的登记前提）"
+    if not gens:
+        return  # 2.0.0 起模板零登记出厂；登记形态由注入正控覆盖
     gated_of = {
         rel: cls for cls in GATED_CLASSES for rel in skel["classes"].get(cls, [])
     }

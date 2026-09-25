@@ -7,7 +7,6 @@ init 是「新工作区的第一脚」，自己必须在**还不存在工作区*
   1. _WS_ARTIFACTS 映射与期望集一致——清单缩水（悄悄少掉哨兵或某个包装器）
      会产出「看起来正常但门全失效」的工作区，必须红在这里由人显式决策；
   2. 幂等 = 逐工件 skip-if-exists（二跑字节零变更），--force 才覆盖；
-  3. 与旧哨兵 .influence-root 共存：negentropy 工作区零改动迁移路径不能破；
   4. 落盘的机读默认值可解析且为空——init 只做机械落盘，内容决策留给人。
 """
 
@@ -113,16 +112,6 @@ def test_force_restores_tampered_artifacts(tmp_path: Path):
     ).read_bytes()
     assert f"新建 {len(EXPECTED_ARTIFACTS)} 件" in r.stdout
     assert "保留既有 0 件" in r.stdout
-
-
-def test_init_coexists_with_legacy_influence_sentinel(tmp_path: Path):
-    legacy = tmp_path / ".influence-root"
-    legacy.write_text("# 旧哨兵\n", encoding="utf-8")
-    r = init(tmp_path)
-    # 共现提示：negentropy 迁移用户须知道二者等价、无需删旧哨兵
-    assert ".influence-root" in r.stdout and "兼容" in r.stdout
-    assert (tmp_path / ".to-video-root").is_file()  # 新哨兵照落
-    assert legacy.read_bytes() == "# 旧哨兵\n".encode("utf-8")  # 原样保留
 
 
 def test_machine_readable_defaults_parse_empty(tmp_path: Path):

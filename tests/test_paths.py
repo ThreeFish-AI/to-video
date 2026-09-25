@@ -70,20 +70,13 @@ def test_workspace_root_hits_new_sentinel(tmp_path: Path):
     assert paths.workspace_root(ws / "episodes") == ws.resolve()
 
 
-def test_workspace_root_accepts_legacy_sentinel(tmp_path: Path):
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    (ws / ".influence-root").write_text("", encoding="utf-8")
-    assert paths.workspace_root(ws) == ws.resolve()
-
-
 def test_workspace_root_takes_nearest_when_nested(tmp_path: Path):
-    """两层嵌套取最近：新旧哨兵各占一层时，深处目录锚到内层——嵌套工作区
-    （negentropy 式 apps/ 深处）不许越级吸到外层。"""
+    """两层嵌套取最近：深处目录锚到内层——嵌套工作区（宿主仓 apps/ 深处）
+    不许越级吸到外层。"""
     outer = tmp_path / "outer"
     inner = outer / "inner"
     (inner / "leaf").mkdir(parents=True)
-    (outer / ".influence-root").write_text("", encoding="utf-8")
+    (outer / ".to-video-root").write_text("", encoding="utf-8")
     (inner / ".to-video-root").write_text("", encoding="utf-8")
     assert paths.workspace_root(inner / "leaf") == inner.resolve()
 
@@ -93,7 +86,7 @@ def test_env_workspace_wins_over_cwd_search(tmp_path: Path, monkeypatch):
     cwd_side = tmp_path / "by-cwd"
     ws.mkdir()
     cwd_side.mkdir()
-    (cwd_side / ".influence-root").write_text("", encoding="utf-8")
+    (cwd_side / ".to-video-root").write_text("", encoding="utf-8")
     (ws / ".to-video-root").write_text("", encoding="utf-8")
     monkeypatch.setenv(paths.ENV_WORKSPACE, str(ws))
     assert paths.workspace_root(cwd_side) == ws.resolve()
@@ -118,7 +111,7 @@ def test_workspace_root_without_sentinel_exits_with_init_hint(tmp_path: Path):
     with pytest.raises(SystemExit) as ei:
         paths.workspace_root(bare)
     msg = str(ei.value)
-    assert ".to-video-root" in msg and ".influence-root" in msg
+    assert ".to-video-root" in msg
     assert "--init-workspace" in msg  # 报错必须带修复动作，不只报状态
 
 

@@ -93,36 +93,11 @@ def test_empty_env_disables_store(monkeypatch):
     assert store_root(disabled=False) is None
 
 
-def test_legacy_env_name_still_honored(monkeypatch, tmp_path):
-    """兼容读：清掉新名后，旧名 NE_TTS_STORE 仍生效（迁移期零配置失效）。"""
+def test_default_dir_used_when_env_unset(monkeypatch, tmp_path):
+    """不设 env ⇒ 落到默认路径（目录允许尚不存在，deposit 时再建）。"""
     monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
-    monkeypatch.setenv("NE_TTS_STORE", str(tmp_path / "legacy-env"))
-    assert store_root(disabled=False) == tmp_path / "legacy-env"
-
-
-def test_default_falls_back_to_legacy_dir(monkeypatch, tmp_path):
-    """不设 env 时：LEGACY 目录存在 ⇒ 优先于「两者都不存在才落的新默认」。
-
-    回退目的是存量缓存原地命中。LEGACY/DEFAULT 指到 tmp 目录再测，不碰真实
-    家目录——真机上旧目录可能真实存在，直接断言会把测试变成环境依赖。
-    """
-    monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
-    monkeypatch.delenv("NE_TTS_STORE", raising=False)
-    legacy = tmp_path / "legacy-store"
-    legacy.mkdir()
-    monkeypatch.setattr(tts, "LEGACY_STORE", str(legacy))
-    # 新默认刻意不创建：存在与否正是本用例的输入
     monkeypatch.setattr(tts, "DEFAULT_STORE", str(tmp_path / "fresh-store"))
-    assert store_root(disabled=False) == legacy
-
-
-def test_default_when_neither_dir_exists(monkeypatch, tmp_path):
-    """LEGACY 也不存在 ⇒ 落到新默认路径（目录允许尚不存在，deposit 时再建）。"""
-    monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
-    monkeypatch.delenv("NE_TTS_STORE", raising=False)
-    monkeypatch.setattr(tts, "LEGACY_STORE", str(tmp_path / "absent-legacy"))
-    monkeypatch.setattr(tts, "DEFAULT_STORE", str(tmp_path / "absent-default"))
-    assert store_root(disabled=False) == tmp_path / "absent-default"
+    assert store_root(disabled=False) == tmp_path / "fresh-store"
 
 
 def test_store_read_error_degrades_to_miss(monkeypatch, tmp_path):
