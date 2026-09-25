@@ -144,4 +144,21 @@
 
 **后续防范**：兼容义务以「显式决策 + 台账 + 版本号」为界——新增任何兼容读/回退/别名前，先问「删除它的 major 版本在哪」，无删除计划就不许加。skeleton 登记表只登记「当前合法偏离」，别仓集名不得进本仓模板。skill 仓不携带任何指向具体内容工作区的名字（系列 id、集 slug、仓名）。
 
-**同类问题影响**：ZenEntropy 14 集（61 包装器、pre-commit 钩子、旧 tts-store、旧哨兵）在拉取 2.0.0 后失效，按上表三步自行适配；`to-video-e2e` 测试工作区同理（重建即可）。本仓 CHANGELOG/issue 台账中的历史叙述按记录保留，未随兼容面删除。
+**同类问题影响**：本仓 CHANGELOG/issue 台账中的历史叙述按记录保留，未随兼容面删除。破坏面与未兼容旧功能清单如下（待 ZenEntropy 侧适配后逐项验证关闭，2026-09-25 登记）：
+
+**A. ZenEntropy（apps/negentropy-influence，14 集）破坏面——按 2.0.0 CHANGELOG 三步适配后逐项验证**
+
+| # | 破坏面 | 修复 | 验证 |
+|---|---|---|---|
+| A1 | 61 个薄包装器（14×tts/build_narration/qa_frames + 17 个 archify 类 + 2 工作区包装器）探测 `pipeline/scripts`，全部「找不到 to-video skill」 | 探测行 `pipeline" / "scripts` → `scripts`（与 2.0.0 模板字节一致） | 任一分集 `scripts/tts.py --help` 可跑；`TO_VIDEO_HOME=<新 skill>` 下 `verify_skeleton.py` 对模板零漂移 |
+| A2 | pre-commit `series-consistency-check` 走工作区包装器，触及 influence 的提交被拦 | 同 A1（工作区 2 份包装器） | 暂存一处 influence 内改动，钩子 Passed 而非报「找不到 skill」 |
+| A3 | 旧哨兵 `.influence-root` 不再识别，依赖 WORKSPACE 锚的脚本大声退出 | 工作区根补空 `.to-video-root` | 工作区内任意目录直跑 `check_series.py`，rc=0 |
+| A4 | tts-store 旧目录（实测 65M / 1815 句）回退删除，缓存全 miss（重渲一集重合成 2.5–3.5h） | `mv ~/Library/Application Support/negentropy-influence/tts-store ~/Library/Application Support/to-video/tts-store` | 任一集 `pipeline.py tts`（不改稿）零重合成、全部命中缓存 |
+| A5 | skeleton 登记清零 + frozen 模板字节变更（包装器探测行、remotion.config.ts 与 frozen 组件注释、.npmrc 删除），旧集 `verify_skeleton --strict` 大量 STALE/DRIFT 红 | 逐集整组同步模板（拷齐再 `tsc --noEmit`）；不重渲的已发布集接受红、不跑该门 | 同步过的集 `--strict` rc=0 |
+| A6 | 已发布集 README/pipeline.toml 的 GitHub blob 外链 42 处（15 处本已 404 + 27 处指向已删迁移桩） | 批量改指 `references/…` 与 `assets/video-skeleton/skeleton.toml` | 抽检 5 处链接可达 |
+
+**B. 未兼容的旧版功能（2.0.0 有意不支持；用于后续「未回归」核对）**：`.influence-root` 哨兵识别；`NE_TTS_STORE` 旧 env 名与旧默认目录回退；`$T/pipeline/scripts/…` 命令路径与 `pipeline/README.md` 迁移桩；`baselineOf` 模板缺省值（机制保留、模板不设）；**跨仓 skeleton 登记**——旧版允许 skill 侧登记内容仓集名的 drift/generation，2.0.0 模板零登记，内容仓的合法漂移暂无机器登记面，若 ZenEntropy 需要恢复该能力须按 RSI 另立条目设计工作区侧登记（A5 的长期解）；模板 `.npmrc` 占位文件。
+
+**C. 本机其他依赖**：`to-video-e2e/mini-video` 测试工作区包装器失效（重建即可）；真树回归语料（`TO_VIDEO_TEST_WORKSPACE` 指 negentropy 树）待 A1/A3 完成后恢复——扫描类门（`--check-scenes` 等）的红绿对拍在此之前不可用，不得以单行构造样例替代（见 RSI-007 教训）。
+
+**D. 跟进项（非破坏，已在 RSI-008 评审回归段登记，不重复维护）**：模板 `README.md.tmpl` 首条 `qa --video out/draft.mp4 --check` 缺选择器、照抄必败。
