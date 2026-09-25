@@ -324,6 +324,10 @@ def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
     r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 1, f"豁免未随偏离改变而失效：\n{r.stdout}"
     assert "DRIFT-CHANGED" in r.stdout, r.stdout
+    # 处置指引须指向工作区登记面：照旧文案改 skill 侧 skeleton.toml 会被
+    # load_registry() 大声拒收，豁免永远改不对（RSI-010 评审回归）
+    line = next(ln for ln in r.stdout.splitlines() if "DRIFT-CHANGED" in ln)
+    assert "to-video.toml" in line and "skeleton.toml" not in line, line
 
 
 def test_i2_honours_the_drift_registry(tmp_path):
@@ -803,8 +807,8 @@ def test_chapter_progress_mount_is_load_bearing():
 # 「整组停在旧代」放行。与 [[drift]] 的分工：drift 钉该集**特有**偏离（一集
 # 一文件一指纹），generation 钉**模板升级遗留**的整组旧态（一组文件一组指纹，
 # 按显式花名册退役）。正控沿双锚点沙箱形态（mirror_skill + flat_ws），注入的
-# 分代登记落在镜像 skeleton.toml 上——真实 legacy 指纹指向真实旧代文件，镜像
-# 里无从复现，故正控自登记「镜像当代」为旧代再升模板，复现整组旧态。
+# 分代登记写进沙箱工作区 to-video.toml 的 [skeleton]——真实 legacy 指纹指向真实
+# 旧代文件，镜像里无从复现，故正控自登记「镜像当代」为旧代再升模板，复现整组旧态。
 
 #: bilingual-i18n 分代组的文件面（含档位），正控与表合法性测试共用。
 GEN_GROUP: tuple[tuple[str, str], ...] = (

@@ -285,7 +285,8 @@ def main() -> int:
                         print(
                             f"    DRIFT-CHANGED {rel} · {slug} 现为 {fp}，"
                             f"登记的是 {registered[(slug, rel)][1]}"
-                            f" —— 偏离内容已变，豁免失效：请复核后更新 skeleton.toml"
+                            f" —— 偏离内容已变，豁免失效：请复核后更新 $W/to-video.toml"
+                            " 的 [[skeleton.drift]]"
                         )
                         continue
                     if generation_hit(generations, slug, rel, fp):

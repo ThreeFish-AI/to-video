@@ -146,11 +146,11 @@
 
 **同类问题影响**：本仓 CHANGELOG/issue 台账中的历史叙述按记录保留，未随兼容面删除。破坏面与未兼容旧功能清单已同步登记到 negentropy 侧（[ISSUE-200](https://github.com/ThreeFish-AI/negentropy/pull/1174)，PR [#1174](https://github.com/ThreeFish-AI/negentropy/pull/1174)，2026-09-25），待其适配后逐项验证关闭：
 
-**A. negentropy（apps/negentropy-influence，14 集）破坏面——按 2.0.0 CHANGELOG 三步适配后逐项验证**
+**A. negentropy（apps/negentropy-influence，14 集）破坏面——按 2.0.0 CHANGELOG 自适配步骤完成后逐项验证**
 
 | # | 破坏面 | 修复 | 验证 |
 |---|---|---|---|
-| A1 | 61 个薄包装器（14×tts/build_narration/qa_frames + 17 个 archify 类 + 2 工作区包装器）探测 `pipeline/scripts`，全部「找不到 to-video skill」 | 探测行 `pipeline" / "scripts` → `scripts`（与 2.0.0 模板字节一致） | 任一分集 `scripts/tts.py --help` 可跑；`TO_VIDEO_HOME=<新 skill>` 下 `verify_skeleton.py` 对模板零漂移 |
+| A1 | 61 个薄包装器（14×tts/build_narration/qa_frames + 17 个 archify 类 + 2 工作区包装器）探测 `pipeline/scripts`，全部「找不到 to-video skill」 | 探测行 `pipeline" / "scripts` → `scripts`；分集 frozen 包装器按 2.0.0 模板整文件覆盖（docstring 同批改过，只改探测行字节不等） | 任一分集 `scripts/tts.py --help` 可跑；`TO_VIDEO_HOME=<新 skill>` 下 `verify_skeleton.py` 对模板零漂移 |
 | A2 | pre-commit `series-consistency-check` 走工作区包装器，触及 influence 的提交被拦 | 同 A1（工作区 2 份包装器） | 暂存一处 influence 内改动，钩子 Passed 而非报「找不到 skill」 |
 | A3 | 旧哨兵 `.influence-root` 不再识别，依赖 WORKSPACE 锚的脚本大声退出 | 工作区根补空 `.to-video-root` | 工作区内任意目录直跑 `check_series.py`，rc=0 |
 | A4 | tts-store 旧目录（实测 65M / 1815 句）回退删除，缓存全 miss（重渲一集重合成 2.5–3.5h） | `mv ~/Library/Application Support/negentropy-influence/tts-store ~/Library/Application Support/to-video/tts-store` | 任一集 `pipeline.py tts`（不改稿）零重合成、全部命中缓存 |
@@ -177,6 +177,6 @@
 
 **处理方式**：`verify_skeleton.py` 新增 `load_registry()`（skill 侧登记键 → `sys.exit` 点名迁移方式；读 `$W/to-video.toml` 的 `skeleton` 表，缺失 = 无登记）；已登记偏离报告改为全部列出，指向 series.json 未知集的条目标「陈旧登记」旁注（登记本地化后「他工作区登记是噪音」的过滤理由不再成立）。skeleton.toml 恢复「合法偏离登记」「骨架分代」两节格式说明（不含条目），三处既有指针随之重新生效；工作区模板 `to-video.toml.tmpl` 加 `[skeleton]` 注释示例，scaffold init 提示同步；07 / PIPELINE.md / CHANGELOG（negentropy 适配增第 ④ 步）指针同步。test_skeleton 的 `register_drift` / `inject_generation` 改写工作区 to-video.toml（既有 6 条分代正控与 2 条 drift 正控随之覆盖新路径），新增 skill 侧登记被拒、模板零登记、陈旧登记旁注三条用例；三条真树用例改读工作区登记。
 
-**后续防范**：skill 仓只放机制；任何「指向具体集/系列」的数据（登记、豁免、花名册）一律住工作区，新增此类配置前先问「它随内容变还是随机制变」。发布说明里的迁移步骤必须能照做——写「须登记到 X」前先确认 X 存在读取入口。删除数据条目时区分「条目」与「格式说明」：前者可清零，后者是机制文档，删了即留悬空指针。
+**后续防范**：skill 仓只放机制；任何「指向具体集/系列」的数据（登记、豁免、花名册）一律住工作区，新增此类配置前先问「它随内容变还是随机制变」。发布说明里的迁移步骤必须能照做——写「须登记到 X」前先确认 X 存在读取入口。删除数据条目时区分「条目」与「格式说明」：前者可清零，后者是机制文档，删了即留悬空指针。评审回归（2026-09-25）：三处漏改——① DRIFT-CHANGED 的处置文案仍写「请复核后更新 skeleton.toml」，照做会被 `load_registry()` 拒收，已改指 `$W/to-video.toml` 的 `[[skeleton.drift]]`，并在 `test_registered_drift_is_pinned_to_its_fingerprint` 断言该行指向工作区；② CHANGELOG 第 ① 步称包装器同步后「verify_skeleton 随之对齐」不成立——同版 7 个 frozen TS/TSX 的纯注释修正改变了 md5，英文渲染预检（直比字节、不查登记）会拦下全部既有集，已补为第 ② 步（当代集整组拷齐、旧代集只拷组外文件），分集包装器亦须整文件覆盖而非只改探测行；③ test_skeleton 分代节注释仍写「登记落在镜像 skeleton.toml」。教训：迁移登记面后，须全仓 grep 旧落点名（含报错文案与测试注释）；迁移步骤里「随之对齐」之类的结论要用字节比对实测，不凭推断。
 
-**同类问题影响**：negentropy 侧 A5 由「整组同步或接受红」扩为可登记（CHANGELOG 第 ④ 步）；旧版在 skill 侧登记的写法在 2.0.0 被拒收（RSI-009 B 节同步改写）。
+**同类问题影响**：negentropy 侧 A5 由「整组同步或接受红」扩为可登记（CHANGELOG 第 ⑤ 步）；旧版在 skill 侧登记的写法在 2.0.0 被拒收（RSI-009 B 节同步改写）。
