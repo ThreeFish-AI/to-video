@@ -25,7 +25,8 @@ def _skill_scripts() -> Path:
     ]
     for c in candidates:
         p = c / "scripts"
-        if (p / "pipeline.py").is_file():
+        # 须见 SKILL.md 哨兵：工作区根也有 scripts/pipeline.py（误中即自递归）
+        if (c / "SKILL.md").is_file() and (p / "pipeline.py").is_file():
             return p
     listed = "\n  ".join(str(c) for c in candidates)
     sys.exit(

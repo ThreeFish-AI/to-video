@@ -5,7 +5,9 @@
 
   1. 解析命中：TO_VIDEO_HOME 指向的假 skill 被找到，且目标脚本收到的
      `--project`（分集包装器）/ `TO_VIDEO_WORKSPACE`（工作区包装器）恰是
-     包装器**自身位置**推导的锚，与调用 CWD 无关；
+     包装器**自身位置**推导的锚，与调用 CWD 无关；命中须见 skill 根
+     `SKILL.md` 哨兵——工作区根同有 `scripts/pipeline.py`，误指工作区须回落
+     下一候选而非自递归；
   2. 解析未命中：三个候选全部列出 + 安装指令——少列一个候选，用户就少
      一条自救路径；
   3. 模板一致性：各形态的包装器正文除目标脚本名外字节一致、解析器体
@@ -22,6 +24,7 @@ import ast
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -66,12 +69,15 @@ def child_env(**overrides: str) -> dict[str, str]:
 
 
 def fake_skill(tmp_path: Path) -> Path:
-    """搭一个只够骗过解析器的假 skill：pipeline.py 兼任探测标记与目标脚本。"""
-    scripts = tmp_path / "fake-skill" / "scripts"
+    """搭一个只够骗过解析器的假 skill：SKILL.md 哨兵 + pipeline.py（兼任探测
+    标记与目标脚本）。"""
+    home = tmp_path / "fake-skill"
+    scripts = home / "scripts"
     scripts.mkdir(parents=True)
+    (home / paths.SKILL_MARKER).write_text("# 假 skill 根哨兵\n", encoding="utf-8")
     for name in ("pipeline.py", *EPISODE_WRAPPERS, *WORKSPACE_WRAPPERS):
         (scripts / name).write_text(PROBE, encoding="utf-8")
-    return tmp_path / "fake-skill"
+    return home
 
 
 def run_wrapper(
@@ -183,6 +189,68 @@ def test_workspace_wrapper_overrides_caller_explicit_env(tmp_path):
     assert probe["workspace_env"] != str(preset)
     # 覆写值 = 包装器自身 parent.parent（与无预设时的自证锚一致）
     assert probe["workspace_env"] == str(ws.resolve())
+
+
+def run_guarded(
+    wrapper: Path, *args: str, env: dict[str, str], cwd: Path, timeout: float = 15
+) -> subprocess.CompletedProcess[str]:
+    """同 run_wrapper，但子进程自成进程组、超时整组 kill——包装器自递归时每层
+    都会再派生一层，只杀直接子进程拦不住。"""
+    p = subprocess.Popen(
+        [sys.executable, str(wrapper), *args],
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+        errors="replace",
+        start_new_session=True,
+    )
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        p.communicate()
+        pytest.fail(f"{wrapper} 未在 {timeout}s 内结束（包装器自递归？）")
+    return subprocess.CompletedProcess(p.args, p.returncode, out, err)
+
+
+@pytest.mark.parametrize("name", (*EPISODE_WRAPPERS, *WORKSPACE_WRAPPERS))
+def test_home_pointing_at_workspace_falls_through(tmp_path, name):
+    """TO_VIDEO_HOME 误指工作区根（易与 TO_VIDEO_WORKSPACE 混淆）⇒ 回落下一候选。
+
+    工作区根自带 `scripts/pipeline.py`（工作区包装器），只认它当探测标记时，
+    工作区包装器会把自己认成 skill 入口无界自递归，分集包装器则去跑不存在的
+    `$W/scripts/tts.py`。命中须同时见 skill 根 SKILL.md 哨兵。"""
+    ws = tmp_path / "ws"
+    (ws / "scripts").mkdir(parents=True)
+    for w in WORKSPACE_WRAPPERS:  # --init-workspace 落盘形态
+        (ws / "scripts" / w).write_text(
+            (WS_TMPL / f"{w}.tmpl").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    if name in WORKSPACE_WRAPPERS:
+        wrapper = ws / "scripts" / name
+    else:
+        (ws / "episodes" / "probe-video" / "scripts").mkdir(parents=True)
+        wrapper = ws / "episodes" / "probe-video" / "scripts" / name
+        shutil.copy2(SKEL / name, wrapper)
+
+    home = tmp_path / "home"  # 次候选 ~/.claude/skills/to-video = 软链安装形态
+    (home / ".claude" / "skills").mkdir(parents=True)
+    installed = home / ".claude" / "skills" / "to-video"
+    installed.symlink_to(fake_skill(tmp_path), target_is_directory=True)
+    probe_out = tmp_path / f"probe-{name}.json"
+
+    r = run_guarded(
+        wrapper,
+        env=child_env(
+            TO_VIDEO_HOME=str(ws), HOME=str(home), WRAP_PROBE_OUT=str(probe_out)
+        ),
+        cwd=tmp_path,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    argv = json.loads(probe_out.read_text(encoding="utf-8"))["argv"]
+    assert argv[0] == str(installed / "scripts" / name), argv
 
 
 # ── 解析未命中：大声退出，候选与出路全给 ──────────────────────────────────

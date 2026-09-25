@@ -87,7 +87,7 @@ $P/
 └── out/                    # 渲染产物（gitignored）
 ```
 
-两级薄包装都不含实现：skill 位置由 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 依序解析，未命中即大声退出并打印安装指令——静默跳过是被禁止的失效形态。
+两级薄包装都不含实现：skill 位置由 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 依序解析（命中 = 候选目录含 `SKILL.md` 且有 `scripts/pipeline.py`；工作区根也有 `scripts/pipeline.py`，缺哨兵判据则 `TO_VIDEO_HOME` 误指工作区时包装器自递归），未命中即大声退出并打印安装指令——静默跳过是被禁止的失效形态。
 
 **格式契约**（`build_narration.py` 的解析规则）：
 - narration.md：`## P0 标题` 分幕 + `- [p0-01] 文本` 一句一行；句 id 必须以幕名小写为前缀、全片唯一。
