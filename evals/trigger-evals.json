@@ -1,0 +1,82 @@
+[
+  {
+    "query": "把这篇 transformer 论文讲成 5 分钟科普，要有动画和配音，给没学过深度学习的人看 https://arxiv.org/abs/1706.03762",
+    "should_trigger": true
+  },
+  {
+    "query": "用 ffmpeg 把 ~/Downloads/demo.mp4 前 10 秒剪掉，再转成 h265，体积越小越好",
+    "should_trigger": false
+  },
+  {
+    "query": "narration.md 改了两句，怎么重新出片？要不要整集 tts 重跑一遍",
+    "should_trigger": true
+  },
+  {
+    "query": "这个 meetup 录屏 mp4 帮我用 whisper 生成 srt 字幕，中英都要",
+    "should_trigger": false
+  },
+  {
+    "query": "tts 跑一半断了咋续，已经合成了 80 多句，不想从头来",
+    "should_trigger": true
+  },
+  {
+    "query": "用 Remotion 给我们 SaaS 做个 30 秒产品宣传片，logo 动画 + 三个功能卖点轮播",
+    "should_trigger": false
+  },
+  {
+    "query": "self-improving-agents 那集英文版也要一份，字幕也要英文的",
+    "should_trigger": true
+  },
+  {
+    "query": "用 edge-tts 把这段文字读出来存成 mp3 就行，要晓晓的声音",
+    "should_trigger": false
+  },
+  {
+    "query": "抽帧 QA 报尾幕渐黑 FAIL，啥意思，怎么修",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我画一张 RAG 系统的架构图，检索、重排、生成几个模块，导出 png",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我在 ~/content/videos 初始化一个做视频的工作区，后面打算做一个 agent 系列",
+    "should_trigger": true
+  },
+  {
+    "query": "带我精读一下 ReAct 这篇论文，先梳理全貌再总结，不用做视频，我就想真正搞懂",
+    "should_trigger": false
+  },
+  {
+    "query": "scaffold 一集新的，slug 用 rag-basics，标题就叫「RAG 到底在检索什么」",
+    "should_trigger": true
+  },
+  {
+    "query": "把 ReAct 论文做成 15 页左右的组会 slides",
+    "should_trigger": false
+  },
+  {
+    "query": "终渲出来了，帮我把成片归档到 ~/Movies/科普 下面，按系列分文件夹，别覆盖之前的版本",
+    "should_trigger": true
+  },
+  {
+    "query": "根据这篇 diffusion 论文写一篇公众号文章，3000 字左右，通俗一点",
+    "should_trigger": false
+  },
+  {
+    "query": "Turn our internal billing-service design doc into an animated explainer video with Chinese voiceover — every claim needs to trace back to the doc.",
+    "should_trigger": true
+  },
+  {
+    "query": "our marketing site embeds @remotion/player and after bumping to 4.x it throws 'Could not find composition'，帮忙 debug 一下",
+    "should_trigger": false
+  },
+  {
+    "query": "想把 langchain 的 agent 源码讲成一期科普视频，代码一直在更新，怎么保证讲的内容不过时",
+    "should_trigger": true
+  },
+  {
+    "query": "写个脚本批量下载这个 youtube 播放列表里的视频，用 yt-dlp 也行",
+    "should_trigger": false
+  }
+]

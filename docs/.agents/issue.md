@@ -46,7 +46,7 @@
 
 **定性**：非阻断改进（不卡单次制片，但创作经验随会话蒸发、跨集重复试错）。
 
-**处理方式**：RSI 增「建模经验分支」——新增有界经验库 [pipeline/MODELING-PLAYBOOK.md](../../pipeline/MODELING-PLAYBOOK.md)（条目化、权重生命周期、候选区攒批策展）+ 规则唯一实现 `pipeline/scripts/check_playbook.py`（3000 字硬上限、2700 触发压缩、压至 2250，滞回）+ RSI.md 策展协议与六级压缩阶梯 + 不变量第 15 条 + 02/05/06/08/09 消费指针 + test_modeling_playbook 执法；设计依据见 [docs/research/modeling-experience-distillation.md](../research/modeling-experience-distillation.md)。PR：[#12](https://github.com/ThreeFish-AI/to-video/pull/12)（commit `53ea0d9` 机制与测试、`56163ae` 研究文档与回路图）。
+**处理方式**：RSI 增「建模经验分支」——新增有界经验库 [pipeline/MODELING-PLAYBOOK.md](../../references/MODELING-PLAYBOOK.md)（条目化、权重生命周期、候选区攒批策展）+ 规则唯一实现 `pipeline/scripts/check_playbook.py`（3000 字硬上限、2700 触发压缩、压至 2250，滞回）+ RSI.md 策展协议与六级压缩阶梯 + 不变量第 15 条 + 02/05/06/08/09 消费指针 + test_modeling_playbook 执法；设计依据见 [docs/research/modeling-experience-distillation.md](../research/modeling-experience-distillation.md)。PR：[#12](https://github.com/ThreeFish-AI/to-video/pull/12)（commit `53ea0d9` 机制与测试、`56163ae` 研究文档与回路图）。
 
 **后续防范**：经验只从显式信号入库（用户认可/否决、复用后的返工），主 Agent 自评为弱信号（w=1）、不得单独晋升定式；超限只许按阶梯逐级压缩，禁止整文件重写（ACE context collapse）与「把条目搬进规格正文腾预算」（转移熵而非减熵）。
 
@@ -110,7 +110,78 @@
 
 **同类问题影响**：negentropy 13 集有存量（合计 85 处，见复现），均为已发布成片，本 PR 不改其内容。本门缺省执法后，这些集在 `pipeline.py check` / `all` 上会红，重渲前必须先修（或逐处以 `caption-dup-ok` 说明）。jev 集（发现集）的 9 处已于 [negentropy#1173](https://github.com/ThreeFish-AI/negentropy/pull/1173) 处理（2026-09-24）：改为关键词锚点、复述门 FAIL 0、重渲并交付 v3（内容侧记录见 negentropy ISSUE-199）；余 12 集 76 处待各自重渲前处理。
 
-## RSI-008 默认配音「朗读感」：合成结构而非情绪强度
+## RSI-008 Skill 不合 Agent Skills 规范：frontmatter 被官方校验器拒收，路由壳缺渐进披露与条件加载，速查门列漂移
+
+**表因**：以 Agent Skills 规范（agentskills.io 规范、官方参考校验器 skills-ref、Anthropic skill authoring best practices）审计本 Skill，发现五类差距：① `skills-ref validate` 失败，报 `Found ugly disallowed JSONesque flow mapping`，位置在 SKILL.md:5 的 `metadata: {…}`；② `allowed-tools` 用逗号分隔（规范为空格分隔），缺 `compatibility`，description 里塞了 1080p30、`--root`、vN 等实现细节，缺英文触发词和负向边界；③ SKILL.md 九阶段速查的「通过门」列是 stages.toml `gate` 的手抄件，9 行里 6 行已漂移（③⑤⑥⑧⑨ 截短或改写，⑦ 内容不同）；④ 快速通道第 5 步教 `npx tsc --noEmit`，与 06 规格「工具一律 `./node_modules/.bin/` 直调」矛盾；⑤ 路由壳没有任务分流，也没说明何时读哪份文件（VOICE-CLONING 等手册要两跳才能到），env 表的 SSOT 放在每次激活都全量加载的 SKILL.md 里，超过 100 行的 5 份规格没有目录，仓内没有评测资产，目录也不合规范的 `scripts/ references/ assets/` 惯例。
+
+**复现**：`git archive <旧提交> | tar -x -C /tmp/x/to-video` 后执行 `uvx --from "git+https://github.com/agentskills/agentskills#subdirectory=skills-ref" skills-ref validate /tmp/x/to-video`，退出码 1。门列逐行对比（SKILL.md 抄件 → stages.toml `gate`）：③ `build_narration.py 通过` → 缺「（narration.json 是派生物）」；⑤ `beat 覆盖率无缺句` → 缺「（--check-scenes 分镜↔代码互比）」；⑥ 缺「排期」；⑦ `七条渲染红线 + 运动层铁律` ↔ `tsc --noEmit 零错误 + 七条渲染红线`；⑧ 缺 `qa --check`，「含尾幕」写成「尾幕」；⑨ 缺「pipeline.toml 的」。`grep -n "npx tsc" SKILL.md` 命中第 38 行。新门在旧 SKILL.md 上会变红：`test_skill_spec` 8 项 ERROR（第 5 行 flow mapping），`test_router_gates_match_stages` 点名 6 行，`test_no_npx_for_remotion_tools` 点名 1 处。
+
+**根因**：SKILL.md 是从 negentropy 的 `.agent` 路由壳演化来的，写的时候对照的是仓内纪律（路由壳只给指针、速查表恰 9 行），没有对照 Agent Skills 规范。frontmatter 从没被任何校验器解析过，Claude Code 能宽容解析 flow style 和逗号分隔，缺陷因此一直不可见。门列只有「链接覆盖 9 篇规格」这一条执法，文本本身无人校验，于是逐步漂移。
+
+**定性**：非阻断改进，含两处缺陷：门列漂移、npx 命令矛盾。在其他宿主上，frontmatter 不合规会直接导致上传失败或触发失效。
+
+**方案比选**：A 只修 frontmatter、门列与 npx，不动布局；B 全量迁移到规范布局，并保留 `pipeline/scripts` ABI 软链；C 迁移但不留软链。C 直接排除：会打断全部已部署的 frozen 包装器，而这些包装器无法从本仓更新。规范本身允许任意目录，A 与 B 都合规；B 是用户在方案评审时的显式选择（2026-09-24，用户在会话中选「全量迁移 scripts/references/assets」），代价是历史相对链接与外链的迁移成本（见「同类问题影响」）。
+
+**处理方式**：[PR #16](https://github.com/ThreeFish-AI/to-video/pull/16)，分三次提交（另有一次按核验反馈补强）：[0b82a71](https://github.com/ThreeFish-AI/to-video/commit/0b82a71) 目录迁移、[14c5b22](https://github.com/ThreeFish-AI/to-video/commit/14c5b22) SKILL.md 与文档重构及执法测试、[43427f1](https://github.com/ThreeFish-AI/to-video/commit/43427f1) 台账与 CHANGELOG、[71b06f4](https://github.com/ThreeFish-AI/to-video/commit/71b06f4) 核验反馈修正。① 用 `git mv` 迁到规范布局，`pipeline/scripts → ../scripts` 保留为软链。这条软链是已部署 frozen 薄包装的定位路径（ABI），5 份包装器的解析函数与全部 frozen 文件字节不变。`pipeline/README.md` 改为迁移桩，全仓 Markdown 链接按旧位置重算。② frontmatter 只保留规范六字段：metadata 改块式、allowed-tools 改空格分隔、新增 compatibility，description 改写为「做什么 + Use when + 不用于」。SKILL.md 重构为：任务分流 → 工作流（显式修复重跑循环）→ 速查（门列逐字等于 stages.toml，⑦ 的 gate 补上「运动层铁律」）→ 不变量（新增包装器 ABI）→ 运行时陷阱 → 按需加载。env 表迁入 PIPELINE.md 并补 `INDEXTTS_SERVER`，5 份长规格各加一行目录，新建 docs/.agents/knowledge-map.md。③ 新增 evals/（3 个输出评测、20 条触发评测，含近邻负例）；新增 `tests/test_skill_spec.py`（只用标准库，是比 strictyaml 更严的 frontmatter 子集解析器，并覆盖字段约束、正文预算、加载期标记、目录行、evals 结构、全仓链接网）；新增门列同源、npx、旧路径三条回归门，以及 ABI 软链两条执法。顺带修正两处迁移前就失实的文案：`prepare_ref.py --out` 的帮助文本和 tts 指纹不符提示，都曾指向不存在的 `pipeline/voices/`，现改为 `$V`。G3 的 evals 新旧对拍推迟到合并后执行：个人级 `~/.claude/skills/to-video` 指向另一份 clone，会遮蔽 worktree 里的同名 skill，合并前测到的只会是旧 description（见 evals/README.md）。
+
+**后续防范**：改 frontmatter 后必须过 test_skill_spec，必要时一次性跑官方 skills-ref。不得为 Claude Code 专有能力引入规范外字段，否则牺牲可移植性，要引入须显式决策。SKILL.md 里任何与 stages.toml、PIPELINE.md 重复的文本，都必须挂逐字同源的执法，否则只留指针。不得删除 `pipeline/scripts` 软链，也不得修改包装器解析函数（该句已被 RSI-009 推翻：兼容面整体移除，解析函数探测路径随之改指 `scripts/`）。改 description 前后，按 evals/README 做触发评测对拍。评审回归（2026-09-25）：旧路径门曾漏掉两类形态——脚本注释里省略 `pipeline/` 前缀的 `templates/<子目录>`，以及 mermaid 图源首行的 `%% source:`（该目录不在受检面内）。现已把两者纳入执法，并修正全部 8 处失效指针。其中 3 处无法泛化检测，只能人工复核：跨目录的相对指针 `../README.md`、不带子目录的 `templates/`、仍作为迁移桩存在的 `pipeline/README.md`。今后搬迁目录时，受检面须覆盖所有「指回文档」的非 Markdown 文件。二次评审（2026-09-25）：工作流 ⑧ 的裸 `pipeline.py … qa`（旧 SKILL.md 就有）必在 qa_frames 处 parser.error（缺 `<video>` 与选择器），修复循环到不了零 FAIL，已改为 `qa --video out/draft.mp4 --last-n 6 --check`，新增 `test_router_qa_commands_pass_both_parsers`：让 SKILL.md 的 qa 实参真跑过 pipeline.py 与 qa_frames.py 两层 argparse。教训：复制即跑的命令要用真解析器判定，文本启发式（只查带不带 `--video`）会放过「有视频、缺选择器」的形态。模板 `README.md.tmpl` 第一条 `qa --video out/draft.mp4 --check` 正是这个形态、同样必败，登记为跟进项：它的现有门 `test_template_readme_qa_commands_are_runnable` 只查 `--video`，未拦住。
+
+**同类问题影响**：已发布分集和工作区经软链零改动继续可用。它们 README 里的 `$T/pipeline/scripts/…` 命令仍然有效。已部署分集 README 与 pipeline.toml 里的 GitHub blob 外链，按 negentropy 14 集实测：`pipeline/README.md` 27 处会落到迁移桩；另有 15 处在合并后 404，分别是 `pipeline/VOICE-CLONING.md` 6 处、`pipeline/templates/video-skeleton/skeleton.toml` 8 处、`pipeline/skills/06-remotion-implementation.md` 1 处。这 15 处属于内容侧的 seeded 文件（可改），RSI 回路对 `$W` 只读，故登记为 negentropy 侧跟进项：批量把外链改到 `references/…` 与 `assets/video-skeleton/skeleton.toml`。本仓不加重定向桩，避免在旧位置造出第二份文件。frozen 文件注释里的旧路径（如 SceneFade 的 `pipeline/skills/06…`）有意保留，按迁移桩里的映射表换算。复制式安装（`npx skills add --copy`）如果丢失软链，所有分集与工作区包装器都会失效（模板沿用同一解析函数，新建的也不例外），README 安装节已注明。
+
+## RSI-009 按 2.0.0 全新维护：移除全部历史兼容面（软链 ABI / 旧哨兵 / 旧 env 与缓存回退 / skeleton 历史登记 / 阶段编号错位）
+
+**表因**：RSI-008 迁移到 Agent Skills 规范布局时，为已部署的 negentropy14 集薄包装保留了 `pipeline/scripts` 软链 ABI、旧哨兵 `.influence-root`、旧 env `NE_TTS_STORE` 与旧缓存目录回退、skeleton.toml 内 33 条 `[[drift]]` 与 2 组 `[[generation]]` 历史登记，以及「⑥↔07、⑦↔06 编号错位」（当初因入链 ≥5 处、改名代价大而保留）。这些兼容物使 skill 仓持续背着历史包袱：frozen 文件注释里的旧路径不能改、迁移桩与不变量 16 须永久维护、skeleton.toml 一半篇幅是别仓集名。
+
+**复现**：`grep -rn 'influence-root\|NE_TTS_STORE\|LEGACY_STORE' --exclude-dir=.git .` 命中 scripts/tests/assets/references 共 10 个文件；`awk '/^\[\[drift\]\]/{c++} END{print c}' assets/video-skeleton/skeleton.toml` = 33；`ls pipeline/` = 迁移桩 README + 软链。negentropy 侧实测依赖面：14 集 61 个包装器探测 `pipeline/scripts`、pre-commit `series-consistency-check` 走工作区包装器、tts-store 65M/1815 句在旧目录。
+
+**根因**：RSI-008 的方案比选以「已部署包装器无法更新」为前提排除了「迁移但不留软链」。该前提是历史包袱的根源：兼容义务一旦背上就单调增长（软链→旧哨兵→旧 env→登记表→不可改的 frozen 注释），每次机制演进都要先问历史集答不答应。
+
+**定性**：破坏性改进（semver major，2.0.0）。negentropy 侧破坏面已知且用户决策（2026-09-25）由其仓自行适配，不在本仓留任何迁移工程。
+
+**方案比选**：A 只删 pipeline/ 目录——不可行，包装器解析函数探测 `<skill>/pipeline/scripts/pipeline.py`，只删目录连新 scaffold 都找不到 skill；B 保留软链等兼容面、仅停止增长——与用户决策相悖，且兼容物维护成本（frozen 注释冻结、迁移桩、不变量执法）持续存在；C **兼容面整体移除 + 包装器探测改指 `scripts/`（采纳）**——推翻 RSI-008 对「迁移但不留软链」的否决，推翻依据：其前提「已部署包装器无法更新」被用户决策废除（negentropy 自行适配）。negentropy 侧适配三步（本仓不代做）：61 个包装器探测路径 `pipeline" / "scripts` → `scripts`（与模板字节同步）、补 `.to-video-root` 哨兵、`mv` tts-store 目录。
+
+**处理方式**：PR #16 内分两批提交。①兼容面移除：`git rm -r pipeline/`；5 份包装器探测路径与 docstring 改指 `scripts/`（test_wrapper_resolver 的 fake_skill 布局与 argv 锚同步，删 2 条 ABI 软链执法）；`WORKSPACE_MARKERS` 收敛为 `.to-video-root`（scaffold 去旧哨兵探测；test_paths/test_init_workspace/test_check_series 删旧哨兵用例）；tts.py 删 `NE_TTS_STORE` 兼容读与 `LEGACY_STORE` 回退（store_root 解析序收敛为 env → 默认目录；test_tts_store 删 2 条兼容用例）；test_docs_paths 删 `$I/$R` 旧锚门与 `COMMAND_SPAN_RE` 的 I/R 记号、`_LEGACY_PATH_RE` 收紧为 `pipeline/` 前缀整体入拦；skeleton.toml 清零 drift/generation 登记、删 `baselineOf` 与 `.npmrc` 占位（verify_skeleton 的 baseline 机制保留，面向将来多模板；test_skeleton 放宽分代表非空前提、删 baselineOf 点名正控）。②编号对齐与资产清理：06-tts-voice / 07-remotion-implementation 文件互换与全量引用同步、错位警示与 test_stages 错位执法反转为对齐执法；influence--* 资产更名 pipeline-layers；frozen 文件陈旧注释修正；SKILL.md version 2.0.0 与 CHANGELOG 破坏性条目。
+
+**后续防范**：兼容义务以「显式决策 + 台账 + 版本号」为界——新增任何兼容读/回退/别名前，先问「删除它的 major 版本在哪」，无删除计划就不许加。skeleton 登记表只登记「当前合法偏离」，别仓集名不得进本仓模板。skill 仓不携带任何指向具体内容工作区的名字（系列 id、集 slug、仓名）。评审回归（2026-09-25）：文件号互换只改了带路径的链接，漏了三类写法——裸编号散文（RSI.md G2「不重述 06 机制与红线」、test_docs_paths 注释「06 规格」）、带新前缀但编号未换的 `references/05→06`、研究文档里的 `skills/06` 简写（4 处）；另有同一版本内 RSI-008 的 CHANGELOG 条目仍写「软链禁删 / 零改动可用 / 错位不变 / 不变量 16」，与 Breaking 节矛盾。现已全部改正。研究文档已纳入 `test_no_legacy_layout_paths` 受检面（`skills/NN` 简写入拦）。裸编号散文无法泛化检测（会与时间、序号误撞），今后改编号须对旧编号全仓 grep，并按上下文语义逐处判定。未发版的条目在发版前要改写到终态，被同版推翻的子句不得留在发布说明里。二次评审（2026-09-25）：包装器探测标记改为 `<c>/scripts/pipeline.py` 后与工作区根布局同形（`--init-workspace` 生成 `$W/scripts/pipeline.py`），`TO_VIDEO_HOME` 误指工作区时工作区包装器把自己认成 skill 入口、无界自递归（沙箱 3 秒串起 42 个子进程），分集包装器则去跑不存在的 `$W/scripts/tts.py`；旧标记 `pipeline/scripts` 不与任何工作区布局相撞，故为本次迁移引入。五份包装器命中判据加 `SKILL.md` 哨兵（与 `paths.SKILL_MARKER` 同口径），`test_home_pointing_at_workspace_falls_through` 五形态参数化执法（进程组超时整组 kill，旧实现下 5 条全红），A1 修复口径同步；negentropy 侧 ISSUE-200 的 A1 须同步此条件。教训：改探测标记时，须对照「可能被误指的目录」（工作区、分集、skill 旧版）的真实布局逐一核对是否同形，标记要取对方结构上不可能有的文件。三次评审（2026-09-25）：09 规格的字体重启触发器指针由 `pipeline/README「字体可复现性」`机械改写为 `references/PIPELINE.md「字体可复现性」`，但该事实条一直在 07 规格（main 上的旧指针即已悬空），同批 Subtitle.tsx 的同一指针却已改对；已改为指向 07 的可跳转链接，新增 `test_pipeline_section_refs_resolve`：`PIPELINE.md …「节名」` 形态的指针须命中 PIPELINE.md 真实标题（旧文案下红、点名 09:33）。教训：搬迁时改写的是「文件名」，节名是否仍在目标文件要单独核对；链接可达门只验文件、不验节名。
+
+**同类问题影响**：本仓 CHANGELOG/issue 台账中的历史叙述按记录保留，未随兼容面删除。破坏面与未兼容旧功能清单已同步登记到 negentropy 侧（[ISSUE-200](https://github.com/ThreeFish-AI/negentropy/pull/1174)，PR [#1174](https://github.com/ThreeFish-AI/negentropy/pull/1174)，2026-09-25），待其适配后逐项验证关闭：
+
+**A. negentropy（apps/negentropy-influence，14 集）破坏面——按 2.0.0 CHANGELOG 自适配步骤完成后逐项验证**
+
+| # | 破坏面 | 修复 | 验证 |
+|---|---|---|---|
+| A1 | 61 个薄包装器（14×tts/build_narration/qa_frames + 17 个 archify 类 + 2 工作区包装器）探测 `pipeline/scripts`，全部「找不到 to-video skill」 | `_skill_scripts` 与 2.0.0 模板同步（探测 `pipeline" / "scripts` → `scripts`，并加 `SKILL.md` 哨兵条件）；分集 frozen 包装器按 2.0.0 模板整文件覆盖（docstring 同批改过，只改探测行字节不等） | 任一分集 `scripts/tts.py --help` 可跑；`TO_VIDEO_HOME=<新 skill>` 下 `verify_skeleton.py` 对模板零漂移 |
+| A2 | pre-commit `series-consistency-check` 走工作区包装器，触及 influence 的提交被拦 | 同 A1（工作区 2 份包装器） | 暂存一处 influence 内改动，钩子 Passed 而非报「找不到 skill」 |
+| A3 | 旧哨兵 `.influence-root` 不再识别，依赖 WORKSPACE 锚的脚本大声退出 | 工作区根补空 `.to-video-root` | 工作区内任意目录直跑 `check_series.py`，rc=0 |
+| A4 | tts-store 旧目录（实测 65M / 1815 句）回退删除，缓存全 miss（重渲一集重合成 2.5–3.5h） | `mkdir -p ~/Library/Application\ Support/to-video` 后 `mv ~/Library/Application\ Support/negentropy-influence/tts-store ~/Library/Application\ Support/to-video/tts-store`（新目录已存在时改 `rsync -a` 合并，勿 mv 嵌套） | 任一集 `pipeline.py tts`（不改稿）零重合成、全部命中缓存 |
+| A5 | skeleton 登记清零 + frozen 模板字节变更（包装器探测行、remotion.config.ts 与 frozen 组件注释、.npmrc 删除），旧集 `verify_skeleton --strict` 大量 STALE/DRIFT 红 | 逐集整组同步模板（拷齐再 `tsc --noEmit`）；仍成立的偏离按 [RSI-010](#rsi-010-骨架合法偏离登记面在-skill-侧工作区无登记入口) 加 `skeleton.` 前缀登记进 `$W/to-video.toml` | 同步过的集 `--strict` rc=0 |
+| A6 | 已发布集 README/pipeline.toml 的 GitHub blob 外链 42 处（15 处本已 404 + 27 处指向已删迁移桩） | 批量改指 `references/…` 与 `assets/video-skeleton/skeleton.toml` | 抽检 5 处链接可达 |
+
+**B. 未兼容的旧版功能（2.0.0 有意不支持；用于后续「未回归」核对）**：`.influence-root` 哨兵识别；`NE_TTS_STORE` 旧 env 名与旧默认目录回退；`$T/pipeline/scripts/…` 命令路径与 `pipeline/README.md` 迁移桩；`baselineOf` 模板缺省值（机制保留、模板不设）；**skill 侧 skeleton 登记**——旧版在 skill 侧登记内容仓集名的 drift/generation；2.0.0 起 skill 侧登记键被 verify_skeleton 拒收，登记面迁至工作区（见 RSI-010）；模板 `.npmrc` 占位文件。
+
+**C. 本机其他依赖**：`to-video-e2e/mini-video` 测试工作区包装器失效（重建即可）；真树回归语料（`TO_VIDEO_TEST_WORKSPACE` 指 negentropy 树）待 A1/A3 完成后恢复——扫描类门（`--check-scenes` 等）的红绿对拍在此之前不可用，不得以单行构造样例替代（见 RSI-007 教训）。
+
+**D. 跟进项（非破坏，已在 RSI-008 评审回归段登记，不重复维护）**：模板 `README.md.tmpl` 首条 `qa --video out/draft.mp4 --check` 缺选择器、照抄必败。
+
+## RSI-010 骨架合法偏离登记面在 skill 侧，工作区无登记入口
+
+**表因**：RSI-009 清空 skeleton.toml 的 33 条 `[[drift]]` 与 2 组 `[[generation]]` 后，2.0.0 CHANGELOG 写「旧内容工作区的既有漂移须重新登记到各自工作区」，但 `verify_skeleton.py` 只读 skill 侧 `$T/assets/video-skeleton/skeleton.toml`，工作区无任何登记入口；同批删掉的登记格式说明（指纹口径、「缺失」哨兵、分代语义）仍被 `pipeline.py` 英文渲染预检报错与 `verify_skeleton.py` docstring 三处指向。
+
+**复现**：`grep -n 'skel.get("drift"\|skel.get("generation"' scripts/verify_skeleton.py` 命中两处，均取自 `SKELETON_TOML`；skeleton.toml 内 `grep -c '分代'` = 0，而 `pipeline.py:643` 报错文案指向「skeleton.toml 分代说明」。
+
+**根因**：登记表在机制与内容同址时代（skill 住在 negentropy 工作区内）放进了模板；抽取为独立 skill 后，登记条目指向的具体集属于**内容**，却仍只能写进**机制**侧——任何用户停用/魔改 frozen 文件都得改已安装的 `$T`，违反 RSI「制片期 `$T` 只读」，且下次 `git pull` 冲突。RSI-009 台账 B 节已把「工作区侧登记」列为另立条目的长期解，CHANGELOG 却按已实现来写。
+
+**定性**：机制缺陷（缺登记面）+ 文档指针悬空；随 2.0.0 同版修复，免得登记位置日后再迁一次、又造成一次破坏性变更。
+
+**方案比选**：A **登记面迁至工作区 `to-video.toml` 的 `[skeleton]`（采纳）**——与该文件既有定位「内容策略随内容走，skill 不携带具体系列身份」同构（同 check_series 的系列 id 集）；键名不变、表名加前缀即可原样搬运旧条目。B 只改 CHANGELOG 文案——零代码，但「改偏离须改 `$T`」的缺口延到下个版本，届时迁移又是一次 breaking。A 的子选择：与 skill 侧**合并**读取被否决（两处登记 = split-brain，且合法条目必含集名、skill 侧不存在正当用途），改为 skill 侧出现 `drift`/`generation` 键即大声退出；`baselineOf` 是模板级声明，维持 skill 侧（RSI-009 已定，面向将来多模板）。
+
+**处理方式**：`verify_skeleton.py` 新增 `load_registry()`（skill 侧登记键 → `sys.exit` 点名迁移方式；读 `$W/to-video.toml` 的 `skeleton` 表，缺失 = 无登记）；已登记偏离报告改为全部列出，指向 series.json 未知集的条目标「陈旧登记」旁注（登记本地化后「他工作区登记是噪音」的过滤理由不再成立）。skeleton.toml 恢复「合法偏离登记」「骨架分代」两节格式说明（不含条目），三处既有指针随之重新生效；工作区模板 `to-video.toml.tmpl` 加 `[skeleton]` 注释示例，scaffold init 提示同步；07 / PIPELINE.md / CHANGELOG（negentropy 适配增第 ④ 步）指针同步。test_skeleton 的 `register_drift` / `inject_generation` 改写工作区 to-video.toml（既有 6 条分代正控与 2 条 drift 正控随之覆盖新路径），新增 skill 侧登记被拒、模板零登记、陈旧登记旁注三条用例；三条真树用例改读工作区登记。
+
+**后续防范**：skill 仓只放机制；任何「指向具体集/系列」的数据（登记、豁免、花名册）一律住工作区，新增此类配置前先问「它随内容变还是随机制变」。发布说明里的迁移步骤必须能照做——写「须登记到 X」前先确认 X 存在读取入口。删除数据条目时区分「条目」与「格式说明」：前者可清零，后者是机制文档，删了即留悬空指针。评审回归（2026-09-25）：三处漏改——① DRIFT-CHANGED 的处置文案仍写「请复核后更新 skeleton.toml」，照做会被 `load_registry()` 拒收，已改指 `$W/to-video.toml` 的 `[[skeleton.drift]]`，并在 `test_registered_drift_is_pinned_to_its_fingerprint` 断言该行指向工作区；② CHANGELOG 第 ① 步称包装器同步后「verify_skeleton 随之对齐」不成立——同版 7 个 frozen TS/TSX 的纯注释修正改变了 md5，英文渲染预检（直比字节、不查登记）会拦下全部既有集，已补为第 ② 步（当代集整组拷齐、旧代集只拷组外文件），分集包装器亦须整文件覆盖而非只改探测行；③ test_skeleton 分代节注释仍写「登记落在镜像 skeleton.toml」。教训：迁移登记面后，须全仓 grep 旧落点名（含报错文案与测试注释）；迁移步骤里「随之对齐」之类的结论要用字节比对实测，不凭推断。二次评审（2026-09-25）：① skill 侧拒收守卫只查顶层 `drift` / `generation` 键，而 skeleton.toml 格式说明里的示例本身就是 `[[skeleton.drift]]`——原样贴进 skill 侧时解析为 `skeleton.drift`，守卫不触发、登记被静默忽略（沙箱实测：带正确指纹仍 `--strict` rc=1 且无指路）。已把拒收键扩为 `LEAK_KEYS`（旧表名 + `skeleton`），`test_skill_side_registry_is_refused` 参数化覆盖两种写法（旧守卫下新用例红）；② skeleton.toml 与 check_script、verify_skeleton、test_skeleton 注释里仍有 9 处旧表名 `[[drift]]`，已统一为 `[[skeleton.drift]]`（测试里刻意注入的旧写法除外）。教训：拒收守卫要按「格式说明里示例的原样形态」建反例，而不只按旧形态建。三次评审（2026-09-25）：① 登记迁到工作区后，drift「必钉指纹」等策略断言只剩真树用例（集成模式、单一工作区）在跑，普通工作区写一条缺 fingerprint 的登记即被 `exempt()` 无条件放行、该文件永久免检。已新增 `registry_problems()` 载入期校验（drift 四字段必填、指纹 12 位 hex 或「缺失」、路径在受门档位、同集同文件不重复；generation 的 id / reason / 花名册 / legacy 非空，legacy 在受门档位且 ≠ 当前模板指纹），非法即大声退出，`exempt()` 删去「未钉即放行」分支；两条真树用例改为委托该函数（规则单一实现），另加离线正反控 10 条与端到端 1 条（旧实现下红）。用 origin/main 旧 skeleton.toml 模拟第 ⑤ 步搬运：33 条 drift 与 bilingual-i18n 全过，仅 `npmrc-inert-key`（`.npmrc` 已退出受门）被拒，CHANGELOG 第 ⑤ 步已注明勿搬；② 拒收文案对已带 `skeleton.` 前缀的形态仍教「加前缀」，照做得 `[[skeleton.skeleton.drift]]`、登记被静默忽略，已按泄漏写法分支指路；③ CHANGELOG 第 ④ 步与 RSI-009 A4 的 `mv` 缺 `mkdir -p`（1.x 在旧目录存在时从不建新目录，本机实测父目录不存在，mv 必报 No such file or directory），且丢了 1.0.0「目标已存在改 rsync 合并、勿 mv 嵌套」的提醒，已补。教训：策略从「本仓测试执法」迁到「用户数据」时，执法点须同步迁到运行期；迁移命令要在目标机器的真实初态上走一遍，不能只在干净环境里推演。
+
+**同类问题影响**：negentropy 侧 A5 由「整组同步或接受红」扩为可登记（CHANGELOG 第 ⑤ 步）；旧版在 skill 侧登记的写法在 2.0.0 被拒收（RSI-009 B 节同步改写）。
+
+## RSI-011 默认配音「朗读感」：合成结构而非情绪强度
 
 **表因**：用户连续两轮否决调优结果（2026-09-25）——α≤1 的语调迁移「过于保守」，α>1 外推「情绪够但仍是朗读、且像别人」。按句内起伏幅度调参无法收敛。
 
@@ -118,13 +189,13 @@
 
 **定性**：Skill 缺陷（合成单位与情感粒度的架构限制），非参数问题。
 
-**处理方式**：新增 `story` 档（段落演绎）并为新集默认——同幕连续句按故事块一次合成（上游 front.py 对 ≤118 token 合并单段连续生成），服务端按句界切回逐句 mp3（静音正中丢弃恰好 `sentenceGapSec`、时间轴加回同值 ⇒ 听感＝自然停顿原值；块末垫 0.18s+0.32s 句距＝0.5s 块间停顿）；块情绪由配音台本 `script/narration.cues.toml`（写稿阶段同产，skills/03 规约）驱动，无台本自动分块 + 预设向量兜底；`……`→`…` 仅 story 档生效（默认映射不动，存量 2 集含 `……` 的重合成行为不漂移）；块=缓存单位（改一句重录整块）；EN 未验证自动回退逐句；切分失败逐句兜底。验证：真管线复现 #07 定档 take——4 块音频时长逐块一致（12.85/12.38/7.86/11.66s，同 seed）、全指标在噪声内（演绎度三轴、WavLM 0.959/0.939、CER 0.098）；P1 17 句自动分块 0 fallback。
+**处理方式**：新增 `story` 档（段落演绎）并为新集默认——同幕连续句按故事块一次合成（上游 front.py 对 ≤118 token 合并单段连续生成），服务端按句界切回逐句 mp3（静音正中丢弃恰好 `sentenceGapSec`、时间轴加回同值 ⇒ 听感＝自然停顿原值；块末垫 0.18s+0.32s 句距＝0.5s 块间停顿）；块情绪由配音台本 `script/narration.cues.toml`（写稿阶段同产，references/03 规约）驱动，无台本自动分块 + 预设向量兜底；`……`→`…` 仅 story 档生效（默认映射不动，存量 2 集含 `……` 的重合成行为不漂移）；块=缓存单位（改一句重录整块）；EN 未验证自动回退逐句；切分失败逐句兜底。验证：真管线复现 #07 定档 take——4 块音频时长逐块一致（12.85/12.38/7.86/11.66s，同 seed）、全指标在噪声内（演绎度三轴、WavLM 0.959/0.939、CER 0.098）；P1 17 句自动分块 0 fallback。
 
 **后续防范**：声音风格类调优先问「合成结构与情感粒度对不对」，再调强度参数；试听素材必须用连续故事段落（零散句子听不出演绎）。切分算法的量尺教训：句界停顿 0.31–0.55s 与句内逗号停顿 0.14–0.42s 区间重叠，不能「取最长 N−1 静音」，按字符占比期望位就近选（DP）。
 
-**同类问题影响**：14 个存量集仍锁 sunny-steady（用户确认先不动；手工重制时按 skills/07「重制存量集」流程切 story + 补台本）。
+**同类问题影响**：14 个存量集仍锁 sunny-steady（用户确认先不动；手工重制时按 references/06「重制存量集」流程切 story + 补台本）。
 
-## RSI-009 文档谎报上游情感混合行为：向量在场时音频被整个丢弃
+## RSI-012 文档谎报上游情感混合行为：向量在场时音频被整个丢弃
 
 **表因**：第三轮实验中 `--emo-ref` + `--emo-vector` 同传（实验服务放行）的输出与纯向量**逐字节一致**（p04/p11 cmp 相同）。
 
