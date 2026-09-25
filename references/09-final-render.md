@@ -30,7 +30,7 @@ cd $P/video
 即整片渲染是**分钟级**，远快于配音（同集 TTS 2.1 小时）。排期上「渲染慢」是错觉——
 真正的长尾在配音；渲染可以放心多轮迭代（改一处场景重渲全片只要 8 分钟）。
 
-渲染主机约束：**macOS + PingFang SC/Songti SC/SF Mono 系统字体**（三集未内嵌 CJK 字体，Linux/CI 渲染不在支持范围；重启触发器见 references/PIPELINE.md「字体可复现性」——渲染迁 Linux/CI，或 Remotion 5.0 将 validateFontIsLoaded 默认翻 true 时必须内嵌子集字体）。
+渲染主机约束：**macOS + PingFang SC/Songti SC/SF Mono 系统字体**（三集未内嵌 CJK 字体，Linux/CI 渲染不在支持范围；重启触发器见 [07 事实条（字体可复现性）](./07-remotion-implementation.md)——渲染迁 Linux/CI，或 Remotion 5.0 将 validateFontIsLoaded 默认翻 true 时必须内嵌子集字体）。
 
 ## 交付件清单
 

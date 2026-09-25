@@ -367,3 +367,29 @@ def test_no_legacy_layout_paths():
     assert not offenders, "文案仍指向已删除的旧布局路径 pipeline/：\n  " + (
         "\n  ".join(offenders)
     )
+
+
+#: 指向 PIPELINE.md 具名章节的指针（如 `§五「双语渲染」`、`「环境变量」`）；
+#: 窗口不跨句读，免得把同句后文的引号误当节名。
+_PIPELINE_SECTION_REF_RE = re.compile(
+    r"PIPELINE\.md[^「」，。；\n]{0,12}「([^」\n]+)」"
+)
+
+
+def test_pipeline_section_refs_resolve():
+    """具名章节指针须落到 PIPELINE.md 真实标题（RSI-009 评审：09 规格曾指向不存在的
+    「字体可复现性」节——该事实条在 07；链接可达门只验文件，不验节名）。"""
+    headings = [
+        ln
+        for ln in README.read_text(encoding="utf-8").splitlines()
+        if ln.startswith("#")
+    ]
+    checked, dangling = 0, []
+    for f in current_docs_and_code():
+        for no, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            for m in _PIPELINE_SECTION_REF_RE.finditer(line):
+                checked += 1
+                if not any(m.group(1) in h for h in headings):
+                    dangling.append(f"{_rel(f)}:{no} → 「{m.group(1)}」")
+    assert checked, "未扫到任何 PIPELINE.md 具名章节指针（检测器失效？本门不得空转）"
+    assert not dangling, "指向 PIPELINE.md 不存在的章节：\n  " + "\n  ".join(dangling)
