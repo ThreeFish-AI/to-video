@@ -226,7 +226,7 @@ _IGNORE_WS_CMD_RE = re.compile(r"pnpm install[\s#]+--ignore-workspace")
 _IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
 
 
-#: Remotion 工具经 npx 调用（06 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
+#: Remotion 工具经 npx 调用（07 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
 _NPX_TOOL_RE = re.compile(r"\bnpx\s+(?:tsc|remotion)\b")
 #: 已不存在的旧布局路径（RSI-009 起 pipeline/ 目录整体移除，任何指回都是死路径；
 #: docs/quickstart 已迁 assets/）；前一字符不许是词字符或 -，但**不排除 /**
@@ -302,19 +302,23 @@ def test_no_instruction_to_add_ignore_workspace():
 
 def current_docs_and_code() -> list[Path]:
     """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + mermaid 图源
-    （首行 `%% source:` 指回文档章节）。frozen 档不再豁免：2.0.0 起模板即唯一
-    事实源（RSI-009），陈旧注释一律清到现行路径。"""
+    （首行 `%% source:` 指回文档章节）+ docs/research（设计依据文档，编号对齐后
+    `skills/NN` 简写会被误读为同号新规格）。frozen 档不再豁免：2.0.0 起模板即唯一
+    事实源（RSI-009），陈旧注释一律清到现行路径。issue 台账与 CHANGELOG 是历史
+    记录，不在面内。"""
+    docs = skill_root() / "docs"
     files = {
         *user_facing_files(),
         *REFERENCES.glob("*.md"),
         skill_root() / "README.md",
-        *(skill_root() / "docs" / "assets" / "mermaid").glob("*.mmd"),
+        *(docs / "assets" / "mermaid").glob("*.mmd"),
+        *(docs / "research").glob("*.md"),
     }
     return sorted(files)
 
 
 def test_no_npx_for_remotion_tools():
-    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 06 命令闭环矛盾。"""
+    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 07 命令闭环矛盾。"""
     offenders = [
         f"{_rel(f)}:{no}"
         for f in current_docs_and_code()

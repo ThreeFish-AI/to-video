@@ -417,7 +417,7 @@ def rule_renderability(series_list: list[dict], msgs: list[str]) -> None:
     """规则 6：storyboard 已定稿的集，注册表 ↔ 场景文件双向对齐。
 
     触发条件是 `script/storyboard.md` **存在**——storyboard 是场景拆解的 SSOT
-    （references/05→06 的交接物），它落地之前 scenes/ 留空是合法的脚手架期状态
+    （references/05→07 的交接物），它落地之前 scenes/ 留空是合法的脚手架期状态
     （scaffold 刻意不生成 scenes/），此刻执法只会把门变成「一建工程就红」。
 
     判据方向不对称是刻意的：**注册 → 文件是 FAIL**（注册了却不存在的场景，
