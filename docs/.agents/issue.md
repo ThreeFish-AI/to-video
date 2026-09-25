@@ -193,7 +193,7 @@
 
 **方案比选**（详见研究文档 §四）：落位——内嵌子步骤（最小干预）vs **正式阶段**（用户决策采纳：阶段地位显式、有独立的门，代理不会跳过）；插入位置——③↔④ 之间 vs **④ 之后、分镜之前**（采纳：优化对象是已校验稿，只对改动句回跑 ④A；beat 分段直接喂给切镜；④ 不动）vs 分镜之后（否决：破坏句区间与锚句，违反配音「文稿冻结」前置）；执法——**不加内容类机器门**（用户决策；语料证明词表门拦不住真实病灶，结构层无法可靠正则化）。
 
-**处理方式**：新增 `references/05-prose-refinement.md`（四层 pass + 四稿专属规则 + 中文去机器味检查表 + 改动审计与复核），原 05–09 `git mv` 顺移为 06–10；stages.toml 插入 `prose-refinement`（authored、无子命令）；SKILL.md / README / PIPELINE.md / knowledge-map / evals / 脚本文案 / 模板与 frozen 注释中的阶段序号与文件名全量同步；RSI.md 不变量 1、8、11 与对应测试去数字化；新增文档完整性门 `test_spec_references_resolve`；两张架构图重生成。PR 与 commit 链接待回填。
+**处理方式**：新增 `references/05-prose-refinement.md`（四层 pass + 四稿专属规则 + 中文去机器味检查表 + 改动审计与复核），原 05–09 `git mv` 顺移为 06–10；stages.toml 插入 `prose-refinement`（authored、无子命令）；SKILL.md / README / PIPELINE.md / knowledge-map / evals / 脚本文案 / 模板与 frozen 注释中的阶段序号与文件名全量同步；RSI.md 不变量 1、8、11 与对应测试去数字化；新增文档完整性门 `test_spec_references_resolve`；两张架构图重生成。[PR #18](https://github.com/ThreeFish-AI/to-video/pull/18)，commit `c3834c4`。
 
 **后续防范**：① 执法测试与不变量**不写死阶段数量或具体序号**，一律从 stages.toml 推导（本次三条测试与三条不变量都曾写死「9」）；② 规格文件名出现在注释与散文里时，改名必须过 `test_spec_references_resolve`，不能只靠 Markdown 链接门；③ 裸写的 `references/07` 这类简写不在门内，改名时须用 `git grep` 搜出所有「references/ + 两位数字」且后面不跟连字符的写法，人工逐条核对；④ 内容层新规则上线前，先在真实语料上量化病灶，避免给已经干净的层级加门。
 
