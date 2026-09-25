@@ -2,8 +2,8 @@
 # 各调用点 --with 逐个声明——为 schema/模板工具引入打包层违反最小干预。
 # 测试运行方式（依赖注入在调用侧）：
 #   uv run --no-project --with pytest --with numpy --with pillow --with mutagen \
-#       --with soundfile python -m pytest pipeline/tests -q
+#       --with soundfile python -m pytest tests -q
 
 [tool.pytest.ini_options]
-testpaths = ["pipeline/tests"]
+testpaths = ["tests"]
 addopts = "-q"

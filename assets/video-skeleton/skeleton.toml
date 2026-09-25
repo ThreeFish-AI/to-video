@@ -1,0 +1,143 @@
+# 骨架冻结清单——机器可读的单一事实源。
+#
+# 此前这份清单是 references/07 里的散文枚举（「A 档逐字节保留 / B 档允许覆写 /
+# 每集改写」三段），**没有任何消费者**：「改任何一处须同步并验 md5 唯一」这条
+# 纸面义务从未被执行过一次。证据：Main.tsx 的注释/换行漂移让两个旧集落后于
+# 两个新集，cards.tsx 裂成 3-vs-1，两处都是在无人察觉中发生的。
+#
+# 消费者：scripts/scaffold.py（实例化）与 scripts/verify_skeleton.py（漂移门）。
+# references/07 现在链接本文件，不再枚举。
+#
+# ## 为什么是「复制 + 命名源头 + 机器校验」而不是共享 npm 包
+#
+# references/PIPELINE.md 第四节的决策**依然成立**：每集必须裸 `pnpm install` 即可
+# 独立可渲染（嵌套 workspace 自锚隔离 + Remotion 版本自由；勿加 --ignore-workspace，
+# 见 README quickstart 与 ISSUE-175），
+# 共享 TS 包会把「一集的视觉改动」泄漏进**已发布**的其他集。本文件不推翻它，
+# 而是补完它缺的那一半：README 原话是「以**任一**既有集工程为模板复制」——
+# 「任一」就是问题所在，391 行冻结基建因此有 4 个同权真理声明者。
+# 现在源头有名字了，义务也有判据了。同类做法：go mod vendor + go mod verify
+# （物理副本 + 校验和门）、Copier（模板 + 应答记录 + 可重放 diff）。
+#
+# ## 档位语义
+#
+#   frozen       逐字节相同。判据见下方「分组语义」。
+#   overridable  默认相同，允许本集覆写 → 只报 INFO，不 FAIL。**两条不变量都尊重
+#                此许可**：I2 对本档不报 STALE，否则「全系列都行使许可」（单集系列
+#                行使一次即是）会让 --strict 变红，等于把许可撤回一半。
+#   regioned     区外冻结：Main.tsx 的场景 import 块与 SCENE_COMPONENTS 注册表
+#                是每集内容，其余是承重 boilerplate（含 SceneFade 首幕/末幕逻辑）。
+#                用**归一化比对**而非插入标记注释——后者要改动 4 个已发布集。
+#                模板侧这两处**刻意留空**：留着某一集的 7 条 `./scenes/*` import
+#                会让新集开箱即 7 个 module-not-found（归一化恰好剥掉它们，所以
+#                留空不影响任何既有集的指纹——留着则纯粹是给新集埋坑）。
+#   structured   结构化比对：package.json 忽略 name/description，但门住
+#                dependencies/devDependencies/scripts。有价值的不变量不是
+#                字节而是「零依赖漂移」——版本漂移会让 A 档 TS 文件行为不同。
+#                （原 pnpm.onlyBuiltDependencies 字段已被 pnpm 12 弃读，构建许可
+#                迁至 pnpm-workspace.yaml 的 allowBuilds——frozen 档执法。）
+#   seeded       scaffold 复制后完全自由，不设门。
+#
+# ## 分组语义（承重）
+#
+# references/07 明写：md5 同步义务**限于同一系列内**；新系列首集从既有集复制后即
+# 建立自己的基线，此后各自演进——否则「复制不共享」的隔离初衷会被一条跨系列的
+# 同步义务反向击穿。故 verify_skeleton 按 series.json 的 seriesList[] 分组核对。
+#
+# 但「系列内一致」对**单集系列**是空条件（没有比较对象）。故还需第二条不变量：
+# 模板本身不过期（I2 对全部系列执法）。`baselineOf` 可选地指定由哪个系列担保
+# 模板的时新性；本模板刻意不设（单一模板下 I2 已全覆盖，指名反而把工作区侧的
+# 系列命名耦合进 skill）。真出现跨系列偏离、需要第二份模板时，cp -r 一份模板
+# 目录 + 设一行 baselineOf 即可，验证器逻辑一行不动——分组是机制，基线选择是
+# 策略。
+#
+# ## 合法偏离登记（工作区 $W/to-video.toml 的 [[skeleton.drift]]）
+#
+# 逃逸口必须存在，但必须**被记录**（同 `# noqa` / Copier `_exclude`）：不设逃逸口
+# 的门必死——第一次合法偏离就会让人把门关掉。登记指向具体集（内容），故住工作区
+# 而不随本模板分发；本文件出现登记键（含 [[skeleton.*]] 形态）verify_skeleton 即大声退出。
+#
+#   [[skeleton.drift]]
+#   episode = "<slug>-video"
+#   path = "video/src/Main.tsx"          # 受门档位内的模板相对路径
+#   fingerprint = "<12 位>"               # 当前值见 verify_skeleton 报告
+#   reason = "<偏离原因 + 撤销条件>"
+#
+# fingerprint 钉住的是**已知的那一处偏离**，口径随档位：frozen 取字节 md5、
+# regioned 取归一化后 md5、structured 取结构键 md5。偏离内容再变即报
+# DRIFT-CHANGED 而非静默放行（同 `# type: ignore[code]` 只豁免指定错误码）。
+# 整文件合法退役钉字面哨兵 `fingerprint = "缺失"`：文件以任何内容重现即失配。
+# 逃逸口用完即收——对齐模板后删除登记，登记表只枚举「当前」合法偏离。
+# 四字段必填、同集同文件只许一条；verify_skeleton 载入即校验（缺指纹 / 格式非法 /
+# 路径不在受门档位即大声退出）——登记住工作区，本仓测试管不到它。
+#
+# ## 骨架分代（工作区 [[skeleton.generation]]）
+#
+# 「一次模板升级 = 一代」。分代文件是**原子组**：半同步集（只换部分文件）tsc 必红，
+# 故豁免只对「整组停在旧代」放行（打 INFO），组内新旧混杂报 GENERATION-MIXED 计入
+# 未登记。episodes 是显式花名册：新集与 cp -r 复制集不继承豁免；某集整组同步到当代
+# 后从花名册删除。与 drift 重叠时 drift 优先（特有偏离比代际滞后更需要盯）。
+# legacy 不得登记成当前模板指纹（永真豁免），载入即拒收。
+#
+#   [[skeleton.generation]]
+#   id = "<代名>"
+#   reason = "<升级内容 + 整组同步指引>"
+#   episodes = ["<slug>-video"]
+#   [skeleton.generation.legacy]         # 受门路径 → 上一代指纹（口径同上，可钉「缺失」）
+#   "video/src/Main.tsx" = "<12 位>"
+
+
+[classes]
+frozen = [
+  # 隔离契约的唯一承担者：缺此文件时嵌套 install 会覆写根 lockfile（ISSUE-175）
+  "video/pnpm-workspace.yaml",
+  "video/tsconfig.json",
+  "video/remotion.config.ts",
+  "video/src/index.ts",
+  "video/src/types.ts",
+  "video/src/timing.ts",
+  # 语言 context 与 audioDir 同构契约（与 scripts/langs.py 镜像、
+  # test_skeleton 执法），同 Subtitle 性质的机械 chrome——跨集一致即产品意图
+  "video/src/i18n.tsx",
+  "video/src/Root.tsx",
+  "video/src/components/NarrationAudio.tsx",
+  "video/src/components/Subtitle.tsx",
+  "video/src/components/SceneFade.tsx",
+  # 顶部分段章节进度条：全片 overlay 纯机械 chrome（同 Subtitle 性质），跨集一致
+  # 即产品意图（「本 skill 制的视频统一配备」）；停用/魔改走工作区 [[skeleton.drift]] 逃逸口。
+  "video/src/components/ChapterProgress.tsx",
+  "video/src/components/cards.tsx",
+  "scripts/build_narration.py",
+  "scripts/tts.py",
+  "scripts/qa_frames.py",
+  # 运动层（motion）：跨集共享的是「怎么动」（机制），不是「画什么」（策略）——
+  # theme/motifs 仍 seeded 各集自由。判据见 tests/test_skeleton.py 的 motion 两条
+  # （不读 theme token / 文件面齐全）。gallery 是独立 Remotion 入口（不经 Root.tsx，
+  # 对既有 Composition 零影响）；单测经 node --test 原生跑 TS（Node ≥ 23.6）。
+  "video/src/motion/tokens.ts",
+  "video/src/motion/window.ts",
+  "video/src/motion/schedule.ts",
+  "video/src/motion/hooks.ts",
+  "video/src/motion/index.ts",
+  "video/src/motion/gallery.tsx",
+  "video/scripts/motion.test.ts",
+]
+# 时序常数 SSOT：timing.ts 经 resolveJsonModule 同步 import，Python 侧
+# timeline.py 直读同一文件。覆写许可存在但四集从未行使过。
+overridable = ["video/src/timing.json"]
+regioned = ["video/src/Main.tsx"]
+structured = ["video/package.json"]
+# motifs.tsx 只播种 chrome 层（Panel/Footnote/SceneTag/Counter/CodeCard/
+# NumberedCard/ease——通用排版机械，只读底座 token）；创作性母题（Terminal/
+# LoopRing/DispatchTable/GateRouter/SlotRing）不进模板，各集复制 ep1 的
+# motifs.tsx 后裁剪（目录见 references/07 母题表）。seeded=复制后自由，无门。
+seeded = [
+  "video/pnpm-lock.yaml",
+  "video/src/design/theme.ts",
+  "video/src/components/motifs.tsx",
+  # 顶部分段进度条的数据面：build_narration 每次 build 从幕标题全量重写——
+  # 每集必然不同的机器生成物（同 pnpm-lock 先例），归 overridable 会打永久 INFO 噪音
+  "video/src/chapters.json",
+  "pipeline.toml",
+  "README.md",
+]
