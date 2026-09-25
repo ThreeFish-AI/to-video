@@ -79,6 +79,43 @@ def test_plan_blocks_oversized_single_sentence_own_block():
     assert len(blocks) == 2  # 超长句无法与邻句成块（>max_chars），各自成块
 
 
+def test_plan_blocks_widens_past_infeasible_lower_bound():
+    """下界切不出时逐层放宽块数，而非整段退化逐句（9×35 字：下界 4 块不可行，5 块可行）。"""
+    items = [
+        {"id": f"p0-{n:02d}", "scene": "P0", "text": "字" * 35} for n in range(1, 10)
+    ]
+    blocks = tts.plan_blocks(items, BLOCK_CFG)
+    assert sorted(len(b) for b in blocks) == [1, 2, 2, 2, 2]
+    assert [sid for b in ids(blocks) for sid in b] == [i["id"] for i in items]
+
+
+def test_plan_blocks_split_cue_run_inherits_emotion():
+    """台本段超限被拆开：后续子块沿用段首情绪（不在段中途退回预设），且不改写原件。"""
+    items = [
+        {"id": f"p0-{n:02d}", "scene": "P0", "text": "字" * 20} for n in range(1, 6)
+    ]
+    items[0]["blockStart"] = True
+    items[0]["cue"] = {"emo": "afraid:1"}
+    blocks = tts.plan_blocks(items, BLOCK_CFG)
+    assert len(blocks) == 2
+    preset = tts.STYLE_PRESETS["story"]["vec"]
+    vecs = [tts.resolve_block_vec(b, preset, 0.28)[0] for b in blocks]
+    assert vecs[0] == vecs[1] == tts.parse_emo_vector("afraid:1")
+    assert all("cue" not in i for i in items[1:])
+
+
+def test_plan_blocks_cue_does_not_leak_past_next_boundary():
+    """继承止于下一个硬边界：新幕 / 无台本的新 run 仍用预设情绪。"""
+    items = [
+        {"id": f"p0-{n:02d}", "scene": "P0", "text": "字" * 20} for n in range(1, 6)
+    ] + [{"id": "p1-01", "scene": "P1", "text": "新幕第一句。"}]
+    items[0]["blockStart"] = True
+    items[0]["cue"] = {"emo": "afraid:1"}
+    blocks = tts.plan_blocks(items, BLOCK_CFG)
+    preset = tts.STYLE_PRESETS["story"]["vec"]
+    assert tts.resolve_block_vec(blocks[-1], preset, 0.28)[0] == preset
+
+
 # ---------------- 切分规划与切分算术 ----------------
 
 
@@ -265,6 +302,19 @@ def test_block_synth_text_adds_terminal_punct():
         {"id": "c", "scene": "P0", "text": "感叹！"},
     ]
     assert tts.block_synth_text(items) == "没有句号。有句号。感叹！"
+
+
+def test_block_synth_text_keeps_soft_pause_endings():
+    """`，：、——` 结尾是原稿续接：原样保留，不拼出 `，。` 双标点。"""
+    items = [
+        {"id": "a", "scene": "P0", "text": "逗号续接，"},
+        {"id": "b", "scene": "P0", "text": "冒号引出："},
+        {"id": "c", "scene": "P0", "text": "破折号——"},
+        {"id": "d", "scene": "P0", "text": "收尾。"},
+    ]
+    text = tts.block_synth_text(items)
+    assert text == "逗号续接，冒号引出：破折号——收尾。"
+    assert "，。" not in tts.tts_text(text, "ZH", perform=True)
 
 
 # ---------------- 块情感（cue）解析 ----------------
@@ -454,7 +504,7 @@ def _clip(fmt: str = "mp3") -> dict:
     }
 
 
-def _run_block(block, audio_dir, timeout: float = 5.0):
+def _run_block(block, audio_dir, timeout: float = 5.0, **kw):
     import asyncio
 
     return asyncio.run(
@@ -473,6 +523,7 @@ def _run_block(block, audio_dir, timeout: float = 5.0):
                 "indextts",
                 "http://unused",
                 audio_dir,
+                **kw,
             ),
             timeout,
         )
@@ -548,6 +599,125 @@ def test_block_rejects_non_mp3_clips(monkeypatch, tmp_path):
     with pytest.raises(tts.NonRetryableError, match="编码器不可用"):
         _run_block(block, tmp_path)
     assert not list(tmp_path.glob("*.mp3"))
+
+
+def test_block_local_hit_backfills_store(monkeypatch, tmp_path):
+    """整块本地命中而库中缺档（首跑 --no-store）⇒ 回填入库，同逐句路径。"""
+    block = [dict(i) for i in P0[:2]]
+    audio, store = tmp_path / "audio", tmp_path / "store"
+    audio.mkdir()
+    monkeypatch.setattr(
+        tts,
+        "http_synthesize_block",
+        lambda *_a, **_k: {
+            "split": "ok",
+            "clips": [_clip(), _clip()],
+            "cuts": [],
+            "seams": [],
+        },
+    )
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    _run_block(block, audio)  # store=None：不入库
+
+    def unexpected(*_a, **_k):
+        raise AssertionError("整块本地命中不应再请求")
+
+    monkeypatch.setattr(tts, "http_synthesize_block", unexpected)
+    _run_block(block, audio, store=store, slug="ep")
+    for i in block:
+        digest = (audio / f"{i['id']}.sha").read_text()
+        assert tts.store_has(store, "ep", i["id"], digest)
+
+
+def test_plan_eta_excludes_store_recoverable_blocks(tmp_path):
+    """--plan 块口径：版本库可整块回收的块不占合成时间（同逐句 n − store_hits 口径）。"""
+    import hashlib
+    import json
+    import os
+    import subprocess
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "tts.py"
+    proj = tmp_path / "ep"
+    (proj / "script").mkdir(parents=True)
+    items = [dict(i) for i in P0[:3]]
+    (proj / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    ref_sha1 = hashlib.sha1(ref.read_bytes()).hexdigest()[:12]
+    p = tts.STYLE_PRESETS["story"]
+    store = tmp_path / "store"
+    src = tmp_path / "src.mp3"
+    src.write_bytes(b"ID3fake")
+    # 无 timing.json ⇒ discard 回退 0.32（与 main 同口径）
+    for b in tts.plan_blocks(items, p["block"]):
+        texts = [tts.synth_source_text(i) for i in b]
+        suffix = tts.block_digest_suffix(texts, 0.32, p["block"]["tail_pad_sec"])
+        for k, i in enumerate(b):
+            d = tts.digest_indextts(
+                ref_sha1,
+                "story",
+                p["vec"],
+                p["alpha"],
+                p["df"],
+                "ZH",
+                "indextts",
+                texts[k],
+                1,
+                None,
+                None,
+                {"seed": p["seed"]},
+                suffix,
+                f"{k + 1}/{len(b)}",
+            )
+            tts.store_deposit(src, i["id"], d, store, proj.name)
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--project",
+            str(proj),
+            "--engine",
+            "indextts",
+            "--ref",
+            str(ref),
+            "--style",
+            "story",
+            "--plan",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env={**os.environ, "TO_VIDEO_TTS_STORE": str(store)},
+    )
+    assert r.returncode == 0, r.stderr
+    assert "版本库整块直收" in r.stdout
+    assert "估算墙钟约 0.0 小时" in r.stdout
+
+
+def test_sample_all_styles_applies_preset_seed(tmp_path):
+    """--all-styles 逐档解析采样口径：story 档带预设 seed，其余档不被波及。"""
+    import os
+    import subprocess
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "tts_sample.py"
+    (tmp_path / ".to-video-root").write_text("", encoding="utf-8")
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    r = subprocess.run(
+        [sys.executable, str(script), "--ref", str(ref), "--all-styles", "--dry-run"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env={**os.environ, "TO_VIDEO_WORKSPACE": str(tmp_path)},
+    )
+    assert r.returncode == 0, r.stderr
+    lines = {ln.split()[0]: ln for ln in r.stdout.splitlines() if ln.startswith("   ")}
+    assert f"seed={tts.STYLE_PRESETS['story']['seed']}" in lines["story"]
+    assert "seed=" not in lines["sunny"]
 
 
 # ---------------- 进度监视：mtime 聚簇 ----------------

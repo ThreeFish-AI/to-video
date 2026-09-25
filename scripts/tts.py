@@ -1144,6 +1144,13 @@ async def synth_block_indextts(
             mp3.write_bytes(audio)
             meta.write_text(digests[k])
             store_deposit(mp3, item["id"], digests[k], store, slug)
+    else:
+        # 同逐句路径：整块命中但库中缺档（曾 --no-store 或入库失败）⇒ 回填
+        for k, item in enumerate(block_items):
+            if not store_has(store, slug, item["id"], digests[k]):
+                store_deposit(
+                    out_dir / f"{item['id']}.mp3", item["id"], digests[k], store, slug
+                )
 
     results = []
     for item in block_items:
@@ -1196,8 +1203,9 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
     """narration items → 故事块（同幕连续句的列表的列表）。
 
     硬边界：幕界 + 台本 blockStart（item 里的 cue 台本由 build_narration 落成
-    blockStart:true）。无台本段自动划分：块数 k=max(⌈n/3⌉,⌈ΣL/90⌉)，DP 最小化
-    块长方差，块 ≤max_sentences 句、≤max_chars 字（合成文本口径，超限单句自成一块）。
+    blockStart:true）。无台本段自动划分：块数取 ≥max(⌈n/3⌉,⌈ΣL/90⌉) 的首个可行值，
+    DP 最小化块长方差，块 ≤max_sentences 句、≤max_chars 字（合成文本口径，超限单句
+    自成一块）。台本段超限被拆开时，后续子块继承段首 cue（块首句浅拷贝注入，不改原件）。
     """
     ms, mc = cfg.get("max_sentences", 3), cfg.get("max_chars", 90)
 
@@ -1210,18 +1218,20 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
     def flush_auto(seg: list[dict]) -> None:
         n = len(seg)
         total = sum(synth_len(i) for i in seg)
-        k = max(1, -(-n // ms), -(-total // mc))
-        k = min(k, n)
-        # DP：把 n 句切成 k 块、块句数 ≤ms 且块长 ≤mc 时最小化块长方差
+        k_min = min(n, max(1, -(-n // ms), -(-total // mc)))
+        # DP：best[end][j]＝前 end 句切成 j 块（块句数 ≤ms、多句块长 ≤mc）的最小块长方差。
+        # k_min 只是下界：装箱约束下恰好 k_min 块常切不出，逐层放宽到首个可行块数
+        # （j=n 即逐句，必可行）——否则整段会整体退化为逐句
         INF = float("inf")
         best: list[list[tuple[float, int]]] = [
-            [(INF, -1)] * (k + 1) for _ in range(n + 1)
+            [(INF, -1)] * (n + 1) for _ in range(n + 1)
         ]
         best[0][0] = (0.0, -1)
         lens = [0]
         for i in seg:
             lens.append(lens[-1] + synth_len(i))
-        for j in range(1, k + 1):
+        k = n
+        for j in range(1, n + 1):
             for end in range(1, n + 1):
                 for start in range(max(0, end - ms), end):
                     seglen = lens[end] - lens[start]
@@ -1234,17 +1244,21 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
                     cand = prev + seglen * seglen
                     if cand < best[end][j][0]:
                         best[end][j] = (cand, start)
-        if best[n][k][0] == INF:  # 上限太紧切不出 k 块：退化为逐句
-            blocks.extend([i] for i in seg)
-            return
+            if j >= k_min and best[n][j][0] < INF:
+                k = j
+                break
         cuts, end = [], n
         for j in range(k, 0, -1):
             cuts.append(end)
             end = best[end][j][1]
         cuts.append(0)
         cuts.reverse()
+        cue = seg[0].get("cue")
         for a, b in zip(cuts, cuts[1:]):
-            blocks.append(seg[a:b])
+            blk = seg[a:b]
+            if a and cue:  # 台本段被上限拆开：子块沿用段首情绪，不在段中途换档
+                blk = [{**blk[0], "cue": cue}, *blk[1:]]
+            blocks.append(blk)
 
     for i in items:
         hard = i.get("blockStart") or (run and run[-1]["scene"] != i["scene"])
@@ -1258,12 +1272,16 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
 
 
 def block_synth_text(items: list[dict]) -> str:
-    """块的合成文本＝成员句拼接；句末无终止标点者补 `。`（上游按标点断句合并段）。"""
-    TERM = "。！？…；"
+    """块的合成文本＝成员句拼接；句末无停顿标点者补 `。`（上游按标点断句合并段）。
+
+    `，：、——` 结尾是原稿有意的续接（本身即停顿、可作切点候选），原样保留——追加 `。`
+    会拼出 `，。`（上游映射为 `,.` 双标点）并把续接改成句末降调。
+    """
+    PAUSE = "。！？…；，：、—"
     parts = []
     for i in items:
         t = synth_source_text(i).strip()
-        if t and t[-1] not in TERM:
+        if t and t[-1] not in PAUSE:
             t += "。"
         parts.append(t)
     return "".join(parts)
@@ -1272,8 +1290,12 @@ def block_synth_text(items: list[dict]) -> str:
 def block_digest_suffix(
     member_texts: list[str], discard: float, tail_pad: float
 ) -> str:
-    """块缓存后缀（仅块模式追加）：改任一句/切分参数 ⇒ 整块换 digest 重录。"""
-    payload = "\x1f".join(member_texts) + f"\x1f{discard!r}\x1f{tail_pad!r}\x1fsplit=v1"
+    """块缓存后缀（仅块模式追加）：改任一句/切分参数 ⇒ 整块换 digest 重录。
+
+    `split=vN` 版本化块文本拼接与切分算法（v2：软停顿结尾不再补 `。`）——算法改变
+    合成结果而成员文本不变时，靠它换键。
+    """
+    payload = "\x1f".join(member_texts) + f"\x1f{discard!r}\x1f{tail_pad!r}\x1fsplit=v2"
     return hashlib.sha1(payload.encode()).hexdigest()[:12]
 
 
@@ -1910,6 +1932,7 @@ async def main() -> None:
             if block_cfg:
                 # 块=缓存单位：整块成员全部命中才算命中；改一句 ⇒ 整块重录
                 cached_blocks = recoverable_blocks = todo_blocks = todo_members = 0
+                recoverable_members = 0
                 for b in blocks:
                     b_vec, b_alpha, _ = resolve_block_vec(b, vec, alpha)
                     suffix = block_digest_suffix(
@@ -1955,13 +1978,15 @@ async def main() -> None:
                         cached_blocks += 1
                     elif all_recoverable:
                         recoverable_blocks += 1
+                        recoverable_members += n
                         todo_blocks += 1
                         todo_members += n
                     else:
                         todo_blocks += 1
                         todo_members += n
+                # 同逐句口径：版本库整块直收不占合成时间，不进估时
                 est = (
-                    todo_members
+                    (todo_members - recoverable_members)
                     * AVG_SEC_PER_LINE
                     * (RTF_1BEAM if beams == 1 else RTF_MULTIBEAM)
                 )
@@ -1976,7 +2001,14 @@ async def main() -> None:
                     + "（块=缓存单位，改一句重录整块）"
                 )
                 print(
-                    f">> 待合成合计 {todo_members} 句（块口径），估算墙钟约 {est / 3600:.1f} 小时"
+                    f">> 待合成合计 {todo_members} 句（块口径）"
+                    + (
+                        f"（其中 {recoverable_blocks} 块 / {recoverable_members} 句由版本库整块直收，"
+                        "不占合成时间）"
+                        if recoverable_members
+                        else ""
+                    )
+                    + f"，估算墙钟约 {est / 3600:.1f} 小时"
                     f"（长跑折算口径 RTF 1 束≈{RTF_1BEAM:g} / 高束宽≈{RTF_MULTIBEAM:g}，"
                     f"机器负载会显著影响，仅作排期参考）"
                 )
