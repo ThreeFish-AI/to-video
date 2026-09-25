@@ -50,6 +50,38 @@
 # 系列命名耦合进 skill）。真出现跨系列偏离、需要第二份模板时，cp -r 一份模板
 # 目录 + 设一行 baselineOf 即可，验证器逻辑一行不动——分组是机制，基线选择是
 # 策略。
+#
+# ## 合法偏离登记（工作区 $W/to-video.toml 的 [[skeleton.drift]]）
+#
+# 逃逸口必须存在，但必须**被记录**（同 `# noqa` / Copier `_exclude`）：不设逃逸口
+# 的门必死——第一次合法偏离就会让人把门关掉。登记指向具体集（内容），故住工作区
+# 而不随本模板分发；本文件出现 drift/generation 键 verify_skeleton 即大声退出。
+#
+#   [[skeleton.drift]]
+#   episode = "<slug>-video"
+#   path = "video/src/Main.tsx"          # 受门档位内的模板相对路径
+#   fingerprint = "<12 位>"               # 当前值见 verify_skeleton 报告
+#   reason = "<偏离原因 + 撤销条件>"
+#
+# fingerprint 钉住的是**已知的那一处偏离**，口径随档位：frozen 取字节 md5、
+# regioned 取归一化后 md5、structured 取结构键 md5。偏离内容再变即报
+# DRIFT-CHANGED 而非静默放行（同 `# type: ignore[code]` 只豁免指定错误码）。
+# 整文件合法退役钉字面哨兵 `fingerprint = "缺失"`：文件以任何内容重现即失配。
+# 逃逸口用完即收——对齐模板后删除登记，登记表只枚举「当前」合法偏离。
+#
+# ## 骨架分代（工作区 [[skeleton.generation]]）
+#
+# 「一次模板升级 = 一代」。分代文件是**原子组**：半同步集（只换部分文件）tsc 必红，
+# 故豁免只对「整组停在旧代」放行（打 INFO），组内新旧混杂报 GENERATION-MIXED 计入
+# 未登记。episodes 是显式花名册：新集与 cp -r 复制集不继承豁免；某集整组同步到当代
+# 后从花名册删除。与 drift 重叠时 drift 优先（特有偏离比代际滞后更需要盯）。
+#
+#   [[skeleton.generation]]
+#   id = "<代名>"
+#   reason = "<升级内容 + 整组同步指引>"
+#   episodes = ["<slug>-video"]
+#   [skeleton.generation.legacy]         # 受门路径 → 上一代指纹（口径同上，可钉「缺失」）
+#   "video/src/Main.tsx" = "<12 位>"
 
 
 [classes]

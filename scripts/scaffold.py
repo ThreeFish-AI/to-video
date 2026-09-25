@@ -89,7 +89,10 @@ def init_workspace(ws: Path, force: bool) -> int:
     print("\n接下来**必须**人工完成的（脚手架刻意不代做）：")
     print("  1. series.json 登记第一个系列（id/title/sourceKind/rule/episodes）")
     print("  2. voices/：prospect_ref 选段 → prepare_ref 裁样 → 把指纹写进 refs.toml")
-    print("  3. to-video.toml：按需声明 check_series 的工程级受检面与系列 id 集")
+    print(
+        "  3. to-video.toml：按需声明 check_series 的工程级受检面与系列 id 集；"
+        "骨架合法偏离走其 [skeleton] 登记"
+    )
     print("  4. （可选）git init；README.md 按本工作区实态改写")
     print(
         "\n  建集：uv run --no-project "

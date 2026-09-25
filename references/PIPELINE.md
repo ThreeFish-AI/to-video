@@ -65,7 +65,7 @@ $W/
 ├── series.md          # 作品总览（人读）
 ├── source-map/        # 多集系列的章节→集归属信源地图
 ├── voices/            # 参考音色样本（gitignored 生物特征；refs.toml 只存指纹）= $V
-├── to-video.toml      # 工作区机制配置（check_series 工程级受检面与系列 id 集）
+├── to-video.toml      # 工作区机制配置（check_series 工程级受检面与系列 id 集、骨架合法偏离登记）
 ├── scripts/*.py       # 工作区级薄包装 → skill（自证工作区锚并硬性覆写 TO_VIDEO_WORKSPACE）
 └── episodes/          # 每集一个 <slug>-video 工程（下）
 ```
@@ -220,7 +220,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 - **路径约定**：主语言 zh 与改造前逐字节一致；en 为 `script/narration.en.{md,json}`、`video/public/audio/en/`（独立 `.engine` 护栏）、`out/captions.en.{srt,vtt}`、`out/{draft,final}.en.mp4`、`out/frames.en/`、交付 `<标题> vN.en.mp4`（版本号按语言独立）。英文时间轴由英文配音实测时长自动重排——分镜 beat 以句 id 取窗，语言无关。
 - **对齐与失鲜**：`narration.en.md` 与主稿句 id 1:1（`build --lang en` 硬对齐门）；基线锁 `narration.en.lock.json` 记录翻译时的主稿句 digest，主稿改稿后 `check --lang en` 点名失配句。重建**不自动接受**改过的主稿（gettext fuzzy 语义）：译句改写即视为已重译、自动刷新；译文无需改动时 `build --lang en --accept <ids>` 显式确认。
 - **缺省语义（昂贵命令显式化）**：`build` / `check` / `captions` / `status` 缺省跑全部声明语言；**`tts` / `render` / `deliver` / `all` 缺省只跑 zh**（声明多语言而未指定即报错提示 `--lang`），显式多值才顺序执行且完成行按语言分打；`qa` 恒单语言（按视频文件名 `.en` 后缀推断）。
-- **骨架分代**：改 frozen 骨架文件引入语言维度属新代（`skeleton.toml` 的 `[[generation]]` 登记旧代指纹与花名册，`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
+- **骨架分代**：改 frozen 骨架文件引入语言维度属新代（工作区 `to-video.toml` 的 `[[skeleton.generation]]` 登记旧代指纹与花名册，格式见 `skeleton.toml`「骨架分代」节；`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
 
 ## 六、新集脚手架清单
 

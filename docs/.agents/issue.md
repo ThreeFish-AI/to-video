@@ -154,11 +154,29 @@
 | A2 | pre-commit `series-consistency-check` 走工作区包装器，触及 influence 的提交被拦 | 同 A1（工作区 2 份包装器） | 暂存一处 influence 内改动，钩子 Passed 而非报「找不到 skill」 |
 | A3 | 旧哨兵 `.influence-root` 不再识别，依赖 WORKSPACE 锚的脚本大声退出 | 工作区根补空 `.to-video-root` | 工作区内任意目录直跑 `check_series.py`，rc=0 |
 | A4 | tts-store 旧目录（实测 65M / 1815 句）回退删除，缓存全 miss（重渲一集重合成 2.5–3.5h） | `mv ~/Library/Application Support/negentropy-influence/tts-store ~/Library/Application Support/to-video/tts-store` | 任一集 `pipeline.py tts`（不改稿）零重合成、全部命中缓存 |
-| A5 | skeleton 登记清零 + frozen 模板字节变更（包装器探测行、remotion.config.ts 与 frozen 组件注释、.npmrc 删除），旧集 `verify_skeleton --strict` 大量 STALE/DRIFT 红 | 逐集整组同步模板（拷齐再 `tsc --noEmit`）；不重渲的已发布集接受红、不跑该门 | 同步过的集 `--strict` rc=0 |
+| A5 | skeleton 登记清零 + frozen 模板字节变更（包装器探测行、remotion.config.ts 与 frozen 组件注释、.npmrc 删除），旧集 `verify_skeleton --strict` 大量 STALE/DRIFT 红 | 逐集整组同步模板（拷齐再 `tsc --noEmit`）；仍成立的偏离按 [RSI-010](#rsi-010-骨架合法偏离登记面在-skill-侧工作区无登记入口) 加 `skeleton.` 前缀登记进 `$W/to-video.toml` | 同步过的集 `--strict` rc=0 |
 | A6 | 已发布集 README/pipeline.toml 的 GitHub blob 外链 42 处（15 处本已 404 + 27 处指向已删迁移桩） | 批量改指 `references/…` 与 `assets/video-skeleton/skeleton.toml` | 抽检 5 处链接可达 |
 
-**B. 未兼容的旧版功能（2.0.0 有意不支持；用于后续「未回归」核对）**：`.influence-root` 哨兵识别；`NE_TTS_STORE` 旧 env 名与旧默认目录回退；`$T/pipeline/scripts/…` 命令路径与 `pipeline/README.md` 迁移桩；`baselineOf` 模板缺省值（机制保留、模板不设）；**跨仓 skeleton 登记**——旧版允许 skill 侧登记内容仓集名的 drift/generation，2.0.0 模板零登记，内容仓的合法漂移暂无机器登记面，若 negentropy 需要恢复该能力须按 RSI 另立条目设计工作区侧登记（A5 的长期解）；模板 `.npmrc` 占位文件。
+**B. 未兼容的旧版功能（2.0.0 有意不支持；用于后续「未回归」核对）**：`.influence-root` 哨兵识别；`NE_TTS_STORE` 旧 env 名与旧默认目录回退；`$T/pipeline/scripts/…` 命令路径与 `pipeline/README.md` 迁移桩；`baselineOf` 模板缺省值（机制保留、模板不设）；**skill 侧 skeleton 登记**——旧版在 skill 侧登记内容仓集名的 drift/generation；2.0.0 起 skill 侧登记键被 verify_skeleton 拒收，登记面迁至工作区（见 RSI-010）；模板 `.npmrc` 占位文件。
 
 **C. 本机其他依赖**：`to-video-e2e/mini-video` 测试工作区包装器失效（重建即可）；真树回归语料（`TO_VIDEO_TEST_WORKSPACE` 指 negentropy 树）待 A1/A3 完成后恢复——扫描类门（`--check-scenes` 等）的红绿对拍在此之前不可用，不得以单行构造样例替代（见 RSI-007 教训）。
 
 **D. 跟进项（非破坏，已在 RSI-008 评审回归段登记，不重复维护）**：模板 `README.md.tmpl` 首条 `qa --video out/draft.mp4 --check` 缺选择器、照抄必败。
+
+## RSI-010 骨架合法偏离登记面在 skill 侧，工作区无登记入口
+
+**表因**：RSI-009 清空 skeleton.toml 的 33 条 `[[drift]]` 与 2 组 `[[generation]]` 后，2.0.0 CHANGELOG 写「旧内容工作区的既有漂移须重新登记到各自工作区」，但 `verify_skeleton.py` 只读 skill 侧 `$T/assets/video-skeleton/skeleton.toml`，工作区无任何登记入口；同批删掉的登记格式说明（指纹口径、「缺失」哨兵、分代语义）仍被 `pipeline.py` 英文渲染预检报错与 `verify_skeleton.py` docstring 三处指向。
+
+**复现**：`grep -n 'skel.get("drift"\|skel.get("generation"' scripts/verify_skeleton.py` 命中两处，均取自 `SKELETON_TOML`；skeleton.toml 内 `grep -c '分代'` = 0，而 `pipeline.py:643` 报错文案指向「skeleton.toml 分代说明」。
+
+**根因**：登记表在机制与内容同址时代（skill 住在 negentropy 工作区内）放进了模板；抽取为独立 skill 后，登记条目指向的具体集属于**内容**，却仍只能写进**机制**侧——任何用户停用/魔改 frozen 文件都得改已安装的 `$T`，违反 RSI「制片期 `$T` 只读」，且下次 `git pull` 冲突。RSI-009 台账 B 节已把「工作区侧登记」列为另立条目的长期解，CHANGELOG 却按已实现来写。
+
+**定性**：机制缺陷（缺登记面）+ 文档指针悬空；随 2.0.0 同版修复，免得登记位置日后再迁一次、又造成一次破坏性变更。
+
+**方案比选**：A **登记面迁至工作区 `to-video.toml` 的 `[skeleton]`（采纳）**——与该文件既有定位「内容策略随内容走，skill 不携带具体系列身份」同构（同 check_series 的系列 id 集）；键名不变、表名加前缀即可原样搬运旧条目。B 只改 CHANGELOG 文案——零代码，但「改偏离须改 `$T`」的缺口延到下个版本，届时迁移又是一次 breaking。A 的子选择：与 skill 侧**合并**读取被否决（两处登记 = split-brain，且合法条目必含集名、skill 侧不存在正当用途），改为 skill 侧出现 `drift`/`generation` 键即大声退出；`baselineOf` 是模板级声明，维持 skill 侧（RSI-009 已定，面向将来多模板）。
+
+**处理方式**：`verify_skeleton.py` 新增 `load_registry()`（skill 侧登记键 → `sys.exit` 点名迁移方式；读 `$W/to-video.toml` 的 `skeleton` 表，缺失 = 无登记）；已登记偏离报告改为全部列出，指向 series.json 未知集的条目标「陈旧登记」旁注（登记本地化后「他工作区登记是噪音」的过滤理由不再成立）。skeleton.toml 恢复「合法偏离登记」「骨架分代」两节格式说明（不含条目），三处既有指针随之重新生效；工作区模板 `to-video.toml.tmpl` 加 `[skeleton]` 注释示例，scaffold init 提示同步；07 / PIPELINE.md / CHANGELOG（negentropy 适配增第 ④ 步）指针同步。test_skeleton 的 `register_drift` / `inject_generation` 改写工作区 to-video.toml（既有 6 条分代正控与 2 条 drift 正控随之覆盖新路径），新增 skill 侧登记被拒、模板零登记、陈旧登记旁注三条用例；三条真树用例改读工作区登记。
+
+**后续防范**：skill 仓只放机制；任何「指向具体集/系列」的数据（登记、豁免、花名册）一律住工作区，新增此类配置前先问「它随内容变还是随机制变」。发布说明里的迁移步骤必须能照做——写「须登记到 X」前先确认 X 存在读取入口。删除数据条目时区分「条目」与「格式说明」：前者可清零，后者是机制文档，删了即留悬空指针。
+
+**同类问题影响**：negentropy 侧 A5 由「整组同步或接受红」扩为可登记（CHANGELOG 第 ④ 步）；旧版在 skill 侧登记的写法在 2.0.0 被拒收（RSI-009 B 节同步改写）。

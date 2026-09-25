@@ -13,7 +13,7 @@
 
 ## 骨架复制适配策略
 
-**复制源头有名字**：[assets/video-skeleton/](../assets/video-skeleton/)。新集用它实例化（`uv run --no-project $T/scripts/scaffold.py <slug>-video --title "…"`），**不要**再 `cp -r` 任一既有集——「任一」意味着 4 个同权真理声明者。冻结档位（frozen / overridable / regioned / structured / seeded）、分组语义与已登记漂移的**机器可读单一事实源**是 [skeleton.toml](../assets/video-skeleton/skeleton.toml)，判据由 `verify_skeleton.py` 执行：
+**复制源头有名字**：[assets/video-skeleton/](../assets/video-skeleton/)。新集用它实例化（`uv run --no-project $T/scripts/scaffold.py <slug>-video --title "…"`），**不要**再 `cp -r` 任一既有集——「任一」意味着 4 个同权真理声明者。冻结档位（frozen / overridable / regioned / structured / seeded）、分组语义与漂移登记格式的**机器可读单一事实源**是 [skeleton.toml](../assets/video-skeleton/skeleton.toml)；已登记的合法偏离随内容落在工作区 `$W/to-video.toml` 的 `[skeleton]`。判据由 `verify_skeleton.py` 执行：
 
 ```bash
 uv run --no-project $T/scripts/verify_skeleton.py          # 漂移报告

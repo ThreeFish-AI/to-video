@@ -25,10 +25,11 @@
   - **假 skill 根**（`mirror_skill`）：SKILL.md 哨兵 + 从真 `scripts/`
     原样拷来的脚本 + 模板全量拷贝。`paths.SKILL` 自 `__file__` 向上找
     SKILL.md——裸拷脚本进 tmp 会在**导入期**就大声退出（旧嵌套镜像因此在
-    机制抽取后整体失效），假哨兵必须随行。drift 登记与漂移注入都落在副本上，
+    机制抽取后整体失效），假哨兵必须随行。模板升代注入落在副本上，
     真仓文件分毫不动。
   - **平铺工作区**（`flat_ws`）：哨兵 + series.json + episodes/。工作区锚由
-    CWD 哨兵搜索提供（subprocess 传 `cwd=工作区根`）。
+    CWD 哨兵搜索提供（subprocess 传 `cwd=工作区根`）。drift/generation 登记
+    写进它的 to-video.toml `[skeleton]`（登记面住工作区，RSI-010）。
 
 沙箱里的分集不再从真树复制：由（副本里的真）scaffold 实例化——scaffold 产物
 与模板字节相同正是 scaffold 自身的执法对象（见
@@ -99,7 +100,7 @@ def mirror_skill(tmp_path: Path) -> Path:
 
     只镜像门与脚手架真正读的东西：SKILL.md 哨兵 + 真 scripts/ 的
     verify_skeleton.py / scaffold.py（含同目录依赖 paths.py）+ 模板全量。
-    skeleton.toml 的 drift 登记注入（register_drift）发生在副本上。
+    模板升代注入（advance_template）发生在副本上；登记写工作区（register_drift）。
     """
     skill = tmp_path / "skill"
     (skill / "scripts").mkdir(parents=True)
@@ -160,17 +161,22 @@ def scaffold_into(
     return run(skill / "scripts" / "scaffold.py", slug, "--title", title, cwd=ws)
 
 
-def register_drift(
-    skill: Path, episode: str, rel: str, fingerprint: str | None
-) -> None:
-    """往镜像 skill 的 skeleton.toml 追加一条 `[[drift]]`。"""
-    toml = skill / "assets" / "video-skeleton" / "skeleton.toml"
+def register_drift(ws: Path, episode: str, rel: str, fingerprint: str | None) -> None:
+    """往沙箱工作区 to-video.toml 追加一条 `[[skeleton.drift]]`。"""
     pin = f'fingerprint = "{fingerprint}"\n' if fingerprint else ""
-    with toml.open("a", encoding="utf-8") as fh:
+    with (ws / "to-video.toml").open("a", encoding="utf-8") as fh:
         fh.write(
-            f'\n[[drift]]\nepisode = "{episode}"\npath = "{rel}"\n{pin}'
+            f'\n[[skeleton.drift]]\nepisode = "{episode}"\npath = "{rel}"\n{pin}'
             'reason = "正控用条目"\n'
         )
+
+
+def ws_registry(ws: Path) -> dict:
+    """工作区 to-video.toml 的 [skeleton] 登记表（真树用例的读取面）。"""
+    toml = ws / "to-video.toml"
+    if not toml.is_file():
+        return {}
+    return tomllib.loads(toml.read_text(encoding="utf-8")).get("skeleton", {})
 
 
 def test_declared_paths_exist_in_template():
@@ -213,9 +219,8 @@ def test_every_template_file_is_classified():
 def test_drift_entries_reference_real_episodes_and_paths():
     """逃逸表不能指向不存在的集或路径——陈旧豁免会静默放行真实漂移。"""
     influence = Path(INTEGRATION_WS).resolve()
-    skel = skeleton()
     slugs = {p.name for p in (influence / "episodes").iterdir() if p.is_dir()}
-    for d in skel.get("drift", []):
+    for d in ws_registry(influence).get("drift", []):
         assert d["episode"] in slugs, f"drift 指向不存在的集：{d['episode']}"
         # 「缺失」哨兵 = 登记一次合法退役（整文件删除、模板保留给其他集）；
         # 哈希指纹的条目仍必须指向实存文件，否则就是陈旧豁免
@@ -311,7 +316,7 @@ def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
     victim.write_bytes(victim.read_bytes() + b"\n// drift v1\n")
     fp_v1 = vs.fingerprint(victim, rel, "frozen")
 
-    register_drift(skill, PROBE_B, rel, fp_v1)
+    register_drift(ws, PROBE_B, rel, fp_v1)
     assert run(verify, "--strict", cwd=ws).returncode == 0, "指纹相符却未放行"
 
     # 偏离内容再变一次：同一条登记不得继续兜住它
@@ -338,7 +343,7 @@ def test_i2_honours_the_drift_registry(tmp_path):
     victim.write_bytes(victim.read_bytes() + b"\n// legit episode-local deviation\n")
     assert run(verify, "--strict", cwd=ws).returncode == 1, "未登记的偏离竟然放行"
 
-    register_drift(skill, PROBE_A, rel, vs.fingerprint(victim, rel, "frozen"))
+    register_drift(ws, PROBE_A, rel, vs.fingerprint(victim, rel, "frozen"))
     r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 0, f"已登记的偏离仍被 STALE 判红：\n{r.stdout}"
 
@@ -367,6 +372,48 @@ def test_i2_honours_the_overridable_class(tmp_path):
     r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 0, f"行使 overridable 许可却被判红：\n{r.stdout}"
     assert "STALE" not in r.stdout, r.stdout
+
+
+# ── 登记面住工作区（RSI-010）：登记指向具体集 = 内容，不随模板分发 ──────────
+
+
+def test_template_carries_no_workspace_registry():
+    """模板零登记出厂：skill 侧出现 drift/generation 即集名泄入机制侧。"""
+    import verify_skeleton as vs
+
+    leaked = [k for k in vs.REGISTRY_KEYS if k in skeleton()]
+    assert not leaked, (
+        f"skill 模板含登记表 {leaked}——应写进工作区 $W/to-video.toml 的 [skeleton]"
+    )
+
+
+def test_skill_side_registry_is_refused(tmp_path):
+    """**正控**：skill 侧写登记 ⇒ 大声退出并指路工作区。静默忽略会让登记者
+    误以为已豁免；与工作区合并读取则是两处登记的 split-brain。"""
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    toml = skill / "assets" / "video-skeleton" / "skeleton.toml"
+    with toml.open("a", encoding="utf-8") as fh:
+        fh.write(
+            '\n[[drift]]\nepisode = "x-video"\npath = "video/src/types.ts"\n'
+            'reason = "旧版 skill 侧写法"\n'
+        )
+    r = run(skill / "scripts" / "verify_skeleton.py", cwd=ws)
+    assert r.returncode != 0, f"skill 侧登记被静默接受：\n{r.stdout}"
+    assert "to-video.toml" in r.stderr and "skeleton.drift" in r.stderr, r.stderr
+
+
+def test_stale_registry_entry_is_flagged(tmp_path):
+    """登记指向 series.json 未知集 ⇒ 报告点名「陈旧登记」，不计入未登记漂移。"""
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    write_series(ws, [("solo", [PROBE_A])])
+    register_drift(ws, "gone-video", "video/src/types.ts", "000000000000")
+
+    r = run(skill / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "gone-video" in r.stdout and "陈旧登记" in r.stdout, r.stdout
 
 
 def test_scaffold_produces_gate_clean_episode(tmp_path):
@@ -770,6 +817,7 @@ GEN_GROUP: tuple[tuple[str, str], ...] = (
 )
 
 
+@needs_real_tree
 def test_generation_registry_is_well_formed():
     """分代表条目合法性：legacy 指纹 12 位 hex 或「缺失」；≠ 当前模板指纹
     （登记成当代值 = 永真豁免，门对该文件失明——同 drift 不钉指纹的教训）；
@@ -779,9 +827,7 @@ def test_generation_registry_is_well_formed():
     import verify_skeleton as vs
 
     skel = skeleton()
-    gens = skel.get("generation", [])
-    if not gens:
-        return  # 2.0.0 起模板零登记出厂；登记形态由注入正控覆盖
+    gens = ws_registry(Path(INTEGRATION_WS).resolve()).get("generation", [])
     gated_of = {
         rel: cls for cls in GATED_CLASSES for rel in skel["classes"].get(cls, [])
     }
@@ -814,27 +860,26 @@ def test_generation_roster_references_real_episodes():
     豁免指向幻影集、汇总行的「停旧代 N」失真。"""
     influence = Path(INTEGRATION_WS).resolve()
     slugs = {p.name for p in (influence / "episodes").iterdir() if p.is_dir()}
-    for g in skeleton().get("generation", []):
+    for g in ws_registry(influence).get("generation", []):
         for slug in g["episodes"]:
             assert slug in slugs, f"generation {g['id']} 花名册指向不存在的集：{slug}"
 
 
 def inject_generation(
-    skill: Path, gid: str, episodes: list[str], legacy: dict[str, str]
+    ws: Path, gid: str, episodes: list[str], legacy: dict[str, str]
 ) -> None:
-    """往镜像 skill 的 skeleton.toml 追加一个 [[generation]]（正控用）。"""
-    toml = skill / "assets" / "video-skeleton" / "skeleton.toml"
+    """往沙箱工作区 to-video.toml 追加一个 [[skeleton.generation]]（正控用）。"""
     eps = ", ".join(f'"{e}"' for e in episodes)
     lines = [
-        "\n[[generation]]",
+        "\n[[skeleton.generation]]",
         f'id = "{gid}"',
         'reason = "正控用分代"',
         f"episodes = [{eps}]",
         "",
-        "[generation.legacy]",
+        "[skeleton.generation.legacy]",
     ]
     lines += [f'"{rel}" = "{fp}"' for rel, fp in legacy.items()]
-    with toml.open("a", encoding="utf-8") as fh:
+    with (ws / "to-video.toml").open("a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
 
 
@@ -869,7 +914,7 @@ def test_generation_old_generation_is_exempt(tmp_path):
     scaffold 产物 == 模板（即「上一代」），登记该代后把模板升一代——集未动 =
     整组停旧代。--strict 必须放行：generation 是合法过渡态而非漂移。"""
     skill, ws, legacy = _gen_sandbox(tmp_path)
-    inject_generation(skill, "gen-a", [PROBE_A], legacy)
+    inject_generation(ws, "gen-a", [PROBE_A], legacy)
     advance_template(skill, GEN_GROUP)
 
     r = run(skill / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
@@ -886,7 +931,7 @@ def test_generation_mixed_half_sync_fails(tmp_path):
     计入未登记、--strict 失败。单集系列里这种形态对 I1/I2 **都静默**（新代指纹
     恰是唯一参照、模板在 seen），MIXED 判定是唯一的网——半同步集 tsc 必红。"""
     skill, ws, legacy = _gen_sandbox(tmp_path)
-    inject_generation(skill, "gen-b", [PROBE_A], legacy)
+    inject_generation(ws, "gen-b", [PROBE_A], legacy)
     advance_template(skill, GEN_GROUP)
     # 只把 Root.tsx 同步到新代（模拟「拷了部分文件就停手」）
     shutil.copy2(
@@ -915,7 +960,7 @@ def test_generation_exempt_does_not_leak_beyond_roster(tmp_path):
         rel: vs.fingerprint(ws / "episodes" / PROBE_A / rel, rel, cls)
         for rel, cls in GEN_GROUP
     }
-    inject_generation(skill, "gen-c", [PROBE_A], legacy)  # 花名册只含 A
+    inject_generation(ws, "gen-c", [PROBE_A], legacy)  # 花名册只含 A
     advance_template(skill, GEN_GROUP)
 
     r = run(skill / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
@@ -928,7 +973,7 @@ def test_generation_mismatched_legacy_still_fails(tmp_path):
     实际不符即失效（同 [[drift]] 纪律：防「登记一次、永久免检」）。"""
     skill, ws, _legacy = _gen_sandbox(tmp_path)
     inject_generation(
-        skill,
+        ws,
         "gen-d",
         [PROBE_A],
         {rel: "000000000000" for rel, _cls in GEN_GROUP},
@@ -951,8 +996,8 @@ def test_generation_mixed_sees_drift_held_files(tmp_path):
     skill, ws, legacy = _gen_sandbox(tmp_path)
     sub = ws / "episodes" / PROBE_A / rel
     sub.write_bytes(sub.read_bytes() + b"\n// probe: episode-specific drift\n")
-    register_drift(skill, PROBE_A, rel, vs.fingerprint(sub, rel, "frozen"))
-    inject_generation(skill, "gen-f", [PROBE_A], legacy)
+    register_drift(ws, PROBE_A, rel, vs.fingerprint(sub, rel, "frozen"))
+    inject_generation(ws, "gen-f", [PROBE_A], legacy)
     advance_template(skill, GEN_GROUP)
 
     script = skill / "scripts" / "verify_skeleton.py"
@@ -994,8 +1039,8 @@ def test_generation_does_not_override_drift_registry(tmp_path):
     tmpl = skill / "assets" / "video-skeleton"
     for r, _cls in GEN_GROUP:
         shutil.copy2(tmpl / r, ws / "episodes" / PROBE_A / r)
-    register_drift(skill, PROBE_B, rel, "111111111111")
-    inject_generation(skill, "gen-e", [PROBE_A, PROBE_B], legacy)
+    register_drift(ws, PROBE_B, rel, "111111111111")
+    inject_generation(ws, "gen-e", [PROBE_A, PROBE_B], legacy)
 
     r = run(skill / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
     assert r.returncode == 1, f"drift 指纹失效被 generation 旧代值兜底：\n{r.stdout}"
