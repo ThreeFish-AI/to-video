@@ -55,7 +55,7 @@
 #
 # 逃逸口必须存在，但必须**被记录**（同 `# noqa` / Copier `_exclude`）：不设逃逸口
 # 的门必死——第一次合法偏离就会让人把门关掉。登记指向具体集（内容），故住工作区
-# 而不随本模板分发；本文件出现 drift/generation 键 verify_skeleton 即大声退出。
+# 而不随本模板分发；本文件出现登记键（含 [[skeleton.*]] 形态）verify_skeleton 即大声退出。
 #
 #   [[skeleton.drift]]
 #   episode = "<slug>-video"
@@ -68,6 +68,8 @@
 # DRIFT-CHANGED 而非静默放行（同 `# type: ignore[code]` 只豁免指定错误码）。
 # 整文件合法退役钉字面哨兵 `fingerprint = "缺失"`：文件以任何内容重现即失配。
 # 逃逸口用完即收——对齐模板后删除登记，登记表只枚举「当前」合法偏离。
+# 四字段必填、同集同文件只许一条；verify_skeleton 载入即校验（缺指纹 / 格式非法 /
+# 路径不在受门档位即大声退出）——登记住工作区，本仓测试管不到它。
 #
 # ## 骨架分代（工作区 [[skeleton.generation]]）
 #
@@ -75,6 +77,7 @@
 # 故豁免只对「整组停在旧代」放行（打 INFO），组内新旧混杂报 GENERATION-MIXED 计入
 # 未登记。episodes 是显式花名册：新集与 cp -r 复制集不继承豁免；某集整组同步到当代
 # 后从花名册删除。与 drift 重叠时 drift 优先（特有偏离比代际滞后更需要盯）。
+# legacy 不得登记成当前模板指纹（永真豁免），载入即拒收。
 #
 #   [[skeleton.generation]]
 #   id = "<代名>"

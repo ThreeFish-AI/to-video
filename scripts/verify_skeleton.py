@@ -48,6 +48,11 @@ SKELETON_TOML = TEMPLATE / "skeleton.toml"
 REGISTRY_KEYS = ("drift", "generation")
 #: skill 侧 skeleton.toml 禁现的顶层键：旧表名 + 照抄工作区示例的 skeleton 前缀形态。
 LEAK_KEYS = (*REGISTRY_KEYS, "skeleton")
+#: 受门档位（seeded 不设门）。
+GATED_CLASSES = ("frozen", "overridable", "regioned", "structured")
+#: 登记指纹的合法形态：12 位 hex（口径随档位，见 fingerprint()）或整文件退役哨兵。
+FP_RE = re.compile(r"[0-9a-f]{12}")
+ABSENT = "缺失"
 
 #: Main.tsx 的每集内容：场景 import 行 + SCENE_COMPONENTS 注册表条目。
 #: 用归一化而非插入标记注释——后者要改动 4 个已发布集的 A 档邻近文件。
@@ -104,8 +109,8 @@ def fingerprint(path: Path, rel: str, cls: str) -> str | None:
     return md5(path)
 
 
-#: 登记表类型：(episode, path) → (reason, fingerprint|None)
-Registry = dict[tuple[str, str], tuple[str, str | None]]
+#: 登记表类型：(episode, path) → (reason, fingerprint)
+Registry = dict[tuple[str, str], tuple[str, str]]
 
 
 class Generation(NamedTuple):
@@ -148,29 +153,107 @@ def exempt(registry: Registry, slug: str, rel: str, fp: str) -> bool:
     """该集该文件的**当前**指纹是否被登记表放行。
 
     登记了但指纹已变 → 不放行，由调用方报 DRIFT-CHANGED：这正是「豁免随偏离
-    内容改变而自动失效」的落点。未写 fingerprint 的旧条目仍无条件放行（向前
-    兼容），但 tests/test_skeleton.py 要求每条 `[[skeleton.drift]]` 都带指纹。
+    内容改变而自动失效」的落点。fingerprint 必填由 registry_problems() 载入期执法。
     """
     hit = registry.get((slug, rel))
-    return hit is not None and (hit[1] is None or hit[1] == fp)
+    return hit is not None and hit[1] == fp
+
+
+def _tables(reg: dict, key: str, out: list[str]) -> list[dict]:
+    """→ `[[skeleton.<key>]]` 条目；写成单表或非表数组即记一处问题并返回空。"""
+    items = reg.get(key, [])
+    if isinstance(items, list) and all(isinstance(x, dict) for x in items):
+        return items
+    out.append(f"skeleton.{key} 须写成 [[skeleton.{key}]] 数组表")
+    return []
+
+
+def _fp_problem(fp: object) -> str | None:
+    if fp is None:
+        return "缺 fingerprint（不钉指纹 = 该文件此后任何改动永久免检）"
+    if fp != ABSENT and not (isinstance(fp, str) and FP_RE.fullmatch(fp)):
+        return f"指纹 {fp!r} 非法（应为 12 位 hex 或「{ABSENT}」哨兵）"
+    return None
+
+
+def registry_problems(reg: dict, classes: dict[str, list[str]]) -> list[str]:
+    """工作区登记的格式校验 → 问题清单（空 = 合法）。
+
+    登记住工作区后本仓测试管不到它，策略须在载入期执法：不钉指纹的 drift 与登记成
+    当代模板值的 legacy 都是永真豁免；不在受门档位的路径无从按档位口径比对（多为
+    模板已移除该文件，条目作废）。"""
+    gated = {rel: cls for cls in GATED_CLASSES for rel in classes.get(cls, [])}
+    out: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for i, d in enumerate(_tables(reg, "drift", out), 1):
+        key = (d.get("episode"), d.get("path"))
+        where = f"[[skeleton.drift]] 第 {i} 条（{key[0]} / {key[1]}）"
+        if not (isinstance(key[0], str) and key[0].strip()):
+            out.append(f"{where}：缺 episode")
+        if key[1] not in gated:
+            out.append(f"{where}：path 不在受门档位")
+        if msg := _fp_problem(d.get("fingerprint")):
+            out.append(f"{where}：{msg}")
+        if not str(d.get("reason", "")).strip():
+            out.append(f"{where}：缺 reason（偏离原因 + 撤销条件）")
+        if key in seen:
+            out.append(f"{where}：与前条重复（同集同文件只许一条）")
+        seen.add(key)
+    for i, g in enumerate(_tables(reg, "generation", out), 1):
+        where = f"[[skeleton.generation]] 第 {i} 条（{g.get('id')}）"
+        if not (str(g.get("id", "")).strip() and str(g.get("reason", "")).strip()):
+            out.append(f"{where}：缺 id / reason")
+        eps = g.get("episodes")
+        if not (isinstance(eps, list) and eps and all(isinstance(e, str) for e in eps)):
+            out.append(f"{where}：episodes 花名册须为非空字符串数组")
+        legacy = g.get("legacy")
+        if not (isinstance(legacy, dict) and legacy):
+            out.append(f"{where}：缺 [skeleton.generation.legacy] 指纹表")
+            continue
+        for rel, fp in legacy.items():
+            if rel not in gated:
+                out.append(f"{where}：legacy {rel} 不在受门档位")
+            elif msg := _fp_problem(fp):
+                out.append(f"{where}：legacy {rel} {msg}")
+            elif fp == fingerprint(template_source(rel), rel, gated[rel]):
+                out.append(f"{where}：legacy {rel} 等于当前模板指纹（永真豁免）")
+    return out
 
 
 def load_registry(skel: dict) -> dict:
     """→ 工作区 to-video.toml 的 [skeleton] 表；文件/表缺失 = 无登记（新工作区默认态）。
 
     登记指向具体集（内容），随内容走而不随模板分发：skill 侧 skeleton.toml 出现
-    登记键即大声退出——静默忽略会让登记者以为已豁免，合并两处则是 split-brain。"""
+    登记键即大声退出——静默忽略会让登记者以为已豁免，合并两处则是 split-brain。
+    工作区登记格式不合法同样大声退出（判据见 registry_problems）。"""
     if leaked := [k for k in LEAK_KEYS if k in skel]:
+        how = []
+        if old := [k for k in leaked if k in REGISTRY_KEYS]:
+            how.append(
+                f"{old} 为旧表名：移入后加 skeleton. 前缀（[[drift]] → "
+                "[[skeleton.drift]]、[generation.legacy] → [skeleton.generation.legacy]）"
+                "，字段不变"
+            )
+        if "skeleton" in leaked:
+            how.append("[skeleton.*] 已是工作区写法：整段原样移入，勿再加前缀")
         sys.exit(
             f"FAIL: {SKELETON_TOML} 含登记表 {leaked}——合法偏离登记在工作区 "
-            "$W/to-video.toml 的 [[skeleton.drift]] / [[skeleton.generation]]"
-            "（整段移入该文件，旧表名加 skeleton. 前缀、字段不变；格式见 skeleton.toml"
-            "「合法偏离登记」节），skill 模板不携带集名"
+            "$W/to-video.toml 的 [[skeleton.drift]] / [[skeleton.generation]]（"
+            + "；".join(how)
+            + "；格式见 skeleton.toml「合法偏离登记」节），skill 模板不携带集名"
         )
     ws_toml = paths.WORKSPACE / "to-video.toml"
     if not ws_toml.is_file():
         return {}
-    return tomllib.loads(ws_toml.read_text(encoding="utf-8")).get("skeleton", {})
+    reg = tomllib.loads(ws_toml.read_text(encoding="utf-8")).get("skeleton", {})
+    if problems := registry_problems(reg, skel["classes"]):
+        sys.exit(
+            f"FAIL: {ws_toml} 的 [skeleton] 登记不合法（{len(problems)} 处）：\n  · "
+            + "\n  · ".join(problems)
+            + "\n  格式见 skeleton.toml「合法偏离登记」「骨架分代」两节；"
+            "指纹当前值先移出该条目跑一次本门，取报告里的 12 位值"
+        )
+    return reg
 
 
 def main() -> int:
@@ -182,13 +265,13 @@ def main() -> int:
     classes: dict[str, list[str]] = skel["classes"]
     baseline_series = skel.get("baselineOf")
     reg = load_registry(skel)
-    #: 登记表 → (reason, fingerprint|None)。**指纹钉住的是「已知的那处偏离」**：
+    #: 登记表 → (reason, fingerprint)。**指纹钉住的是「已知的那处偏离」**：
     #: 不带指纹的豁免以 (episode, path) 为键无条件放行，于是该文件此后对任何改动
     #: 都永久免检——而 Main.tsx 恰是每集都要动的文件，等于把最该看的地方蒙上。
-    #: 带指纹后豁免会在偏离内容改变时自动失效（同 `# type: ignore[code]` 只豁免
-    #: 指定错误码，而非整行）；登记里写的「撤销条件」也随之成为机器判据。
+    #: 故指纹必填（载入期执法）：豁免在偏离内容改变时自动失效（同 `# type: ignore[code]`
+    #: 只豁免指定错误码，而非整行）；登记里写的「撤销条件」也随之成为机器判据。
     registered: Registry = {
-        (d["episode"], d["path"]): (d.get("reason", ""), d.get("fingerprint"))
+        (d["episode"], d["path"]): (d["reason"], d["fingerprint"])
         for d in reg.get("drift", [])
     }
     #: 分代登记（[[skeleton.generation]]）：花名册集「整组停在旧代」的合法态。与 drift
@@ -217,12 +300,7 @@ def main() -> int:
             "模板时新性暂无担保（新工作区首个系列落成后自愈）"
         )
 
-    # 受门档位（seeded 不设门）
-    gated = [
-        (rel, cls)
-        for cls in ("frozen", "overridable", "regioned", "structured")
-        for rel in classes.get(cls, [])
-    ]
+    gated = [(rel, cls) for cls in GATED_CLASSES for rel in classes.get(cls, [])]
 
     unregistered = 0
     #: (代 id, slug) → {rel: 'new' | 'old'}：分代状态收集——GENERATION-MIXED
@@ -388,7 +466,7 @@ def main() -> int:
         print("\n  已登记的合法偏离（逃逸口必须存在，但必须被记录）：")
         for (slug, rel), (why, pin) in sorted(registered.items()):
             stale = "" if slug in known_slugs else "  ⚠️ 不在 series.json：陈旧登记"
-            print(f"    · {slug} / {rel}  [指纹 {pin or '未钉'}]{stale}\n        {why}")
+            print(f"    · {slug} / {rel}  [指纹 {pin}]{stale}\n        {why}")
 
     print(
         f"\n>> 未登记漂移 {unregistered} 处"

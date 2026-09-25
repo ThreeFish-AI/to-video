@@ -217,29 +217,26 @@ def test_every_template_file_is_classified():
 
 @needs_real_tree
 def test_drift_entries_reference_real_episodes_and_paths():
-    """逃逸表不能指向不存在的集或路径——陈旧豁免会静默放行真实漂移。"""
+    """逃逸表不能指向不存在的集或路径——陈旧豁免会静默放行真实漂移。
+
+    格式判据（指纹 / reason / 档位）只在 verify_skeleton.registry_problems 实现，
+    此处只补需要真树才能判的两条。"""
+    import verify_skeleton as vs
+
     influence = Path(INTEGRATION_WS).resolve()
+    reg = ws_registry(influence)
+    assert not vs.registry_problems(reg, skeleton()["classes"])
     slugs = {p.name for p in (influence / "episodes").iterdir() if p.is_dir()}
-    for d in ws_registry(influence).get("drift", []):
+    for d in reg.get("drift", []):
         assert d["episode"] in slugs, f"drift 指向不存在的集：{d['episode']}"
         # 「缺失」哨兵 = 登记一次合法退役（整文件删除、模板保留给其他集）；
         # 哈希指纹的条目仍必须指向实存文件，否则就是陈旧豁免
-        is_absent = d.get("fingerprint") == "缺失"
         assert (
-            is_absent or (influence / "episodes" / d["episode"] / d["path"]).is_file()
+            d["fingerprint"] == vs.ABSENT
+            or (influence / "episodes" / d["episode"] / d["path"]).is_file()
         ), (
             f"drift 指向不存在的文件：{d['episode']}/{d['path']}"
             '（若为合法退役，fingerprint 须钉 "缺失" 哨兵）'
-        )
-        assert d.get("reason", "").strip(), (
-            f"{d['episode']}/{d['path']} 缺 reason —— 逃逸口必须被记录，"
-            "无理由的豁免下一个人无法判断能否撤销"
-        )
-        # 机制上允许缺 fingerprint（向前兼容），但策略上不允许：不钉指纹的豁免
-        # 等于「该文件从此永久免检」，包括与 reason 无关的后续改动。
-        assert len(d.get("fingerprint", "")) == 12 or is_absent, (
-            f"{d['episode']}/{d['path']} 缺 12 位 fingerprint —— 未钉指纹的豁免"
-            "会把该文件此后的任何漂移一并放行；当前值可从 verify_skeleton.py 报告里取"
         )
 
 
@@ -392,14 +389,17 @@ def test_template_carries_no_workspace_registry():
 
 
 @pytest.mark.parametrize(
-    "table",
+    ("table", "hint", "wrong_hint"),
     [
-        "drift",  # 旧版 skill 侧写法
-        "skeleton.drift",  # 照抄 skeleton.toml 格式说明里的工作区示例（RSI-010 评审回归）
+        # 旧版 skill 侧写法：须加前缀
+        ("drift", "加 skeleton. 前缀", "原样移入"),
+        # 照抄 skeleton.toml 格式说明里的工作区示例（RSI-010 评审回归）：已带前缀，
+        # 再教「加前缀」会得到 [[skeleton.skeleton.drift]]，登记被静默忽略
+        ("skeleton.drift", "原样移入", "加 skeleton. 前缀"),
     ],
 )
-def test_skill_side_registry_is_refused(tmp_path, table):
-    """**正控**：skill 侧写登记 ⇒ 大声退出并指路工作区。静默忽略会让登记者
+def test_skill_side_registry_is_refused(tmp_path, table, hint, wrong_hint):
+    """**正控**：skill 侧写登记 ⇒ 大声退出并按写法指路工作区。静默忽略会让登记者
     误以为已豁免；与工作区合并读取则是两处登记的 split-brain。"""
     skill = mirror_skill(tmp_path)
     ws = flat_ws(tmp_path)
@@ -412,6 +412,101 @@ def test_skill_side_registry_is_refused(tmp_path, table):
     r = run(skill / "scripts" / "verify_skeleton.py", cwd=ws)
     assert r.returncode != 0, f"skill 侧登记被静默接受：\n{r.stdout}"
     assert "to-video.toml" in r.stderr and "skeleton.drift" in r.stderr, r.stderr
+    assert hint in r.stderr and wrong_hint not in r.stderr, r.stderr
+
+
+# ── 工作区登记的载入期校验：登记住工作区后本仓测试管不到它（RSI-010 三次评审）──
+
+
+def _valid_registry() -> dict:
+    """合法基线：各用例只在其上破坏一处（负控见 test_registry_problems_accepts_valid）。"""
+    return {
+        "drift": [
+            {
+                "episode": "a-video",
+                "path": "video/src/types.ts",
+                "fingerprint": "0123456789ab",
+                "reason": "偏离原因；撤销条件",
+            }
+        ],
+        "generation": [
+            {
+                "id": "g",
+                "reason": "升级内容；整组同步指引",
+                "episodes": ["a-video"],
+                "legacy": {"video/src/Root.tsx": "缺失"},
+            }
+        ],
+    }
+
+
+def _legacy_equals_template(reg: dict) -> None:
+    import verify_skeleton as vs
+
+    rel = "video/src/Root.tsx"
+    tmpl_fp = vs.fingerprint(vs.template_source(rel), rel, "frozen")
+    reg["generation"][0]["legacy"][rel] = tmpl_fp
+
+
+def test_registry_problems_accepts_valid():
+    import verify_skeleton as vs
+
+    assert vs.registry_problems(_valid_registry(), skeleton()["classes"]) == []
+
+
+@pytest.mark.parametrize(
+    ("mutate", "needle"),
+    [
+        (lambda r: r["drift"][0].pop("fingerprint"), "缺 fingerprint"),
+        (lambda r: r["drift"][0].update(fingerprint="abc"), "非法"),
+        (lambda r: r["drift"][0].update(reason=" "), "缺 reason"),
+        (lambda r: r["drift"][0].update(path="README.md"), "不在受门档位"),
+        (lambda r: r["drift"].append(dict(r["drift"][0])), "重复"),
+        (lambda r: r.update(drift={"episode": "a-video"}), "数组表"),
+        (lambda r: r["generation"][0].update(episodes=[]), "花名册"),
+        # 模板已移除的文件（旧 npmrc-inert-key 代）：条目作废
+        (
+            lambda r: r["generation"][0]["legacy"].update({"video/.npmrc": "缺失"}),
+            "不在受门档位",
+        ),
+        (_legacy_equals_template, "永真豁免"),
+    ],
+    ids=[
+        "drift-unpinned",
+        "drift-bad-fp",
+        "drift-no-reason",
+        "drift-ungated-path",
+        "drift-duplicate",
+        "drift-not-array",
+        "gen-empty-roster",
+        "gen-ungated-legacy",
+        "gen-legacy-is-template",
+    ],
+)
+def test_registry_problems_flags_each_form(mutate, needle):
+    import verify_skeleton as vs
+
+    reg = _valid_registry()
+    mutate(reg)
+    problems = vs.registry_problems(reg, skeleton()["classes"])
+    assert any(needle in p for p in problems), problems
+
+
+def test_unpinned_drift_is_refused_at_load(tmp_path):
+    """**正控**：工作区登记缺指纹 ⇒ 载入即大声退出。旧实现经 exempt() 无条件放行
+    （单集系列 I1/I2 全绿），该文件此后任何改动永久免检。"""
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    assert scaffold_into(skill, ws, PROBE_A).returncode == 0
+    write_series(ws, [("solo", [PROBE_A])])
+    rel = "video/src/types.ts"
+    victim = ws / "episodes" / PROBE_A / rel
+    victim.write_bytes(victim.read_bytes() + b"\n// unpinned deviation\n")
+    register_drift(ws, PROBE_A, rel, None)
+
+    r = run(skill / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
+    assert r.returncode != 0, f"未钉指纹的登记被静默放行：\n{r.stdout}"
+    assert "缺 fingerprint" in r.stderr and "to-video.toml" in r.stderr, r.stderr
 
 
 def test_stale_registry_entry_is_flagged(tmp_path):
@@ -830,39 +925,14 @@ GEN_GROUP: tuple[tuple[str, str], ...] = (
 
 @needs_real_tree
 def test_generation_registry_is_well_formed():
-    """分代表条目合法性：legacy 指纹 12 位 hex 或「缺失」；≠ 当前模板指纹
-    （登记成当代值 = 永真豁免，门对该文件失明——同 drift 不钉指纹的教训）；
-    声明的文件都在受门档位里（不在档内的文件无从按档位口径比对指纹）。
-    Main 的 regioned 归一化口径无法在测试内对旧内容复现，由「≠ 当前模板指纹」
-    与真树正控（各集停在登记旧代时门全绿）共同担保。"""
+    """真树分代表合法：判据（legacy 12 位 hex 或「缺失」、≠ 当前模板指纹、文件在
+    受门档位、id/reason/花名册非空）唯一实现于 verify_skeleton.registry_problems，
+    离线正反控见 test_registry_problems_*。Main 的 regioned 归一化口径无法在测试内
+    对旧内容复现，由「≠ 当前模板指纹」与真树正控（各集停在登记旧代时门全绿）共同担保。"""
     import verify_skeleton as vs
 
-    skel = skeleton()
-    gens = ws_registry(Path(INTEGRATION_WS).resolve()).get("generation", [])
-    gated_of = {
-        rel: cls for cls in GATED_CLASSES for rel in skel["classes"].get(cls, [])
-    }
-    for g in gens:
-        assert g["id"].strip() and g.get("reason", "").strip(), (
-            f"generation {g.get('id')!r} 缺 id/reason —— 分代必须被记录"
-        )
-        assert g.get("episodes"), f"generation {g['id']} 花名册为空"
-        legacy = g.get("legacy", {})
-        assert legacy, f"generation {g['id']} 缺 legacy 指纹表"
-        for rel, fp in legacy.items():
-            assert rel in gated_of, (
-                f"generation {g['id']} 声明了不受门的文件：{rel}"
-                "（分代豁免按档位口径比对指纹）"
-            )
-            assert fp == "缺失" or re.fullmatch(r"[0-9a-f]{12}", fp), (
-                f"generation {g['id']} 的 {rel} 指纹非法：{fp!r}"
-                "（应 12 位 hex 或「缺失」哨兵）"
-            )
-            tmpl_fp = vs.fingerprint(vs.template_source(rel), rel, gated_of[rel])
-            assert fp != tmpl_fp, (
-                f"generation {g['id']} 的 {rel} legacy 指纹 == 当前模板 —— "
-                "登记成当代值会把该文件永久豁免"
-            )
+    reg = ws_registry(Path(INTEGRATION_WS).resolve())
+    assert not vs.registry_problems(reg, skeleton()["classes"])
 
 
 @needs_real_tree
