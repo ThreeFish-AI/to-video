@@ -144,13 +144,22 @@ def parse_md(
 #       校验「去标点后与 text 全等、发音标注逐个原样」，改字必须回 narration.md 改。
 # 无该文件 ⇒ narration.json 与今日逐字节一致（存量集零波及）；en 构建不消费台本
 # （story 档 EN 回退逐句）。
-#: 「只许改标点」的比较口径：半角 `.,:` 夹在两数字之间时是数值/时刻的一部分
-#: （3.5%、1,200、10:30）而非标点——剥掉它，say 删掉小数点也能过校验、合成念成另一个数
-CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?]|(?<!\d)[.,:]|[.,:](?!\d)")
+#: 「只许改标点」的比较口径，按标点**串**整体判定（逐字符判定会被 `3……5` 绕过）：
+#: 不夹在两数字之间 ⇒ 剥掉；夹在两数字之间且恰为单个半角 `.,:` ⇒ 数值/时刻的一部分
+#: （3.5%、1,200、10:30），原样保留；夹在两数字之间的其余标点 ⇒ 归一为分隔符（「2020，2026」
+#: 改「2020…2026」仍放行）。后两条保证 say 删小数点、往数字串里插 `，` 或删掉两数之间的
+#: 标点都比对不上——否则合成念成另一个数
+CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?.,:]+")
 
 
 def _strip_punct(s: str) -> str:
-    return CUES_PUNCT_RE.sub("", s)
+    def repl(m: re.Match[str]) -> str:
+        a, b = m.start(), m.end()
+        if not (a and s[a - 1].isdecimal() and b < len(s) and s[b].isdecimal()):
+            return ""
+        return m.group() if m.group() in (".", ",", ":") else "\x1f"
+
+    return CUES_PUNCT_RE.sub(repl, s)
 
 
 def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:

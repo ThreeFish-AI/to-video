@@ -404,6 +404,23 @@ def test_resolve_block_vec_rejects_over_strength():
     assert bad == "p0-01"
 
 
+def test_resolve_block_vec_accepts_full_strength_despite_float_sum():
+    """归一后 Σ 浮点可为 1+1ulp：build 放行的 alpha=0.8 不得被 Σ×α≤0.8 护栏误拒（服务端同口径）。"""
+    emo = "afraid:0.01,surprised:0.04,calm:0.13"
+    raw = tts.parse_emo_vector(emo)
+    naive = [x / sum(raw) for x in raw]
+    assert sum(naive) * 0.8 > 0.8  # 前提：该方向确实踩到浮点边界
+    b = [dict(P0[0])]
+    b[0]["cue"] = {"emo": emo, "alpha": 0.8}
+    vec, alpha, bad = tts.resolve_block_vec(b, tts.STYLE_PRESETS["story"]["vec"], 0.28)
+    assert bad is None and alpha == 0.8
+    assert sum(vec) * alpha <= 0.8
+    assert max(abs(a - c) for a, c in zip(vec, naive)) < 1e-15
+    # 未踩边界的档（α<0.8）向量逐位不变 ⇒ 摘要不漂移
+    b[0]["cue"] = {"emo": emo}
+    assert tts.resolve_block_vec(b, tts.STYLE_PRESETS["story"]["vec"], 0.28)[0] == naive
+
+
 def test_resolve_block_vec_falls_back_to_preset():
     vec, alpha, bad = tts.resolve_block_vec(
         [dict(P0[0])], tts.STYLE_PRESETS["story"]["vec"], 0.28
@@ -541,6 +558,30 @@ def test_apply_cues_keeps_digit_separators(tmp_path):
         items = [
             {"id": "p0-01", "scene": "P0", "text": "增长了3.5%，用时10:30，共1,200次。"}
         ]
+        cues.write_text(f'[say]\np0-01 = "{say}"\n', encoding="utf-8")
+        _, n_say, errs = bn.apply_cues(tmp_path, items)
+        if ok:
+            assert errs == [] and n_say == 1, say
+        else:
+            assert any("只许改标点" in e for e in errs), say
+
+
+def test_apply_cues_rejects_punct_inserted_into_numbers(tmp_path):
+    """往数字串里插标点（含多字符 `……`）或删掉两数之间的标点都改了读数，须拒；
+    两数之间已有的标点换成别的表演标点照常放行。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for text, say, ok in (
+        ("一共1200台。", "一共12，00台。", False),
+        ("一共1200台。", "一共12……00台。", False),
+        ("写于2026年。", "写于20，26年。", False),
+        ("从2020，2026两年。", "从20202026两年。", False),
+        ("从2020，2026两年。", "从2020……2026两年！", True),
+        ("一共1200台。", "一共，1200台！", True),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": text}]
         cues.write_text(f'[say]\np0-01 = "{say}"\n', encoding="utf-8")
         _, n_say, errs = bn.apply_cues(tmp_path, items)
         if ok:

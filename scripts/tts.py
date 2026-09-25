@@ -981,7 +981,7 @@ def resolve_block_vec(
 
     cue 方向归一到 Σ=1、强度取 cue.alpha 或预设 α——与 #07 的「名义 Σ0.35×α0.8」
     在上游 4 位截断后逐位等价（0.35×0.8 = 1×0.28），故可复现定档 take。
-    返回 (vec, alpha, 出错的句 id|None)；Σ×α>0.8 时返回错误 id 由调用方报错。
+    返回 (vec, alpha, 出错的句 id|None)；α>0.8（方向已归一，有效和即 α）时返回错误 id 由调用方报错。
     """
     cue = block_items[0].get("cue")
     if not cue:
@@ -992,8 +992,14 @@ def resolve_block_vec(
         return list(preset_vec), preset_alpha, block_items[0]["id"]
     vec = [x / total for x in vec]
     alpha = float(cue.get("alpha", preset_alpha))
-    if sum(vec) * alpha > 0.8:
+    if alpha > 0.8:
         return vec, alpha, block_items[0]["id"]
+    # 归一后 Σ 浮点可能是 1.0000000000000002：α=0.8 时 Σ×α 以 1 ulp 之差撞本地与服务端的
+    # ≤0.8 护栏（build 已放行同一台本）。仅此情形把最大分量逐 ulp 下调（≤2 步），上游 4 位
+    # 截断下无可听差异；未超界的块向量与摘要逐位不变
+    top = max(range(len(vec)), key=vec.__getitem__)
+    while sum(vec) * alpha > 0.8:
+        vec[top] = math.nextafter(vec[top], 0.0)
     return vec, alpha, None
 
 
