@@ -53,7 +53,7 @@ cd $P/video && pnpm install && ./node_modules/.bin/tsc --noEmit
 
 # 6) ⑧ 循环「修场景 → render → qa」至零 FAIL，才放行终渲
 uv run --no-project $T/scripts/pipeline.py --project $P render   # → $P/out/draft.mp4
-uv run --no-project $T/scripts/pipeline.py --project $P qa
+uv run --no-project $T/scripts/pipeline.py --project $P qa --video out/draft.mp4 --last-n 6 --check   # --video 按 $P 解析；--scene/--last-n/句 id 三选一
 
 # 7) ⑨ 终渲 + 字幕 + 交付（deliver 刻意不串联，须显式执行）
 uv run --no-project $T/scripts/pipeline.py --project $P render --final

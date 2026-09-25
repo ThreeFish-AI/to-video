@@ -25,7 +25,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- SKILL.md 速查表「通过门」列与 stages.toml 漂移 6/9 行、快速通道教 `npx tsc --noEmit`（与 06「`./node_modules/.bin/` 直调」矛盾），均已修正并加回归门（RSI-008）；`prepare_ref.py --out` 帮助与 tts 指纹不符提示此前指向不存在的 `pipeline/voices/`，改为如实的 `$V`（工作区 voices/）。
+- SKILL.md 速查表「通过门」列与 stages.toml 漂移 6/9 行、快速通道教 `npx tsc --noEmit`（与 06「`./node_modules/.bin/` 直调」矛盾），均已修正并加回归门（RSI-008）；工作流 ⑧ 的裸 `qa`（缺视频与选择器，必在 qa_frames 处 parser.error）改为 `qa --video out/draft.mp4 --last-n 6 --check`，由 `test_router_qa_commands_pass_both_parsers` 以两层真解析器执法；`prepare_ref.py --out` 帮助与 tts 指纹不符提示此前指向不存在的 `pipeline/voices/`，改为如实的 `$V`（工作区 voices/）。
 
 - scaffold 结尾提示与 skeleton.toml 注释不再教人加 `--ignore-workspace`（RSI-005）：ISSUE-175 后分集 `pnpm-workspace.yaml` 已自锚，该参数会连本工程 workspace 一并忽略致 `ERR_PNPM_IGNORED_BUILDS`；新增测试跨行拦截用户可见文案（含模板）中的该命令形态。模板 `video/.npmrc` 的 `ignore-workspace=true` 经探针确认在 pnpm ≥11 下不被读取（死配置），改为只含说明，已发布 14 集登记 `[[generation]] npmrc-inert-key` 停旧代；顺带补齐 jev 集的 bilingual-i18n 花名册、为 agent-skills 集 Main 空行偏离登记 `[[drift]]`，真树骨架门 `--strict` 由 7 处未登记转为 0。
 - 覆盖门「sidecar 缺 type」WARN 不再指向不存在的 `scripts/archify_types.py`（RSI-006）：三处文案改为如实指路（在 sidecar JSON 顶层写回 `type`；`record_archify_all` 重录经 `prior_type` 保留，单图 `record_archify.py` 重录须带 `--type`）；新增测试要求用户可见文案（脚本 / 文档 / 模板）点名的 `scripts/*.py` 必须真实存在。

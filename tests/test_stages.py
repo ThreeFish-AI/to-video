@@ -22,6 +22,7 @@ render 旧骨架预检）。
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -412,6 +413,44 @@ def test_router_gates_match_stages():
         f"只核到 {checked} 行（链接列形态变了？本门不得空转）"
     )
     assert not drift, "速查表门列与 stages.toml 漂移：\n  " + "\n  ".join(drift)
+
+
+#: SKILL.md 的 qa 调用行：取子命令后的实参（止于行尾注释）。
+ROUTER_QA_RE = re.compile(r"pipeline\.py\s+--project\s+\S+\s+qa\b([^#`\n]*)")
+
+
+def test_router_qa_commands_pass_both_parsers(monkeypatch, tmp_path):
+    """SKILL.md 的 qa 命令须过 pipeline.py 与 qa_frames.py 两层 argparse 且带 --check
+    （RSI-008 评审：裸 `qa` 在 qa_frames 处 parser.error，⑧ 修复循环到不了零 FAIL）。
+
+    用真解析器判定而非文本启发式：「有 --video 却缺选择器」同样会红。
+    """
+    import pipeline
+    import qa_frames
+
+    tails = ROUTER_QA_RE.findall(_router_text())
+    assert tails, "SKILL.md 里没找到 qa 命令（检测器失效？）"
+    monkeypatch.setattr(pipeline, "load_config", lambda root: ({}, {}))
+    for tail in tails:
+        forwarded: list[list[str]] = []
+        monkeypatch.setattr(
+            pipeline, "run", lambda cmd, cwd=None: forwarded.append(cmd) or 0
+        )
+        argv = ["pipeline.py", "--project", str(tmp_path), "qa", *shlex.split(tail)]
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit) as outer:
+            pipeline.main()
+        assert outer.value.code == 0, f"pipeline.py 拒收参数：qa{tail}"
+        (cmd,) = forwarded
+        inner = cmd[next(i for i, a in enumerate(cmd) if a.endswith("qa_frames.py")) :]
+        monkeypatch.setattr(sys, "argv", inner)
+        with pytest.raises(SystemExit) as ei:
+            qa_frames.main()
+        # 过了参数校验即去读 manifest（tmp 工程没有）；parser.error 的退出码是 2
+        assert "manifest.json 不存在" in str(ei.value.code), (
+            f"qa_frames 拒收参数：qa{tail}"
+        )
+        assert "--check" in inner, f"qa 未带 --check，过不了 ⑧ 门：qa{tail}"
 
 
 def test_router_declares_key_invariants_section():
