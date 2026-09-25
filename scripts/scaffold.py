@@ -186,7 +186,7 @@ def main() -> int:
     )
     print(
         "  4. script/narration.md → storyboard.md → video/src/scenes/*.tsx（全部新写）；"
-        "④ 校验后按 Stage ⑤ 成文优化规格润色四稿再切镜"
+        "④ 校验后按 Stage ⑤ 润色笔记/策划/逐字稿再切镜，分镜定稿前回调 ⑤ 第七节"
     )
     print(
         "  5. video/src/Main.tsx：填 scenes/ import 与 SCENE_COMPONENTS 注册表"
