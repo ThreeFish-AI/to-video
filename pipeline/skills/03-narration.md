@@ -66,6 +66,30 @@
   [VOICE-CLONING.md §5.4](../VOICE-CLONING.md)）。
 - 发现的读错字请沉淀到 [PRON-GLOSSARY.md](../PRON-GLOSSARY.md) 供跨集复用。
 
+## 配音台本（narration.cues.toml，与主稿同产）
+
+story 档（默认配音）按**故事块**合成演绎——块边界、块情绪、表演标点写进
+`script/narration.cues.toml`，**写稿时与 narration.md 一同产出**（定稿口径见
+[VOICE-CLONING §4.5](../VOICE-CLONING.md)；无台本可跑但块间情绪对比打折）：
+
+```toml
+[block.p0-01]                        # 该句 id 是一个故事块的起点
+emo = "afraid:0.18,surprised:0.12"   # 块情绪方向（happy/angry/sad/afraid/disgusted/
+                                     # melancholic/surprised/calm；强度由预设定，可 alpha= 覆盖）
+
+[say]                                # 表演标点：只进合成文本，字幕仍取 narration.md 原句
+p0-07 = "2026年9月，一篇论文，押了一个大胆的赌注。"
+```
+
+导演规则（第三轮试听定档的实证，2026-09-25）：
+1. **按故事弧分块**，不按字数均分：铺垫（好奇/平实）→ 冲突（焦虑/反问）→ 转折（悬念）
+   → 揭示（兴奋）→ 收束（得意/满足）；每块 ≤3 句、≤90 字，幕界天然断块；
+2. **块间要换情绪**——全片一种情绪就是「朗读感」的根因；相邻块方向尽量不同
+   （如 surprised → melancholic → happy 的起伏曲线）；
+3. 表演标点（`…` 拖停顿、`！` 抛高点、关键短语前加逗号顿一下）只许改标点，
+   `build` 会校验「去标点后与正文全等」，改字必须回 narration.md；
+4. 发音标注句的 `say` 必须原样携带 `<字|读音>`。
+
 ## 英文译稿（双语集，可选）
 
 - **激活**：`pipeline.toml` 声明 `narration.langs = ["zh", "en"]`（`narration.langs` 是语言激活的唯一来源；未声明的集与现状完全一致）。

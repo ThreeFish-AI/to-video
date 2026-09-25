@@ -125,10 +125,23 @@ def main() -> None:
         )
         return
     elapsed = span
-    # 每句墙钟 = 相邻 mtime 差；首句差值不可得（跑前时刻未知），不进统计
+    # 每句墙钟 = 相邻 mtime 差；首句差值不可得（跑前时刻未知），不进统计。
+    # 块模式（story 档）一次请求落 N 个 mp3（mtime 差 <1s）——先按 <1s 聚簇成
+    # 「一次合成」单位再算墙钟，否则块内近零差会拉爆秒/字中位。
+    clusters: list[tuple[str, float, float]] = []  # (簇首句 id, 簇首 mtime, 簇内字数)
+    cur_ids: list[str] = [done[0][1]]
+    cur_t0 = done[0][0]
+    prev_t = done[0][0]
+    for t, sid in done[1:]:
+        if t - prev_t >= 1.0:
+            clusters.append((cur_ids[0], cur_t0, sum(chars[i] for i in cur_ids)))
+            cur_ids, cur_t0 = [], t
+        cur_ids.append(sid)
+        prev_t = t
+    # 簇墙钟 = 下一簇首句 mtime − 本簇首句 mtime（代表句＝下一簇首句）；末簇不可得
     walls = [
-        (done[k + 1][1], mtimes[k + 1] - mtimes[k], chars[done[k + 1][1]])
-        for k in range(len(done) - 1)
+        (clusters[k + 1][0], clusters[k + 1][1] - clusters[k][1], clusters[k][2])
+        for k in range(len(clusters) - 1)
     ]
     per_s = [w for _, w, _ in walls]
     spc = [w / max(1, c) for _, w, c in walls]

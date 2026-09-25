@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import io
 import math
 import sys
@@ -40,6 +41,7 @@ import numpy as np
 import soundfile as sf
 import uvicorn
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 # 客户端 tts.py 与本服务分属两个运行环境（skill 侧轻依赖 vs index-tts venv），但服务启动
@@ -83,6 +85,9 @@ def load_model(
             "supports_duration_factor": True,
             # v2 的 infer() 签名里没有 text_normalization（infer_v2.py 无该形参），v2.5 才有
             "supports_text_normalization": True,
+            # 块切分（story 档）：low_vram 路径 >40 字即按标点分段（段间 interval_silence
+            # 定长零值静音），句界会被污染，不具备块切分条件
+            "supports_blocks": not getattr(tts, "low_vram", False),
             # 从对象实际状态派生：MPS 分支构造器内部强制 use_bf16=False（实际 fp32）
             "dtype_flag": "bf16" if getattr(tts, "use_bf16", use_bf16) else "fp32",
         }
@@ -189,15 +194,47 @@ EMO_LABELS = "happy,angry,sad,afraid,disgusted,melancholic,surprised,calm"
 #     溢出后果不是音频被裁短，而是文本尾部根本没被念出（infer_v2_5.py:792-813）。
 
 
+class BlockSpec(BaseModel):
+    """段落演绎（story 档）块切分参数：服务端把一次块合成的 PCM 按句界切回 N 段。
+
+    weights：各句「发音量」权重（客户端按字符口径算好），用于把 N−1 个句界匹配到
+    静音段（期望位置按累计权重内插）；discard_sec：每个句界静音正中丢弃的秒数——
+    时间轴随后加回同值，听感＝自然停顿原值；tail_pad_sec：末句尾垫静音（块间对齐）。
+    """
+
+    weights: list[float]
+    discard_sec: float = 0.32
+    tail_pad_sec: float = 0.0
+
+    @field_validator("weights")
+    @classmethod
+    def _weights_ok(cls, v: list[float]) -> list[float]:
+        if len(v) < 1:
+            raise ValueError("block.weights 不能为空")
+        if not all(math.isfinite(x) and x > 0 for x in v):
+            raise ValueError("block.weights 各分量必须为正有限数值")
+        return v
+
+    @field_validator("discard_sec", "tail_pad_sec")
+    @classmethod
+    def _sec_ok(cls, v: float) -> float:
+        if not 0.0 <= v <= 2.0:
+            raise ValueError("block 时间参数必须在 [0, 2] 秒")
+        return v
+
+
 class SynthesizeRequest(BaseModel):
     text: str
     ref_path: str
     emo_vector: list[float] | None = None
     # 情感参考音频：音色取自 ref_path，语调/情绪取自本字段（另一段录音），无合成味的风格迁移。
-    # 本服务拒绝它与 emo_vector 同传 —— 但理由不是「上游会静默丢弃音频」（那是误读：
-    # infer_v2_5.py:611 的 `if emo_audio_prompt is None` 不成立，音频仍会经 merge_emovec 以
-    # (1−Σw) 权重混进最终 emovec）。真实问题是 **emo_alpha 被消费两次**：先在 :605-608 缩放
-    # 8 维向量，又在 :763 用作参考音频的隐空间插值系数，语义混乱且不可预测。
+    # 本服务拒绝它与 emo_vector 同传，理由有二（第 1 条为 2026-09-25 核源码勘误：
+    # infer_v2_5.py:582-585 只要给了 emo_vector 就把 emo_audio_prompt 置 None——音频被
+    # 整个丢弃，同传实测与纯向量输出逐字节一致；**并非**旧注释所说「音频仍会以 (1−Σw)
+    # 权重混进最终 emovec」，该表述错误，见 INDEXTTS-2.5-ADVANCED §3.1 勘误）：
+    #   1) 向量在场即音频失效，同传没有意义；
+    #   2) emo_alpha 被消费两次：先在 :605-608 缩放向量（clamp [0,1]），又在 merge_emovec
+    #      用作音频插值系数，语义混乱且不可预测。
     emo_ref_path: str | None = None
     # 自然语言情感描述（如「轻快爽朗、自信阳光」）：服务端先用 QwenEmotion 转成 8 维向量，
     # 再按 ≤0.8 有效和规则缩放后当作 emo_vector 使用，并在 X-Emo-Vector 响应头回显供固化复用。
@@ -206,6 +243,8 @@ class SynthesizeRequest(BaseModel):
     duration_factor: float = 1.0
     lang: str = "ZH"
     num_beams: int = 1
+    # 块切分（story 档专用）：给出即走 JSON 响应（clips 数组），不再返回单个 mp3。
+    block: BlockSpec | None = None
     # ---- 采样参数族：缺省即上游默认，取值域对齐 webui.py:901-910 的滑杆区间 ----
     temperature: float = SAMPLING_DEFAULTS["temperature"]
     top_p: float = SAMPLING_DEFAULTS["top_p"]
@@ -407,12 +446,14 @@ async def lifespan(app: FastAPI):
         encoder=encoder,
         supports_duration_factor=meta["supports_duration_factor"],
         supports_text_normalization=meta["supports_text_normalization"],
+        supports_blocks=meta.get("supports_blocks", False),
         supports_emo_text=getattr(tts, "qwen_emo", None) is not None,
         infer_lock=asyncio.Lock(),
     )
     print(
         f">> 就绪：IndexTTS-{STATE['version']} device={STATE['device']} dtype={STATE['dtype']} "
         f"encoder={encoder} emo_text={'on' if STATE['supports_emo_text'] else 'off'} "
+        f"blocks={'on' if STATE['supports_blocks'] else 'off'} "
         f"sampling=on seed=on"
     )
     yield
@@ -440,6 +481,9 @@ async def health():
         # 默认值完全一致），故恒为 True。客户端据此在旧服务上对非默认取值硬失败。
         "supports_sampling_params": True,
         "supports_seed": True,
+        # 块切分（story 档）：low_vram 路径 >40 字即分段（段间 200ms 定长静音会污染句界），
+        # 不具备条件；v2 未验证亦不开放。客户端据此在旧服务上对块模式硬失败。
+        "supports_blocks": STATE.get("supports_blocks", False),
     }
 
 
@@ -452,6 +496,74 @@ def _mps_empty_cache() -> None:
             torch.mps.empty_cache()
     except Exception:  # noqa: BLE001 - 清缓存失败不影响合成结果
         pass
+
+
+def _block_reply(data, sr: int, req: SynthesizeRequest) -> tuple[dict, str]:
+    """块 PCM → {split, clips, cuts, seams}（切分本体是 tts.py 的纯函数，numpy 在本进程可用）。
+
+    切分失败不抛错：返回 split="failed"+原因，客户端按逐句兜底（保持 HTTP 200——
+    失败是可降级的业务结果，不是服务错误）。
+    """
+    from tts import (  # noqa: E402 - 与文件头同方向（server→tts），运行时导入省冷启动
+        frame_db,
+        plan_block_cuts,
+        silence_runs,
+        split_block_pcm,
+    )
+
+    n = len(req.block.weights)
+    if n == 1:  # 单句块：无句界，仅尾垫
+        clips_pcm = split_block_pcm(
+            data, sr, [], req.block.discard_sec, req.block.tail_pad_sec
+        )
+        return _clips_json(clips_pcm, sr, [], []), "json"
+    db = frame_db(data, sr)
+    runs, on, off = silence_runs(db, sr)
+    picked = plan_block_cuts(runs, req.block.weights, len(data) / sr, on, off)
+    if picked is None:
+        return {
+            "split": "failed",
+            "reason": f"静音候选与句数不匹配（{len(runs)} 个候选 / {n - 1} 个句界）",
+            "clips": None,
+        }, "json"
+    # 分段缝检测：上游对 >118 token 的块按标点分段并以 interval_silence 定长静音拼接，
+    # 该静音是精确零值且不随内容变化——检出即告警（客户端 WARN 提示缩短块）。
+    # ⚠️ 只看**语音之间**的零值段：块首/块尾的数字静音（BigVGAN 输出的天然零垫）不是缝
+    # （2026-09-25 实测：不排除首尾时 4/4 块全部误报）。
+    import numpy as np
+
+    flat = data.flatten()
+    zero = np.flatnonzero(np.diff((flat == 0).astype(int)) != 0) + 1
+    seams = []
+    if len(zero):
+        edges = np.concatenate(([0], zero, [len(flat)]))
+        for k in range(len(edges) - 1):
+            if flat[edges[k]] == 0:
+                t0, dur = edges[k] / sr, (edges[k + 1] - edges[k]) / sr
+                if 0.15 <= dur <= 0.25 and on < t0 and t0 + dur < off:
+                    seams.append(round(t0, 2))
+    clips_pcm = split_block_pcm(
+        data, sr, picked, req.block.discard_sec, req.block.tail_pad_sec
+    )
+    return (
+        _clips_json(
+            clips_pcm, sr, [(round(s, 2), round(e, 2)) for s, e in picked], seams
+        ),
+        "json",
+    )
+
+
+def _clips_json(clips_pcm, sr: int, cuts, seams) -> dict:
+    clips = []
+    for pcm, _nat in clips_pcm:
+        audio, _fmt = encode_mp3(pcm, sr)
+        clips.append(
+            {
+                "audio": base64.b64encode(audio).decode(),
+                "durationSec": round(len(pcm) / sr, 3),
+            }
+        )
+    return {"split": "ok", "clips": clips, "cuts": cuts, "seams": seams}
 
 
 @app.post("/synthesize")
@@ -506,6 +618,11 @@ async def synthesize(req: SynthesizeRequest):
             "IndexTTS-2 的 infer() 没有 text_normalization 形参（v2.5 专属）："
             "请改用 v2.5 服务，或去掉 --no-text-normalization",
         )
+    if req.block and not STATE.get("supports_blocks"):
+        raise HTTPException(
+            400,
+            "块切分不可用（IndexTTS-2 或 low_vram 路径不支持）——客户端应以 supports_blocks 预检",
+        )
 
     derived: list[float] | None = None
     async with STATE["infer_lock"]:
@@ -522,13 +639,20 @@ async def synthesize(req: SynthesizeRequest):
                     _infer_sync, STATE["tts"], ref, req, Path(td)
                 )
                 data, sr = await asyncio.to_thread(_read_audio, wav_path)
-                audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
+                if req.block:
+                    # 块模式：PCM 在此（float32、未过 mp3 编码），切分走 tts.py 的纯函数
+                    # （服务端持有 numpy；客户端 mutagen-only 且不得 import 兄弟模块）
+                    audio, fmt = await asyncio.to_thread(_block_reply, data, sr, req)
+                else:
+                    audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
         finally:
             # MPS 长跑泄漏对冲：每次合成后归还分配器缓存。实测（2026-09-23 本机）连续
             # 合成约 40 分钟后 MPS 缓存累积击穿 30 GiB 上限，之后所有请求 500 且 health
             # 假绿；empty_cache 每句 <100ms，换整集长跑稳定。放 finally：失败路径（NaN
             # 500 / infer 抛错，含 OOM 本身）同样归还，否则一次击穿后缓存再无释放时机。
             await asyncio.to_thread(_mps_empty_cache)
+    if req.block:
+        return JSONResponse(audio)  # _block_reply 已产出 JSON dict（split ok/failed）
     headers = {"X-Audio-Format": fmt, "X-Duration-Sec": f"{len(data) / sr:.3f}"}
     if derived is not None:  # 回显 Qwen 推出的向量，便于事后用 --emo-vector 固化复现
         headers["X-Emo-Vector"] = ",".join(f"{x:g}" for x in derived)

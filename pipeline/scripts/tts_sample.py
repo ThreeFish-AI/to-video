@@ -439,6 +439,15 @@ def main() -> None:
         sampling = resolve_sampling(args)
     except ValueError as e:
         parser.error(str(e))
+    block_style = (
+        (STYLE_PRESETS.get(args.style) or {}).get("block") if args.style else None
+    )
+    if block_style:
+        print(
+            "提示：story 档的正体是「故事块」合成（块内句间自然停顿，见 VOICE-CLONING §4.5）；"
+            "tts_sample 只合成单句，听感（跨句弧线/停顿对比）不外推，以成片段落试听为准。",
+            file=sys.stderr,
+        )
     # --all-styles 下 resolve_sampling 只取命令行值（args.style 仍是默认 neutral，其预设无
     # sampling）。将来若给某个预设加了 sampling，A/B 就会静默丢掉那一档的采样口径 —— 提前拦住。
     if args.all_styles and any(p.get("sampling") for p in STYLE_PRESETS.values()):
