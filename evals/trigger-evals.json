@@ -12,7 +12,7 @@
     "should_trigger": true
   },
   {
-    "query": "这个 meetup 录屏 mp4 帮我用 whisper 生成 srt 字募，中英都要",
+    "query": "这个 meetup 录屏 mp4 帮我用 whisper 生成 srt 字幕，中英都要",
     "should_trigger": false
   },
   {
@@ -72,7 +72,7 @@
     "should_trigger": false
   },
   {
-    "query": "想把 langchain 的 agent 源码讲成一期科普视屏，代码一直在更新，怎么保证讲的内容不过时",
+    "query": "想把 langchain 的 agent 源码讲成一期科普视频，代码一直在更新，怎么保证讲的内容不过时",
     "should_trigger": true
   },
   {
