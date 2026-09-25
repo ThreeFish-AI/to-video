@@ -139,7 +139,7 @@ def project_root(workspace: Path) -> Path:
     return workspace.resolve()
 
 
-#: skill 根：templates/ 与三本手册的定位基准（模块加载期解析，永不失败）。
+#: skill 根：assets/ 模板与 references/ 文档的定位基准（模块加载期解析，永不失败）。
 SKILL = skill_root()
 
 

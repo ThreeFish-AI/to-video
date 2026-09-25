@@ -249,11 +249,13 @@ _NPX_TOOL_RE = re.compile(r"\bnpx\s+(?:tsc|remotion)\b")
 #: RSI-008 迁移后已不存在的旧路径（pipeline/scripts 是 ABI 软链、pipeline/README.md 是
 #: 迁移桩，二者仍真实存在故不在此列）；前一字符不许是词字符或 -，但**不排除 /**
 #: （`$T/…` 命令与本仓 blob 外链都以 / 起头），只放过上游
-#: apps/negentropy-influence/pipeline/… 的历史外链。
+#: apps/negentropy-influence/pipeline/… 的历史外链。另拦省略 pipeline/ 前缀的
+#: `templates/<子目录>` 与 `skills/NN` 简写（脚本注释的惯用写法）。
 _LEGACY_PATH_RE = re.compile(
     r"(?<![\w-])(?<!negentropy-influence/)"
     r"(?:pipeline/(?:skills|templates|tests|stages\.toml|VOICE-CLONING"
     r"|INDEXTTS|PRON-GLOSSARY|MODELING-PLAYBOOK)|docs/quickstart)"
+    r"|(?<![\w-])(?<!pipeline/)(?:templates/(?:video-skeleton|workspace)|skills/\d\d)"
 )
 
 
@@ -324,9 +326,15 @@ def _frozen_templates() -> set[Path]:
 
 
 def current_docs_and_code() -> list[Path]:
-    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README，减 frozen 档。"""
+    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + mermaid 图源
+    （首行 `%% source:` 指回文档章节），减 frozen 档。"""
     frozen = _frozen_templates()
-    files = {*user_facing_files(), *REFERENCES.glob("*.md"), skill_root() / "README.md"}
+    files = {
+        *user_facing_files(),
+        *REFERENCES.glob("*.md"),
+        skill_root() / "README.md",
+        *(skill_root() / "docs" / "assets" / "mermaid").glob("*.mmd"),
+    }
     return sorted(f for f in files if f not in frozen)
 
 
@@ -351,18 +359,26 @@ def test_no_npx_for_remotion_tools():
         ("[x](https://github.com/o/to-video/blob/main/pipeline/templates/x)", True),
         ("cp $T/docs/quickstart/P0.tsx", True),
         ("[x](../pipeline/stages.toml)", True),
+        ("%% source: pipeline/VOICE-CLONING.md — §一", True),
+        ("必须与 templates/video-skeleton 一致", True),
+        ("skill 只带 templates/workspace/voices/", True),
+        ("见 skills/06 清单", True),
         ("apps/negentropy-influence/pipeline/skills/06-x.md", False),
+        ("apps/negentropy-influence/pipeline/templates/workspace/x", False),
         ("$T/pipeline/scripts/tts.py", False),
         ("映射见 pipeline/README.md", False),
+        ("assets/video-skeleton/skeleton.toml", False),
+        ("ln -s <目录> ~/.claude/skills/to-video", False),
     ],
 )
 def test_legacy_path_detector_forms(line, legacy):
-    """检测器自检：`/` 起头的 `$T` 命令与本仓 blob 外链曾被整体漏检（RSI-008 复核）。"""
+    """检测器自检：`/` 起头的 `$T` 命令与本仓 blob 外链、省略 pipeline/ 前缀的
+    简写曾被漏检（RSI-008 复核）。"""
     assert bool(_LEGACY_PATH_RE.search(line)) is legacy
 
 
 def test_no_legacy_layout_paths():
-    """RSI-008 目录迁移后，现行文案不得再指向已不存在的旧 pipeline/ 子路径。"""
+    """RSI-008 目录迁移后，现行文案不得再指向已不存在的旧 pipeline/ 子路径（含简写）。"""
     offenders = [
         f"{_rel(f)}:{no} → {m.group(0)}"
         for f in current_docs_and_code()

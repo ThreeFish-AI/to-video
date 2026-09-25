@@ -11,7 +11,7 @@
     就是第二事实源，必然漂移。`status` 实时派生新鲜度，零存储。
   - 不假装能跑写作阶段（①②④⑤中的人/代理部分）——只跑工具与其质量门。
 
-用法（$T/$P 的定义见 ../README.md 路径变量约定——那里是唯一定义处，此处不复制
+用法（$T/$P 的定义见 references/PIPELINE.md 路径变量约定——那里是唯一定义处，此处不复制
 位置字面量，否则搬迁时又多两处要改）：
   uv run --no-project $T/scripts/pipeline.py --project $P <cmd>
 子命令：status / doctor / build / check / tts / captions / deliver / render / qa / all / clean-samples / stages

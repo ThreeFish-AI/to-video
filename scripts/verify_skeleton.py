@@ -7,7 +7,7 @@
 
 两条不变量（依据 references/06 的「义务限于同一系列内」）：
   I1 系列内一致：同一 series 的各集，frozen 文件哈希必须唯一
-  I2 模板不过期：baselineOf 指定的系列必须与 templates/video-skeleton 一致
+  I2 模板不过期：baselineOf 指定的系列必须与 assets/video-skeleton 一致
       —— 单集系列的 I1 是空条件（无比较对象），故 I2 不可省
 
 两者**共用同一个逃逸口**（skeleton.toml 的 `[[drift]]`，见 exempt()）：语义不一致

@@ -34,7 +34,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from paths import WORKSPACE  # noqa: E402 - 惰性锚；voices 属工作区内容
 
 #: voices/ 是工作区根下的内容目录（生物特征 gitignore + refs.toml 白名单），
-#: 不再随 skill 分发——skill 只带 templates/workspace/voices/ 的初始模板。
+#: 不再随 skill 分发——skill 只带 assets/workspace/voices/ 的初始模板。
 REFS_TOML = WORKSPACE / "voices" / "refs.toml"
 VOICES_DIR = REFS_TOML.parent
 #: 源录音为本人私有文件，仅记录相对家目录路径占位；真实路径在清单里以 ~ 展开
