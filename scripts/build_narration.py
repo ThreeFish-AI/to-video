@@ -141,7 +141,7 @@ def parse_md(
 #   [block.<句id>] emo = "afraid:0.18,surprised:0.12"（可选 alpha=0.35）
 #       —— 该 id 是一个故事块的起点；块内情绪由 tts.py 归一后使用（§4.5）。
 #   [say] <句id> = "…表演标点版…" —— 仅合成文本（ttsText），字幕取 text 不变；
-#       校验「去标点后与 text 全等」，改字必须回 narration.md 改。
+#       校验「去标点后与 text 全等、发音标注逐个原样」，改字必须回 narration.md 改。
 # 无该文件 ⇒ narration.json 与今日逐字节一致（存量集零波及）；en 构建不消费台本
 # （story 档 EN 回退逐句）。
 CUES_PUNCT = "，。！？…、；：,.!?;:"
@@ -202,14 +202,17 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
             errors.append(f"{cues_path.name}: say.{sid} 必须是非空字符串")
             continue
         base = by_id[sid]
-        want = _strip_punct(strip_marks(base.get("ttsText", base["text"])))
-        if _strip_punct(strip_marks(say)) != want:
+        src = base.get("ttsText", base["text"])
+        if _strip_punct(strip_marks(say)) != _strip_punct(strip_marks(src)):
             errors.append(
                 f"{cues_path.name}: say.{sid} 与正文不一致（只许改标点，改字请回 narration.md）"
             )
             continue
-        if has_marks(base.get("ttsText", "")) and not has_marks(say):
-            errors.append(f"{cues_path.name}: say.{sid} 丢失发音标注")
+        # 保留标注再比：标注的集合/位置/读音须与正文逐个一致（只查「有无」会放过删改）
+        if _strip_punct(say) != _strip_punct(src):
+            errors.append(
+                f"{cues_path.name}: say.{sid} 发音标注与正文不一致（须原样携带 <字|读音>）"
+            )
             continue
         base["ttsText"] = say
         n_say += 1

@@ -1067,7 +1067,7 @@ async def synth_block_indextts(
     else:
         all_hit = False
 
-    async def request(text: str, w: list[float], label: str) -> dict:
+    async def request(text: str, w: list[float], label: str, pad: float) -> dict:
         # 锁只罩单次请求（含重试）：兜底要再发请求，锁内递归会与 Semaphore(1) 自锁
         last_err: Exception | None = None
         async with sem:
@@ -1085,7 +1085,7 @@ async def synth_block_indextts(
                         num_beams,
                         w,
                         discard_sec,
-                        tail_pad_sec,
+                        pad,
                         sampling,
                     )
                 except NonRetryableError:
@@ -1097,7 +1097,9 @@ async def synth_block_indextts(
 
     split_note: str | None = None
     if not all_hit:
-        resp = await request(block_text, weights, f"{block_items[0]['id']}…{n} 句")
+        resp = await request(
+            block_text, weights, f"{block_items[0]['id']}…{n} 句", tail_pad_sec
+        )
         clips = resp.get("clips") if resp.get("split") == "ok" else None
         if clips:
             if resp.get("seams"):
@@ -1112,7 +1114,8 @@ async def synth_block_indextts(
                 )
         else:
             # 切分失败：逐句兜底（单句块无句界，服务端必 split ok），同块情绪。产物仍按块
-            # 成员摘要落盘——同输入+定种子下切分失败可复现，复跑直接命中而非每次重试整块
+            # 成员摘要落盘——同输入+定种子下切分失败可复现，复跑直接命中而非每次重试整块。
+            # 尾垫只给末句（同块合成口径）：服务端单句路径无条件补垫，非末句须传 0
             print(
                 f"WARN 块切分失败（{resp.get('reason', '未知')}），退回逐句合成："
                 f"{block_items[0]['id']}…共 {n} 句",
@@ -1121,7 +1124,12 @@ async def synth_block_indextts(
             split_note = "fallback"
             clips = []
             for k, item in enumerate(block_items):
-                one = await request(block_synth_text([item]), [weights[k]], item["id"])
+                one = await request(
+                    block_synth_text([item]),
+                    [weights[k]],
+                    item["id"],
+                    tail_pad_sec if k == n - 1 else 0.0,
+                )
                 got = one.get("clips") if one.get("split") == "ok" else None
                 if not got or len(got) != 1:
                     raise NonRetryableError(
@@ -1275,13 +1283,16 @@ def block_synth_text(items: list[dict]) -> str:
     """块的合成文本＝成员句拼接；句末无停顿标点者补 `。`（上游按标点断句合并段）。
 
     `，：、——` 结尾是原稿有意的续接（本身即停顿、可作切点候选），原样保留——追加 `。`
-    会拼出 `，。`（上游映射为 `,.` 双标点）并把续接改成句末降调。
+    会拼出 `，。`（上游映射为 `,.` 双标点）并把续接改成句末降调。收引号/括号不算末字：
+    `不可能！”` 按 `！` 判定，否则会拼出 `！”。` 同类双标点。
     """
     PAUSE = "。！？…；，：、—"
+    CLOSERS = "”’」』）)》】\"'"
     parts = []
     for i in items:
         t = synth_source_text(i).strip()
-        if t and t[-1] not in PAUSE:
+        body = t.rstrip(CLOSERS)
+        if body and body[-1] not in PAUSE:
             t += "。"
         parts.append(t)
     return "".join(parts)
@@ -1292,10 +1303,10 @@ def block_digest_suffix(
 ) -> str:
     """块缓存后缀（仅块模式追加）：改任一句/切分参数 ⇒ 整块换 digest 重录。
 
-    `split=vN` 版本化块文本拼接与切分算法（v2：软停顿结尾不再补 `。`）——算法改变
-    合成结果而成员文本不变时，靠它换键。
+    `split=vN` 版本化块文本拼接与切分算法（v2：软停顿结尾不再补 `。`；v3：收引号前
+    的标点计入末字、逐句兜底仅末句补尾垫）——算法改变合成结果而成员文本不变时，靠它换键。
     """
-    payload = "\x1f".join(member_texts) + f"\x1f{discard!r}\x1f{tail_pad!r}\x1fsplit=v2"
+    payload = "\x1f".join(member_texts) + f"\x1f{discard!r}\x1f{tail_pad!r}\x1fsplit=v3"
     return hashlib.sha1(payload.encode()).hexdigest()[:12]
 
 

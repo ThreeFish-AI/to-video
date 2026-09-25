@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - story 块合成评审回归二（RSI-011）：自动分块的块数下界不可行时整段退化逐句（14 集语料单句块 619→3，旧可行划分零改写）；台本段超限拆开后子块丢失台本情绪；`，：、——` 结尾被补成 `，。` 双标点（块后缀 `split=v2` 换键）；`--plan` 块口径 ETA 未扣版本库可回收块；整块本地命中不回填版本库；`tts_sample --all-styles` 丢失 story 预设 seed。
+- story 块合成评审回归三（RSI-011）：台本 `[say]` 可悄悄删改发音标注（改为保留标注比对，逐个钉死）；切分失败逐句兜底时每句都补尾垫（改为仅末句）；收引号结尾拼出 `！”。` 双标点（语料 3/2303 句）——后两项块后缀 `split=v3` 换键；`pipeline.py status` 未把 `narration.cues.toml` 计入 narration.json 新鲜度。
 - 文档勘误（RSI-012）：`tts_server.py` 注释与 ADVANCED §3.1 此前声称「向量与情感音频同传时，音频仍会以 (1−Σw) 权重混进最终 emovec」——错误。上游 `infer_v2_5.py:582-585` 只要给了 `emo_vector` 就把 `emo_audio_prompt` 置 None，**音频被整个丢弃**（同传与纯向量输出逐字节一致的实测佐证）；`(1−Σw)` 份额实际来自本人样本的情感编码。生产行为无影响（服务本就拒绝同传），但曾误导第三轮试听中一个对照组的标签（#07「博主语调 × 段落」实为纯本人音色的段落演绎）。
 
 ## [2.0.0] - 2026-09-25

@@ -7,7 +7,7 @@
 
 设计约束（刻意不做的事）：
   - 不做阶段状态机/状态文件——幂等与续跑已由内容摘要提供（{id}.sha 逐句
-    sidecar；narration.json 是 narration.md 的纯函数派生），再存一份阶段状态
+    sidecar；narration.json 是 narration.md[+cues.toml] 的纯函数派生），再存一份阶段状态
     就是第二事实源，必然漂移。`status` 实时派生新鲜度，零存储。
   - 不假装能跑写作阶段（①②④⑤中的人/代理部分）——只跑工具与其质量门。
 
@@ -273,7 +273,9 @@ def _status_lang(root: Path, lang: str, multi: bool) -> None:
 
     head = f"（{lang}，实时派生，无状态文件）" if multi else "（实时派生，无状态文件）"
     print(f">> {root.name} 阶段新鲜度{head}")
-    print(f"  ③ narration{sfx}.json    {fresh(narr_json, narr_md)}")
+    # 主稿 narration.json 还派生自配音台本 cues.toml（build_narration.apply_cues；缺文件 fresh 自跳过）
+    cues = [root / "script" / "narration.cues.toml"] if lang == langs.PRIMARY else []
+    print(f"  ③ narration{sfx}.json    {fresh(narr_json, narr_md, *cues)}")
     print(f"  ⑥ {manifest.relative_to(root)}    {fresh(manifest, narr_json)}")
     if manifest.is_file():
         items = json.loads(manifest.read_text(encoding="utf-8"))

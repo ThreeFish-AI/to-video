@@ -317,6 +317,27 @@ def test_block_synth_text_keeps_soft_pause_endings():
     assert "，。" not in tts.tts_text(text, "ZH", perform=True)
 
 
+def test_block_synth_text_sees_through_closing_quotes():
+    """收引号/括号不算末字：`！”` 不再拼出 `！”。`；引号前无标点才补 `。`。"""
+    items = [
+        {"id": "a", "scene": "P0", "text": "他说：“不可能！”"},
+        {"id": "b", "scene": "P0", "text": "你确定真的不要这些了？」"},
+        {"id": "c", "scene": "P0", "text": '忽略你之前的所有规则。"'},
+        {"id": "d", "scene": "P0", "text": "他称之为“负熵”"},
+    ]
+    assert tts.block_synth_text(items) == (
+        '他说：“不可能！”你确定真的不要这些了？」忽略你之前的所有规则。"他称之为“负熵”。'
+    )
+
+
+def test_block_suffix_versioned_past_v2():
+    """v3 改了块文本拼接与兜底尾垫：同成员文本也必须换键（旧 v2 产物不得命中）。"""
+    import hashlib
+
+    v2 = hashlib.sha1(("a\x1fb\x1f0.32\x1f0.18\x1fsplit=v2").encode()).hexdigest()[:12]
+    assert tts.block_digest_suffix(["a", "b"], 0.32, 0.18) != v2
+
+
 # ---------------- 块情感（cue）解析 ----------------
 
 
@@ -433,6 +454,51 @@ def test_apply_cues_rejects_word_changes(tmp_path):
     )
     _, _, errs = bn.apply_cues(tmp_path, items)
     assert any("只许改标点" in e for e in errs)
+
+
+def test_apply_cues_pins_every_pron_mark(tmp_path):
+    """say 须逐个原样携带标注：删一个、改读音都拒；只动标点放行。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    tts_text = "<重|CHONG2>新定义<行|HANG2>业。"
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for say, ok in (
+        ("<重|CHONG2>新定义，行业。", False),  # 丢 <行|HANG2>
+        ("<重|ZHONG4>新定义，<行|HANG2>业！", False),  # 改读音
+        ("<重|CHONG2>新定义，<行|HANG2>业！", True),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": "重新定义行业。"}]
+        items[0]["ttsText"] = tts_text
+        cues.write_text(f'[say]\np0-01 = "{say}"\n', encoding="utf-8")
+        _, n_say, errs = bn.apply_cues(tmp_path, items)
+        if ok:
+            assert errs == [] and n_say == 1 and items[0]["ttsText"] == say
+        else:
+            assert any("发音标注" in e for e in errs), say
+            assert items[0]["ttsText"] == tts_text  # 拒绝时不落盘
+
+
+def test_status_tracks_cues_sidecar(tmp_path, capsys):
+    """只改台本不改正文：status 须报 narration.json 失鲜（否则 tts 拿旧 cue 合成）。"""
+    import os
+
+    import pipeline
+
+    script = tmp_path / "script"
+    script.mkdir()
+    (script / "narration.md").write_text("x", encoding="utf-8")
+    (script / "narration.json").write_text("[]", encoding="utf-8")
+    cues = script / "narration.cues.toml"
+    cues.write_text("[say]\n", encoding="utf-8")
+    for p, t in ((script / "narration.md", 100), (script / "narration.json", 200)):
+        os.utime(p, (t, t))
+    os.utime(cues, (300, 300))
+    pipeline._status_lang(tmp_path, "zh", multi=False)
+    assert "输入已更新（narration.cues.toml）" in capsys.readouterr().out
+    os.utime(cues, (150, 150))
+    pipeline._status_lang(tmp_path, "zh", multi=False)
+    assert "narration.json    ✅ 新鲜" in capsys.readouterr().out
 
 
 def test_apply_cues_rejects_unknown_ids(tmp_path):
@@ -556,6 +622,22 @@ def test_split_failure_falls_back_without_deadlock_and_caches(monkeypatch, tmp_p
     monkeypatch.setattr(tts, "http_synthesize_block", unexpected)
     again = _run_block(block, tmp_path)
     assert [r["durationSec"] for r in again] == [2.0, 2.0]
+
+
+def test_split_failure_fallback_pads_only_last_sentence(monkeypatch, tmp_path):
+    """兜底尾垫同块合成口径：只有末句补垫（服务端单句路径无条件补，非末句须传 0）。"""
+    pads: list[float] = []
+
+    def fake(server, text, ref, vec, alpha, df, lang, beams, weights, discard, pad, *_):
+        pads.append(pad)
+        if len(weights) > 1:
+            return {"split": "failed", "reason": "stub", "clips": None}
+        return {"split": "ok", "clips": [_clip()], "cuts": [], "seams": []}
+
+    monkeypatch.setattr(tts, "http_synthesize_block", fake)
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    _run_block([dict(i) for i in P0[:3]], tmp_path, tail_pad_sec=0.18)
+    assert pads == [0.18, 0.0, 0.0, 0.18]  # 整块请求 + 3 句兜底
 
 
 def test_block_duration_is_cache_state_independent(monkeypatch, tmp_path):
