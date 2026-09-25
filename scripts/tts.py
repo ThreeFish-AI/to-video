@@ -935,7 +935,7 @@ def http_synthesize_block(
     tail_pad_sec: float,
     sampling: dict | None = None,
 ) -> dict:
-    """块模式 POST /synthesize → JSON {clips:[{audio,durationSec}], cuts, seams, split}。
+    """块模式 POST /synthesize → JSON {clips:[{audio,durationSec,format}], cuts, seams, split}。
 
     块音频在服务端按句界切回 N 个 mp3（b64）。超时 1800 s：块 ≈3 句音频 12–18 s，
     忙时热节流可把单块推理推过逐句口径的 600 s。
@@ -1019,7 +1019,7 @@ async def synth_block_indextts(
     tail_pad_sec: float = 0.18,
     perform_punct: bool = False,
 ) -> list[dict]:
-    """一个故事块 → N 句 mp3（块=缓存单位；切分失败逐句兜底，摘要口径不变）。"""
+    """一个故事块 → N 句 mp3（块=缓存单位；切分失败逐句兜底，仍按块成员摘要落盘）。"""
     vec, alpha, bad_id = resolve_block_vec(block_items, preset_vec, preset_alpha)
     if bad_id is not None:
         raise NonRetryableError(
@@ -1067,103 +1067,92 @@ async def synth_block_indextts(
     else:
         all_hit = False
 
-    if not all_hit:
+    async def request(text: str, w: list[float], label: str) -> dict:
+        # 锁只罩单次请求（含重试）：兜底要再发请求，锁内递归会与 Semaphore(1) 自锁
+        last_err: Exception | None = None
         async with sem:
-            last_err: Exception | None = None
-            resp: dict | None = None
             for attempt in range(RETRIES):
                 try:
-                    resp = await asyncio.to_thread(
+                    return await asyncio.to_thread(
                         http_synthesize_block,
                         server,
-                        tts_text(block_text, lang, perform=perform_punct),
+                        tts_text(text, lang, perform=perform_punct),
                         ref,
                         vec,
                         alpha,
                         df,
                         lang,
                         num_beams,
-                        weights,
+                        w,
                         discard_sec,
                         tail_pad_sec,
                         sampling,
                     )
-                    break
                 except NonRetryableError:
                     raise
                 except Exception as e:  # noqa: BLE001 - 推理服务需要整体重试
                     last_err = e
                     await asyncio.sleep(1.5 * (attempt + 1))
-            if resp is None:
-                raise RuntimeError(
-                    f"块合成失败（{block_items[0]['id']}…{n} 句）: {last_err}"
-                )
-            if resp.get("split") != "ok" or not resp.get("clips"):
-                # 切分失败：逐句兜底（单句块走同一 JSON 通道，摘要口径不变），manifest 留痕
-                print(
-                    f"WARN 块切分失败（{resp.get('reason', '未知')}），退回逐句合成："
-                    f"{block_items[0]['id']}…共 {n} 句",
-                    file=sys.stderr,
-                )
-                results = []
-                for item in block_items:
-                    one = await synth_block_indextts(
-                        sem,
-                        [item],
-                        force,
-                        ref,
-                        ref_sha1,
-                        style,
-                        preset_vec,
-                        preset_alpha,
-                        df,
-                        lang,
-                        engine_tag,
-                        server,
-                        out_dir,
-                        num_beams,
-                        sampling,
-                        store,
-                        slug,
-                        discard_sec,
-                        tail_pad_sec,
-                        perform_punct,
-                    )
-                    r = one[0]
-                    r["blockSplit"] = "fallback"
-                    results.append(r)
-                return results
+        raise RuntimeError(f"块合成失败（{label}）: {last_err}")
+
+    split_note: str | None = None
+    if not all_hit:
+        resp = await request(block_text, weights, f"{block_items[0]['id']}…{n} 句")
+        clips = resp.get("clips") if resp.get("split") == "ok" else None
+        if clips:
             if resp.get("seams"):
                 print(
                     f"WARN 块内出现上游分段缝 {resp['seams']}（>118 token 被迫分段，段间为"
                     f" 200ms 定长静音）——请缩短该块：{block_items[0]['id']}",
                     file=sys.stderr,
                 )
-            clips = resp["clips"]
             if len(clips) != n:
                 raise NonRetryableError(
                     f"块切分数 {len(clips)} != 句数 {n}（{block_items[0]['id']}）"
                 )
-            for k, clip in enumerate(clips):
-                item = block_items[k]
-                mp3 = out_dir / f"{item['id']}.mp3"
-                meta = out_dir / f"{item['id']}.sha"
-                audio = base64.b64decode(clip["audio"])
-                if not audio:
-                    raise RuntimeError(f"空音频响应（{item['id']}）")
-                mp3.write_bytes(audio)
-                meta.write_text(digests[k])
-                store_deposit(mp3, item["id"], digests[k], store, slug)
+        else:
+            # 切分失败：逐句兜底（单句块无句界，服务端必 split ok），同块情绪。产物仍按块
+            # 成员摘要落盘——同输入+定种子下切分失败可复现，复跑直接命中而非每次重试整块
+            print(
+                f"WARN 块切分失败（{resp.get('reason', '未知')}），退回逐句合成："
+                f"{block_items[0]['id']}…共 {n} 句",
+                file=sys.stderr,
+            )
+            split_note = "fallback"
+            clips = []
+            for k, item in enumerate(block_items):
+                one = await request(block_synth_text([item]), [weights[k]], item["id"])
+                got = one.get("clips") if one.get("split") == "ok" else None
+                if not got or len(got) != 1:
+                    raise NonRetryableError(
+                        f"逐句兜底仍切分失败（{item['id']}）: {one.get('reason', '未知')}"
+                    )
+                clips.append(got[0])
+        fmts = {c.get("format") for c in clips}
+        if fmts != {"mp3"}:  # 同逐句路径的编码器守卫：WAV 字节不得落成 .mp3
+            raise NonRetryableError(
+                f"服务端编码器不可用（format={','.join(sorted(map(str, fmts)))}）"
+                f"—— 按 {MANUAL} §七 检查 soundfile/lameenc，或用当前 tts_server.py 重启服务"
+            )
+        for k, clip in enumerate(clips):
+            item = block_items[k]
+            mp3 = out_dir / f"{item['id']}.mp3"
+            meta = out_dir / f"{item['id']}.sha"
+            audio = base64.b64decode(clip["audio"])
+            if not audio:
+                raise RuntimeError(f"空音频响应（{item['id']}）")
+            mp3.write_bytes(audio)
+            meta.write_text(digests[k])
+            store_deposit(mp3, item["id"], digests[k], store, slug)
 
     results = []
-    for k, item in enumerate(block_items):
-        # 命中路径无 clips：实测 mp3 时长；合成路径用服务端 PCM 实测（免 mp3 padding 偏差）
-        dur = (
-            float(clips[k]["durationSec"])
-            if not all_hit and clips
-            else mp3_duration(out_dir / f"{item['id']}.mp3")
-        )
-        results.append({**item, "durationSec": round(dur, 3)})
+    for item in block_items:
+        # 合成与命中同口径实测 mp3 时长（同逐句路径）：否则复跑时 manifest 随缓存状态漂移
+        dur = mp3_duration(out_dir / f"{item['id']}.mp3")
+        r = {**item, "durationSec": round(dur, 3)}
+        if split_note:
+            r["blockSplit"] = split_note
+        results.append(r)
     return results
 
 

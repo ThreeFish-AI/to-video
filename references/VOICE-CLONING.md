@@ -292,7 +292,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 - **缓存**：块＝缓存单位（摘要含块后缀）——**改一句重录整块**；seed 固定 4242（定档 take 可复现），换 take 用 `--seed-offset`。
 - **重制存量集**（旧档 → story）：改 pipeline.toml `style = "story"` + 补写该集 cues.toml + 显式 `--allow-voice-switch`。
 - `--steady` 与 story 冲突（逐句升束 vs 一个请求一块），硬拒；显式 `--num-beams` 仍可。
-- 切分失败自动逐句兜底（manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检（low_vram 路径不支持）。
+- 切分失败自动逐句兜底（沿用块情绪；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检（low_vram 路径不支持）。
 
 ## 五、小样试听与逐集合成
 

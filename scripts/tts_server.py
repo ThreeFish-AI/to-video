@@ -556,11 +556,13 @@ def _block_reply(data, sr: int, req: SynthesizeRequest) -> tuple[dict, str]:
 def _clips_json(clips_pcm, sr: int, cuts, seams) -> dict:
     clips = []
     for pcm, _nat in clips_pcm:
-        audio, _fmt = encode_mp3(pcm, sr)
+        audio, fmt = encode_mp3(pcm, sr)
         clips.append(
             {
                 "audio": base64.b64encode(audio).decode(),
                 "durationSec": round(len(pcm) / sr, 3),
+                # 实际编码格式（同逐句路径的 X-Audio-Format）：无 MP3 编码器时回退 wav，客户端据此硬拒
+                "format": fmt,
             }
         )
     return {"split": "ok", "clips": clips, "cuts": cuts, "seams": seams}

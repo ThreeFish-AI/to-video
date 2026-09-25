@@ -438,3 +438,170 @@ def test_steady_with_block_style_is_rejected(tmp_path):
     )
     assert r.returncode != 0
     assert "冲突" in (r.stderr + r.stdout)
+
+
+# ---------------- 块合成主流程（stub 服务端）----------------
+
+
+def _clip(fmt: str = "mp3") -> dict:
+    """占位 clip：客户端只落字节不解码（时长由 mp3_duration 实测，测试里 stub）。"""
+    import base64
+
+    return {
+        "audio": base64.b64encode(b"ID3fake").decode(),
+        "durationSec": 9.99,
+        "format": fmt,
+    }
+
+
+def _run_block(block, audio_dir, timeout: float = 5.0):
+    import asyncio
+
+    return asyncio.run(
+        asyncio.wait_for(
+            tts.synth_block_indextts(
+                asyncio.Semaphore(tts.CONCURRENCY_INDEXTTS),
+                block,
+                False,
+                "ref.wav",
+                "r" * 12,
+                "story",
+                tts.STYLE_PRESETS["story"]["vec"],
+                tts.STYLE_PRESETS["story"]["alpha"],
+                1.0,
+                "ZH",
+                "indextts",
+                "http://unused",
+                audio_dir,
+            ),
+            timeout,
+        )
+    )
+
+
+def test_split_failure_falls_back_without_deadlock_and_caches(monkeypatch, tmp_path):
+    """切分失败 → 锁外逐句兜底（旧实现锁内递归，Semaphore(1) 自锁挂死）；兜底产物按块
+    成员摘要落盘，复跑整块命中、零请求；兜底沿用块情绪（台本 cue 覆盖全部成员）。"""
+    block = [dict(i) for i in P0[:2]]
+    block[0]["cue"] = {"emo": "afraid:0.6,surprised:0.4"}
+    calls: list[tuple[int, list[float]]] = []
+
+    def fake(server, text, ref, vec, alpha, df, lang, beams, weights, *rest):
+        calls.append((len(weights), vec))
+        if len(weights) > 1:
+            return {"split": "failed", "reason": "stub", "clips": None}
+        return {"split": "ok", "clips": [_clip()], "cuts": [], "seams": []}
+
+    monkeypatch.setattr(tts, "http_synthesize_block", fake)
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    out = _run_block(block, tmp_path)
+    assert [n for n, _ in calls] == [2, 1, 1]
+    assert calls[1][1] == calls[2][1] == calls[0][1]  # 兜底同块情绪
+    assert [r["blockSplit"] for r in out] == ["fallback", "fallback"]
+
+    def unexpected(*_a, **_k):
+        raise AssertionError("兜底产物复跑应整块命中")
+
+    monkeypatch.setattr(tts, "http_synthesize_block", unexpected)
+    again = _run_block(block, tmp_path)
+    assert [r["durationSec"] for r in again] == [2.0, 2.0]
+
+
+def test_block_duration_is_cache_state_independent(monkeypatch, tmp_path):
+    """合成与命中同取 mp3 实测时长：服务端 PCM 口径（durationSec）不进 manifest。"""
+    block = [dict(i) for i in P0[:2]]
+    monkeypatch.setattr(
+        tts,
+        "http_synthesize_block",
+        lambda *_a, **_k: {
+            "split": "ok",
+            "clips": [_clip(), _clip()],
+            "cuts": [],
+            "seams": [],
+        },
+    )
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    fresh = _run_block(block, tmp_path)
+    cached = _run_block(block, tmp_path)
+    assert (
+        [r["durationSec"] for r in fresh]
+        == [r["durationSec"] for r in cached]
+        == [2.0, 2.0]
+    )
+
+
+def test_block_rejects_non_mp3_clips(monkeypatch, tmp_path):
+    """服务端无 MP3 编码器回退 wav：硬拒且不落盘（同逐句路径 X-Audio-Format 守卫）。"""
+    import pytest
+
+    block = [dict(i) for i in P0[:2]]
+    monkeypatch.setattr(
+        tts,
+        "http_synthesize_block",
+        lambda *_a, **_k: {
+            "split": "ok",
+            "clips": [_clip("wav"), _clip("wav")],
+            "cuts": [],
+            "seams": [],
+        },
+    )
+    with pytest.raises(tts.NonRetryableError, match="编码器不可用"):
+        _run_block(block, tmp_path)
+    assert not list(tmp_path.glob("*.mp3"))
+
+
+# ---------------- 进度监视：mtime 聚簇 ----------------
+
+
+def _progress(tmp_path, texts: list[str], mtimes: list[float]) -> str:
+    """造工程：前 len(mtimes) 句已产出（mp3 mtime 按给定序列），跑 tts_progress 取 stdout。"""
+    import json
+    import os
+    import subprocess
+
+    items = [
+        {"id": f"p0-{k:02d}", "scene": "P0", "text": t} for k, t in enumerate(texts)
+    ]
+    (tmp_path / "script").mkdir()
+    (tmp_path / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+    audio = tmp_path / "video" / "public" / "audio"
+    audio.mkdir(parents=True)
+    base = 1_700_000_000.0
+    for item, t in zip(items, mtimes):
+        p = audio / f"{item['id']}.mp3"
+        p.write_bytes(b"x")
+        os.utime(p, (base + t, base + t))
+    script = Path(__file__).resolve().parents[1] / "scripts" / "tts_progress.py"
+    r = subprocess.run(
+        [sys.executable, str(script), "--project", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return r.stdout
+
+
+def test_progress_wall_pairs_with_its_own_sentence(tmp_path):
+    """逐句口径：墙钟 t(k+1)−t(k) 是第 k+1 句的合成耗时，除以第 k+1 句字数；末句计入。"""
+    # 10 字 / 2 字 / 20 字 已产出，末句待合成：秒/字 = [10/2, 20/20] → 中位 3.0
+    out = _progress(tmp_path, ["一" * 10, "二" * 2, "三" * 20, "四" * 5], [0, 10, 30])
+    assert "中位 3.000" in out
+
+
+def test_progress_clusters_block_writes(tmp_path):
+    """块口径：<1s 内落盘的 N 句聚成一次合成，墙钟除以下一簇总字数。"""
+    # 簇 A（10+10 字 @0/0.2s）→ 簇 B（15+5 字 @40/40.3s）：40s / 20 字 = 2.0
+    out = _progress(
+        tmp_path,
+        ["甲" * 10, "乙" * 10, "丙" * 15, "丁" * 5, "戊" * 3],
+        [0, 0.2, 40, 40.3],
+    )
+    assert "中位 2.000" in out
+
+
+def test_progress_single_cluster_reports_insufficient_samples(tmp_path):
+    """单簇但跨度 ≥1s（连续 <1s 间隔串起）：无墙钟样本，报不足而非 StatisticsError。"""
+    out = _progress(tmp_path, ["甲" * 5] * 4, [0, 0.6, 1.2])
+    assert "样本不足" in out

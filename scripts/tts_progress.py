@@ -138,11 +138,20 @@ def main() -> None:
             cur_ids, cur_t0 = [], t
         cur_ids.append(sid)
         prev_t = t
-    # 簇墙钟 = 下一簇首句 mtime − 本簇首句 mtime（代表句＝下一簇首句）；末簇不可得
+    clusters.append((cur_ids[0], cur_t0, sum(chars[i] for i in cur_ids)))  # 末簇入列
+    # 簇墙钟 = 下一簇首 mtime − 本簇首 mtime ＝ 下一簇的合成耗时 ⇒ 代表句与字数都取下一簇；
+    # 首簇差值不可得
     walls = [
-        (clusters[k + 1][0], clusters[k + 1][1] - clusters[k][1], clusters[k][2])
+        (clusters[k + 1][0], clusters[k + 1][1] - clusters[k][1], clusters[k + 1][2])
         for k in range(len(clusters) - 1)
     ]
+    if not walls:
+        # 单簇（块内落盘间隔 <1s 但总跨度 ≥1s 的短暂初态）：尚无可测墙钟
+        print(
+            f">> 进度 {len(done)}/{len(items)} 句 · 目前只有 1 次合成产出，墙钟样本不足；"
+            "下一次合成落盘后复跑本命令"
+        )
+        return
     per_s = [w for _, w, _ in walls]
     spc = [w / max(1, c) for _, w, c in walls]
     win = spc[-args.window :] if args.window > 0 else spc
