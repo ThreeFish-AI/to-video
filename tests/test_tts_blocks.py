@@ -116,6 +116,53 @@ def test_plan_blocks_cue_does_not_leak_past_next_boundary():
     assert tts.resolve_block_vec(blocks[-1], preset, 0.28)[0] == preset
 
 
+def test_plan_blocks_edit_only_repartitions_its_window():
+    """改一句只重排其所在划分窗：9×31 字末句 +1 字，前 6 句的块原样不动（全局 DP 下 5 块全平移）。"""
+    items = [
+        {"id": f"p0-{n:02d}", "scene": "P0", "text": "字" * 31} for n in range(1, 10)
+    ]
+
+    def head(blocks):  # 完全落在首窗（前 6 句）的块
+        return [b for b in ids(blocks) if all(int(s[-2:]) <= 6 for s in b)]
+
+    before = tts.plan_blocks(items, BLOCK_CFG)
+    items[-1] = {**items[-1], "text": "字" * 32}
+    after = tts.plan_blocks(items, BLOCK_CFG)
+    assert head(before) == head(after) and len(head(before)) == 3
+
+
+def test_plan_blocks_edit_blast_radius_is_bounded():
+    """任一句改字长，需重录的句数 ≤ 所在窗（2×max_sentences，1 句尾窗并入 ⇒ 至多 +1）。"""
+    import random
+
+    rng = random.Random(20260926)
+    bound = 2 * BLOCK_CFG["max_sentences"] + 1
+    for _ in range(40):
+        n = rng.randint(4, 20)
+        lens = [rng.randint(8, 50) for _ in range(n)]
+        mk = lambda ls: [  # noqa: E731
+            {"id": f"p0-{k:02d}", "scene": "P0", "text": "字" * L}
+            for k, L in enumerate(ls, 1)
+        ]
+        base = {tuple(b) for b in ids(tts.plan_blocks(mk(lens), BLOCK_CFG))}
+        for i in range(n):
+            for d in (-6, 3, 12):
+                edited = list(lens)
+                edited[i] = max(1, edited[i] + d)
+                new = ids(tts.plan_blocks(mk(edited), BLOCK_CFG))
+                sid = f"p0-{i + 1:02d}"
+                redo = sum(len(b) for b in new if tuple(b) not in base or sid in b)
+                assert redo <= bound, (lens, i, d, new)
+
+
+def test_plan_blocks_lone_tail_joins_previous_window():
+    """7 句的段：末句不因定长窗被孤立成单句块（1 句尾窗并入前窗）。"""
+    items = [
+        {"id": f"p0-{n:02d}", "scene": "P0", "text": "字" * 20} for n in range(1, 8)
+    ]
+    assert all(len(b) > 1 for b in tts.plan_blocks(items, BLOCK_CFG))
+
+
 # ---------------- 切分规划与切分算术 ----------------
 
 
@@ -477,6 +524,50 @@ def test_apply_cues_pins_every_pron_mark(tmp_path):
         else:
             assert any("发音标注" in e for e in errs), say
             assert items[0]["ttsText"] == tts_text  # 拒绝时不落盘
+
+
+def test_apply_cues_keeps_digit_separators(tmp_path):
+    """数字里的半角 . , : 是正文字符：say 删掉它等于改数（3.5%→35%），须拒；句读标点照常可改。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for say, ok in (
+        ("增长了35%，用时10:30，共1,200次。", False),
+        ("增长了3.5%，用时1030，共1,200次。", False),
+        ("增长了3.5%，用时10:30，共1200次。", False),
+        ("增长了3.5%……用时10:30！共1,200次！", True),
+    ):
+        items = [
+            {"id": "p0-01", "scene": "P0", "text": "增长了3.5%，用时10:30，共1,200次。"}
+        ]
+        cues.write_text(f'[say]\np0-01 = "{say}"\n', encoding="utf-8")
+        _, n_say, errs = bn.apply_cues(tmp_path, items)
+        if ok:
+            assert errs == [] and n_say == 1, say
+        else:
+            assert any("只许改标点" in e for e in errs), say
+
+
+def test_apply_cues_malformed_tables_are_reported_not_raised(tmp_path):
+    """台本写错形态：汇入错误清单（build 统一 FAIL 退出），不得抛 traceback。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for body, needle in (
+        ('[block]\np0-01 = "happy:1"\n', "block.p0-01 须为表"),
+        ('[block.p0-01]\nemo = "happy:1"\nalpha = "x"\n', "alpha"),
+        ('[block.p0-01]\nemo = "happy:1"\nalpha = true\n', "alpha"),
+        ("[block.p0-01]\nemo = 1\n", "emo"),
+        ('block = "x"\n', "[block] 须为表"),
+        ('say = "x"\n', "[say] 须为表"),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+        cues.write_text(body, encoding="utf-8")
+        n_block, _, errs = bn.apply_cues(tmp_path, items)
+        assert n_block == 0 and any(needle in e for e in errs), (body, errs)
+        assert "cue" not in items[0]
 
 
 def test_status_tracks_cues_sidecar(tmp_path, capsys):

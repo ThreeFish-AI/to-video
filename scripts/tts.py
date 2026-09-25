@@ -1211,9 +1211,10 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
     """narration items → 故事块（同幕连续句的列表的列表）。
 
     硬边界：幕界 + 台本 blockStart（item 里的 cue 台本由 build_narration 落成
-    blockStart:true）。无台本段自动划分：块数取 ≥max(⌈n/3⌉,⌈ΣL/90⌉) 的首个可行值，
-    DP 最小化块长方差，块 ≤max_sentences 句、≤max_chars 字（合成文本口径，超限单句
-    自成一块）。台本段超限被拆开时，后续子块继承段首 cue（块首句浅拷贝注入，不改原件）。
+    blockStart:true）。无台本段自动划分：先按位置切成 2×max_sentences 句的定长窗
+    （1 句尾窗并入前窗），窗内块数取 ≥max(⌈n/3⌉,⌈ΣL/90⌉) 的首个可行值，DP 最小化
+    块长方差，块 ≤max_sentences 句、≤max_chars 字（合成文本口径，超限单句自成一块）。
+    台本段超限被拆开时，后续子块继承段首 cue（块首句浅拷贝注入，不改原件）。
     """
     ms, mc = cfg.get("max_sentences", 3), cfg.get("max_chars", 90)
 
@@ -1223,13 +1224,13 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
     blocks: list[list[dict]] = []
     run: list[dict] = []
 
-    def flush_auto(seg: list[dict]) -> None:
+    def window_cuts(seg: list[dict]) -> list[int]:
         n = len(seg)
         total = sum(synth_len(i) for i in seg)
         k_min = min(n, max(1, -(-n // ms), -(-total // mc)))
         # DP：best[end][j]＝前 end 句切成 j 块（块句数 ≤ms、多句块长 ≤mc）的最小块长方差。
         # k_min 只是下界：装箱约束下恰好 k_min 块常切不出，逐层放宽到首个可行块数
-        # （j=n 即逐句，必可行）——否则整段会整体退化为逐句
+        # （j=n 即逐句，必可行）——否则整窗会整体退化为逐句
         INF = float("inf")
         best: list[list[tuple[float, int]]] = [
             [(INF, -1)] * (n + 1) for _ in range(n + 1)
@@ -1261,6 +1262,18 @@ def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
             end = best[end][j][1]
         cuts.append(0)
         cuts.reverse()
+        return cuts
+
+    def flush_auto(seg: list[dict]) -> None:
+        # 定长窗：块界只依赖窗内句长 ⇒ 改一句至多重排所在窗（≤2×ms+1 句）。整段全局 DP
+        # 下块界依赖段内全部句长，改一个字即可整段平移、整幕重录（14 集对拍：改字爆炸
+        # 半径 max 34→7 句，块数 +2.6%）。窗界按位置而非内容，插/删句仍重排同段其后各窗
+        starts = list(range(0, len(seg), 2 * ms))
+        if len(starts) > 1 and len(seg) - starts[-1] == 1:
+            starts.pop()  # 1 句尾窗并入前窗：幕末收束句不孤立成逐句合成
+        cuts = [0]
+        for a, b in zip(starts, [*starts[1:], len(seg)]):
+            cuts += [a + c for c in window_cuts(seg[a:b])[1:]]
         cue = seg[0].get("cue")
         for a, b in zip(cuts, cuts[1:]):
             blk = seg[a:b]

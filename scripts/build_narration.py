@@ -144,11 +144,13 @@ def parse_md(
 #       校验「去标点后与 text 全等、发音标注逐个原样」，改字必须回 narration.md 改。
 # 无该文件 ⇒ narration.json 与今日逐字节一致（存量集零波及）；en 构建不消费台本
 # （story 档 EN 回退逐句）。
-CUES_PUNCT = "，。！？…、；：,.!?;:"
+#: 「只许改标点」的比较口径：半角 `.,:` 夹在两数字之间时是数值/时刻的一部分
+#: （3.5%、1,200、10:30）而非标点——剥掉它，say 删掉小数点也能过校验、合成念成另一个数
+CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?]|(?<!\d)[.,:]|[.,:](?!\d)")
 
 
 def _strip_punct(s: str) -> str:
-    return "".join(c for c in s if c not in CUES_PUNCT)
+    return CUES_PUNCT_RE.sub("", s)
 
 
 def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
@@ -165,36 +167,54 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
     except (tomllib.TOMLDecodeError, UnicodeError) as e:
         return 0, 0, [f"{cues_path.name} 解析失败: {e}"]
     errors: list[str] = []
+    # 形态写错（值不是表）一律汇入错误清单，由 build 统一 FAIL 退出，不抛 traceback
+    tables: dict[str, dict] = {}
+    for name in ("block", "say"):
+        tbl = cues.get(name, {})
+        if not isinstance(tbl, dict):
+            errors.append(f"{cues_path.name}: [{name}] 须为表")
+            tbl = {}
+        tables[name] = tbl
     by_id = {i["id"]: i for i in items}
     n_block = n_say = 0
-    for sid, spec in (cues.get("block") or {}).items():
+    for sid, spec in tables["block"].items():
         if sid not in by_id:
             errors.append(f"{cues_path.name}: block.{sid} 不是本稿句 id")
             continue
+        if not isinstance(spec, dict):
+            errors.append(
+                f'{cues_path.name}: block.{sid} 须为表（[block.{sid}] emo = "…"）'
+            )
+            continue
         emo = spec.get("emo")
-        if not emo:
-            errors.append(f"{cues_path.name}: block.{sid} 缺 emo")
+        if not isinstance(emo, str) or not emo.strip():
+            errors.append(f"{cues_path.name}: block.{sid} 缺 emo（须为非空字符串）")
             continue
         try:
-            vec = parse_emo_vector(str(emo))
+            vec = parse_emo_vector(emo)
             if sum(vec) <= 0:
                 raise ValueError("方向全零")
         except ValueError as e:
             errors.append(f"{cues_path.name}: block.{sid} emo 无效（{e}）")
             continue
-        cue: dict = {"emo": str(emo)}
-        if spec.get("alpha") is not None:
-            a = float(spec["alpha"])
-            if not 0 < a <= 0.8 or sum(vec) / max(sum(vec), 1e-9) * a > 0.8:
+        cue: dict = {"emo": emo}
+        a = spec.get("alpha")
+        if a is not None:
+            # 方向由 tts.py 归一到 Σ=1 ⇒ 有效和 Σ×α 即 α；bool 是 int 子类，须单独排除
+            if (
+                isinstance(a, bool)
+                or not isinstance(a, int | float)
+                or not 0 < a <= 0.8
+            ):
                 errors.append(
-                    f"{cues_path.name}: block.{sid} alpha 越界（须 Σ×α ≤ 0.8）"
+                    f"{cues_path.name}: block.{sid} alpha 须为 (0, 0.8] 内的数值（Σ×α ≤ 0.8）"
                 )
                 continue
-            cue["alpha"] = a
+            cue["alpha"] = float(a)
         by_id[sid]["blockStart"] = True
         by_id[sid]["cue"] = cue
         n_block += 1
-    for sid, say in (cues.get("say") or {}).items():
+    for sid, say in tables["say"].items():
         if sid not in by_id:
             errors.append(f"{cues_path.name}: say.{sid} 不是本稿句 id")
             continue
