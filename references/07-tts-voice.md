@@ -1,4 +1,4 @@
-# Stage ⑥ TTS 配音：声音克隆决策树（skill 规格 · 06）
+# Stage ⑦ TTS 配音：声音克隆决策树（skill 规格 · 07）
 
 > 目标读者：执行配音阶段的代理/操作者。**参数与实测数据一律以 [VOICE-CLONING.md](VOICE-CLONING.md) §三–§六为准（链接非复制）**；本文件只承载操作顺序与决策点。
 > 上游能力面、机制循证与提升路线图见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md)；读音标注台账见 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)。
@@ -51,7 +51,7 @@ IndexTTS 服务端（端口取自 `tts.server`，默认 8766，下文命令以�
 
 先完成者**不得**关闭他人正用的实例（以第 1 步判据为准）；适当重启本身即运维收益——清空累积态、归还显存。完整部署/启停命令见 [VOICE-CLONING.md §二](VOICE-CLONING.md)。
 
-## 完成门（交给 Stage ⑧ 前）
+## 完成门（交给 Stage ⑨ 前）
 
 - manifest 句数 = narration 句数；`pipeline.py check` 的实测时长口径落在预算窗内；
 - sidecar `{id}.sha` 逐句齐备（断点续跑的依据）；`.engine` 标记已更新；

@@ -1,6 +1,6 @@
-# Stage ⑧ 草渲 + 抽帧 QA（skill 规格 · 08）
+# Stage ⑨ 草渲 + 抽帧 QA（skill 规格 · 09）
 
-> 草渲的意义：半分辨率快速出片，把「时长/分镜/画面」问题在终渲前暴露。渲染缺陷的**七条红线**沉淀在 [07-remotion-implementation.md](./07-remotion-implementation.md)（SSOT，此处不复制）；本文件覆盖抽帧与自动体检的操作契约。
+> 草渲的意义：半分辨率快速出片，把「时长/分镜/画面」问题在终渲前暴露。渲染缺陷的**七条红线**沉淀在 [08-remotion-implementation.md](./08-remotion-implementation.md)（SSOT，此处不复制）；本文件覆盖抽帧与自动体检的操作契约。
 
 **目录**：命令闭环 · 双语集 · 自动体检判据与处置 · 人工目检清单 · ★ 分幕音画复检（TTS 长跑期间做） · 修复回路
 
@@ -43,21 +43,21 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 
 - 草渲 `uv run --no-project $T/scripts/pipeline.py --project $P render --lang en` → `out/draft.en.mp4`；抽帧 `… qa --lang en $P/out/draft.en.mp4 …`（`--lang` 缺省按视频文件名 `.en` 后缀推断，显式冲突即报错）；帧目录 `out/frames.en/`。
 - **英文 TTS 之后、英文渲染之前必跑** `uv run --no-project $T/scripts/check_archify.py --project $P --lang en`：archify cue 的 playbackRate = 章时长 ÷ 锚句时长，英文锚句时长不同，**显式 `fit='stretch'` 的 cue 越界会在渲染期直接抛错**（zh 版同理但时序不变故无此增量风险）。
-- 英文字幕的两行回落几何（盒顶 137 ≤ 单行包络 137.4，字幕带侵入检测两语言照常执法）见 [07](./07-remotion-implementation.md)。
+- 英文字幕的两行回落几何（盒顶 137 ≤ 单行包络 137.4，字幕带侵入检测两语言照常执法）见 [08](./08-remotion-implementation.md)。
 
 ## 自动体检判据与处置
 
 | 判据 | 级别 | 处置 |
 |---|---|---|
-| 黑帧/早渐黑（均值 <0.02；末 beat 且分镜标「渐黑」豁免） | FAIL | 查尾幕渐黑是否从**末 beat** 而非末句推导（references/07 红线 4）；查 SceneFade 末幕是否误开淡出 |
+| 黑帧/早渐黑（均值 <0.02；末 beat 且分镜标「渐黑」豁免） | FAIL | 查尾幕渐黑是否从**末 beat** 而非末句推导（references/08 红线 4）；查 SceneFade 末幕是否误开淡出 |
 | 字幕带侵入（字幕框 x 区间外有独立亮块） | WARN | 角标/图形挪出 bottom≥160px 安全区（角标一律绝对定位并写死 `bottom ≥ 150`） |
 | 冻帧（相邻采样帧 16×16 指纹相同） | WARN | 查 beat 窗口是否错位/句子未被分镜覆盖（`check_script.py --check-scenes`） |
 | 字幕缺失（字幕带无文字亮度像素） | WARN | 查该句 Subtitle 是否被遮挡或文本为空 |
-| 主题对比度 <4.5:1 | FAIL | 换色或加深；概念色清单见 references/07 视觉契约 |
+| 主题对比度 <4.5:1 | FAIL | 换色或加深；概念色清单见 references/08 视觉契约 |
 
 **FAIL 0 的边界（ISSUE-187 泛化）**：`--check` 只覆盖黑帧/冻帧/字幕带侵入/对比度——对文字朝向、
 几何锚点、图层遮挡**全盲**（四类画面缺陷曾在 FAIL 0 · WARN 0 下全部漏网），FAIL 0 不是视觉正确性的
-证据，2D 同样必须按分幕复检抽帧目视（3D 侧同款要求见 [07 §3D 验收](./07-remotion-implementation.md)）。
+证据，2D 同样必须按分幕复检抽帧目视（3D 侧同款要求见 [08 §3D 验收](./08-remotion-implementation.md)）。
 **判据上架纪律（ISSUE-167）**：新增/修改判据必须先在一帧**已知干净**的画面上验证零报警——半透明
 字幕底曾让「亮列连通段」判据把每个汉字当侵入物，全片 500+ 假 WARN 让这行输出彻底失去信噪比、
 等于关掉检查；判据优先用几何量（尺寸/边距来自代码常量、零自由度）而非亮度阈值（随配色/透明度/
@@ -78,7 +78,7 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 1. 色彩语义遵守本集契约（每个概念色的指代不串）；
 2. 每个 beat 画面与分镜「画面/动效」列语义一致；
 3. 金句卡排版（衬线体/居中/角标出处）。
-4. **顶部章节条五判据**（规格见 references/07「顶部章节进度条」）：分段比例≈幕时长占比；
+4. **顶部章节条五判据**（规格见 references/08「顶部章节进度条」）：分段比例≈幕时长占比；
    填充前沿随帧线性推进、无播放头圆点；**段内文字双色随填充前沿揭示**——已填侧深字、未填侧亮字，
    未播章整段暗字（换段帧 `scenes[i+1].from` 前后各抽一帧）；开场淡入与片尾淡出（首/尾帧行为）；
    段内文字与 narration.md 幕标题一致、无溢出截断异常，整带收在 y<56 不与 SceneTag/角标重叠。

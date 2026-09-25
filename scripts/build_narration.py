@@ -434,7 +434,7 @@ def emit_chapters(
 def emit_series_layers(root: Path) -> None:
     """series.json → video/src/series-layers.json（系列身份装置的数据面）。
 
-    references/07 五层 Harness 栈的层序/层名**必须**从 series.json 派生（硬编码即漂移）；
+    references/08 五层 Harness 栈的层序/层名**必须**从 series.json 派生（硬编码即漂移）；
     Remotion 的打包根是 video/，读不到工程外文件，故由本脚本每次 build 重派生落盘。
     仅取本集所属系列；集不在任何系列（脚手架期）则跳过不写。层短名取 cardSub
     首段（「执行层 · 循环」→「执行层」）。next 为下一集标题（P6 呼吸预告用）。

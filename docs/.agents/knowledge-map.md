@@ -6,7 +6,7 @@
 
 | 文档 | 内容 | 读者 |
 |---|---|---|
-| [SKILL.md](../../SKILL.md) | Skill 路由壳：任务分流、工作流、九阶段速查、关键不变量、运行时陷阱、按需加载 | Agent（激活即加载） |
+| [SKILL.md](../../SKILL.md) | Skill 路由壳：任务分流、工作流、十阶段速查、关键不变量、运行时陷阱、按需加载 | Agent（激活即加载） |
 | [README.md](../../README.md) | 门面：核心能力、安装、前置依赖、Quickstart、许可 | 人 |
 | [CHANGELOG.md](../../CHANGELOG.md) | 版本史与迁移记录 | 人 / Agent |
 
@@ -15,9 +15,9 @@
 | 文档 | 内容 |
 |---|---|
 | [PIPELINE.md](../../references/PIPELINE.md) | 机制 SSOT：路径变量 `$T/$W/$P/$V` 唯一定义、环境变量注册表、目录约定、脚本清单、`pipeline.toml` 字段表、交付归档、复用边界、双语渲染、新集脚手架清单 |
-| [stages.toml](../../references/stages.toml) | 九阶段唯一机器可读声明（id / 序号 / 规格指针 / 子命令 / 通过门） |
-| [01](../../references/01-source-extraction.md) · [02](../../references/02-planning.md) · [03](../../references/03-narration.md) · [04](../../references/04-verification.md) · [05](../../references/05-storyboard.md) | 内容层阶段规格 ①–⑤：信源取证、策划、逐字稿、双重校验、分镜 |
-| [06](../../references/06-tts-voice.md) · [07](../../references/07-remotion-implementation.md) · [08](../../references/08-render-qa.md) · [09](../../references/09-final-render.md) | 生产层阶段规格 ⑥–⑨ |
+| [stages.toml](../../references/stages.toml) | 全部阶段的唯一机器可读声明（id / 序号 / 规格指针 / 子命令 / 通过门） |
+| [01](../../references/01-source-extraction.md) · [02](../../references/02-planning.md) · [03](../../references/03-narration.md) · [04](../../references/04-verification.md) · [05](../../references/05-prose-refinement.md) · [06](../../references/06-storyboard.md) | 内容层阶段规格 ①–⑥：信源取证、策划、逐字稿、双重校验、成文优化、分镜 |
+| [07](../../references/07-tts-voice.md) · [08](../../references/08-remotion-implementation.md) · [09](../../references/09-render-qa.md) · [10](../../references/10-final-render.md) | 生产层阶段规格 ⑦–⑩ |
 | [VOICE-CLONING.md](../../references/VOICE-CLONING.md) | 声音克隆操作手册：部署、样本、风格档、合成、缓存、排障 |
 | [INDEXTTS-2.5-ADVANCED.md](../../references/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
 | [PRON-GLOSSARY.md](../../references/PRON-GLOSSARY.md) | 易错字台账：发音标注跨集复用表 |
@@ -31,6 +31,7 @@
 | [issue.md](./issue.md) | RSI 台账（`RSI-xxx`） |
 | [evals/README.md](../../evals/README.md) | 输出质量评测与触发评测的用法（`evals.json` / `trigger-evals.json`） |
 | [modeling-experience-distillation.md](../research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
+| [prose-refinement.md](../research/prose-refinement.md) | ⑤ 成文优化的语料取证、理论依据（IEEE 引用）与方案比选（落位 / 插入位置 / 执法力度） |
 
 ## 资产
 

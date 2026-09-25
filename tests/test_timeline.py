@@ -91,7 +91,7 @@ def test_load_constants_missing_fields(tmp_path):
 def test_blend_measured_prefix_matches_full_manifest():
     """黄金判据：已实测前缀的 fromFrame 与全量 manifest 逐帧相等。
 
-    这是分幕复检（references/08「长跑期间做，不要等成片」）能提前给出可靠结论的
+    这是分幕复检（references/09「长跑期间做，不要等成片」）能提前给出可靠结论的
     前提：compute() 是顺序游标，前缀帧位只取决于前面的时长，后段外推值不回
     污染前缀。若此性质破，混排时间轴上的前缀结论全部作废。
     """

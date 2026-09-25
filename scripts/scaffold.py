@@ -11,7 +11,7 @@
 1. **不生成 scenes/**。目录留空，场景骨架样例只在模板里（scenes-EXAMPLE.tsx.txt，
    刻意不用 .tsx 后缀，免得被 tsc 收进去）。切割线是有意的：脚手架只拿走**机械
    复制**（那 391 行你本来就不该逐行读的冻结基建），保留**创作性撰写**（theme
-   与 scenes 必须读 references/07 才写得对）。手抄一遍学到的东西不该被一键抹掉。
+   与 scenes 必须读 references/08 才写得对）。手抄一遍学到的东西不该被一键抹掉。
 2. **不改工作区根 .gitignore**。会修改工作区根文件的脚手架是爆炸半径的意外扩张；且
    ignore 规则已通配到分集级，新集自动覆盖，本来就无需这一步。
 3. **不写 series.json**。登记发布顺序是内容决策（要定 episode 序号、色板、
@@ -185,7 +185,8 @@ def main() -> int:
         "  3. video/src/design/theme.ts：换本集概念色（≥4.5:1，色相不与系列已用色撞车）"
     )
     print(
-        "  4. script/narration.md → storyboard.md → video/src/scenes/*.tsx（全部新写）"
+        "  4. script/narration.md → storyboard.md → video/src/scenes/*.tsx（全部新写）；"
+        "④ 校验后按 Stage ⑤ 成文优化规格润色四稿再切镜"
     )
     print(
         "  5. video/src/Main.tsx：填 scenes/ import 与 SCENE_COMPONENTS 注册表"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""科普视频管线单入口——九阶段中工具化阶段的薄编排。
+"""科普视频管线单入口——各阶段中工具化阶段的薄编排。
 
 此前「跑管线」= 人从 README 复制粘贴命令序列，且每集的引擎/风格/样本参数
 散落三份 README（已实际漂移：README 仍教 passionate 而VOICE-CLONING 推荐位
@@ -9,7 +9,7 @@
   - 不做阶段状态机/状态文件——幂等与续跑已由内容摘要提供（{id}.sha 逐句
     sidecar；narration.json 是 narration.md 的纯函数派生），再存一份阶段状态
     就是第二事实源，必然漂移。`status` 实时派生新鲜度，零存储。
-  - 不假装能跑写作阶段（①②④⑤中的人/代理部分）——只跑工具与其质量门。
+  - 不假装能跑写作阶段（①②④⑤⑥中的人/代理部分）——只跑工具与其质量门。
 
 用法（$T/$P 的定义见 references/PIPELINE.md 路径变量约定——那里是唯一定义处，此处不复制
 位置字面量，否则搬迁时又多两处要改）：
@@ -59,7 +59,7 @@ MANUAL = str(paths.SKILL / "references" / "VOICE-CLONING.md")  # skill 根哨兵
 
 # ---------------- 语言维度（执行层） ----------------
 #
-# 「语言」是与九阶段正交的维度：机制在 langs.py、策略在 pipeline.toml 的
+# 「语言」是与阶段序列正交的维度：机制在 langs.py、策略在 pipeline.toml 的
 # narration.langs、执行在此处（--lang）。缺省语义按命令的代价分类（昂贵命令
 # 显式化，ISSUE-163 同族）：便宜命令缺省跑全部声明语言，昂贵命令缺省只跑主语言。
 
@@ -155,7 +155,7 @@ _FAILED_LANGS: list[str] = []
 
 def per_lang(cmd: str, lang_list: list[str], step) -> int:
     """逐语言顺序执行 step(lang)→rc。多语言时逐语言打完成行——「完成行=该语言
-    产物成功」（references/09），某语言失败不打该语言完成行、即断不跑后续语言
+    产物成功」（references/10），某语言失败不打该语言完成行、即断不跑后续语言
     （同 cmd_all 短路先例：坏状态下连跑昂贵命令没有意义）。单语言不打语言完成行，
     保持 main() 总行的现状形态。"""
     _FAILED_LANGS.clear()
@@ -251,7 +251,7 @@ def _lock_freshness(root: Path, lang: str) -> str:
 
 
 def _status_lang(root: Path, lang: str, multi: bool) -> None:
-    """单语言的新鲜度行（多语言时标题带语言名；zh 单语言语义同旧——⑥ 行
+    """单语言的新鲜度行（多语言时标题带语言名；zh 单语言语义同旧——⑦ 行
     由「audio/manifest」标签改为显示 manifest 实际相对路径，属显示更明确）。"""
     from timeline import load_constants
 
@@ -274,7 +274,7 @@ def _status_lang(root: Path, lang: str, multi: bool) -> None:
     head = f"（{lang}，实时派生，无状态文件）" if multi else "（实时派生，无状态文件）"
     print(f">> {root.name} 阶段新鲜度{head}")
     print(f"  ③ narration{sfx}.json    {fresh(narr_json, narr_md)}")
-    print(f"  ⑥ {manifest.relative_to(root)}    {fresh(manifest, narr_json)}")
+    print(f"  ⑦ {manifest.relative_to(root)}    {fresh(manifest, narr_json)}")
     if manifest.is_file():
         items = json.loads(manifest.read_text(encoding="utf-8"))
         done = sum(1 for i in items if (audio_dir / f"{i['id']}.mp3").is_file())
@@ -285,9 +285,9 @@ def _status_lang(root: Path, lang: str, multi: bool) -> None:
         print(f"     {done}/{len(items)} 句 mp3 · 预计成片 {mins:.1f} 分钟")
     if lang != langs.PRIMARY:
         print(f"     译稿基线锁       {_lock_freshness(root, lang)}")
-    print(f"  ⑧ out/draft{sfx}.mp4     {fresh(draft, manifest, board)}")
+    print(f"  ⑨ out/draft{sfx}.mp4     {fresh(draft, manifest, board)}")
     print(
-        f"  ⑨ out/final{sfx}.mp4     {final.is_file() and fresh(final, draft) or '待产出'}"
+        f"  ⑩ out/final{sfx}.mp4     {final.is_file() and fresh(final, draft) or '待产出'}"
     )
 
 
@@ -375,7 +375,7 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
                 f"  ✅ IndexTTS 服务: v{h.get('version')} {h.get('device')}/{h.get('dtype')}"
             )
         except (urllib.error.URLError, OSError) as e:
-            # 服务按需启停、用完即关（references/06「服务生命周期」）：离线是常态而非故障，
+            # 服务按需启停、用完即关（references/07「服务生命周期」）：离线是常态而非故障，
             # 不计入失败——计入则 doctor 在正常关停态恒红，反过来诱导预启动。
             print(
                 f"  ⚠️  IndexTTS 服务未在线: {e}"
@@ -560,8 +560,8 @@ def cmd_deliver(
     dry_run: bool,
     langs: list[str] | None = None,
 ) -> int:
-    """⑨ 交付归档。显式子命令，刻意不串联进 render --final——完成行
-    `>> render 完成` 是 references/09 钉死的判完成信号，串联外部写操作会在失败时
+    """⑩ 交付归档。显式子命令，刻意不串联进 render --final——完成行
+    `>> render 完成` 是 references/10 钉死的判完成信号，串联外部写操作会在失败时
     产生「标记已打 + rc 非零」的混合信号（触发契约见该文档 §终渲）。"""
     extra: list[str] = []
     if out_root:
@@ -795,7 +795,7 @@ def cmd_clean_samples(_root: Path, _cfg: dict) -> int:
 
 
 def cmd_stages() -> int:
-    """打印九阶段声明表（替代 README 手维护的阶段表；声明源 references/stages.toml）。
+    """打印阶段声明表（替代 README 手维护的阶段表；声明源 references/stages.toml）。
 
     与工程无关，故不读 pipeline.toml。
     """
@@ -803,7 +803,7 @@ def cmd_stages() -> int:
         (paths.SKILL / "references" / "stages.toml").read_text(encoding="utf-8")
     )
     print(
-        ">> 九阶段（声明源 references/stages.toml；authored=撰写产出 / tooled=工具产出）\n"
+        f">> {len(decl['stage'])} 个阶段（声明源 references/stages.toml；authored=撰写产出 / tooled=工具产出）\n"
     )
     for st in decl["stage"]:
         cmds = " ".join(st["commands"]) or "—"
@@ -938,7 +938,7 @@ def main() -> None:
         help="译稿基线锁：确认这些句的译文在主稿改稿后无需改动（重译过的句自动刷新，"
         "无需点名）；只转发给译稿语言",
     )
-    p = sub.add_parser("check", parents=[lang_flag], help="④⑤ 内容门")
+    p = sub.add_parser("check", parents=[lang_flag], help="④⑥ 内容门")
     p.add_argument(
         "--check-scenes",
         action="store_true",
@@ -951,10 +951,10 @@ def main() -> None:
         help="附:分镜动效标注↔场景运动模型互比（WARN-only）",
     )
     sub.add_parser(
-        "captions", parents=[lang_flag], help="⑥+ 导出 srt/vtt（按语言分槽位）"
+        "captions", parents=[lang_flag], help="⑦+ 导出 srt/vtt（按语言分槽位）"
     )
     p = sub.add_parser(
-        "deliver", parents=[lang_flag], help="⑨ 交付归档：成片按系列/标题 vN 落统一根"
+        "deliver", parents=[lang_flag], help="⑩ 交付归档：成片按系列/标题 vN 落统一根"
     )
     p.add_argument(
         "--root",
@@ -966,7 +966,7 @@ def main() -> None:
     )
     sub.add_parser("clean-samples", help="清理 .temp/voice-samples（生物特征）")
     p = sub.add_parser(
-        "tts", parents=[lang_flag], help="⑥ 配音合成（参数来自 pipeline.toml）"
+        "tts", parents=[lang_flag], help="⑦ 配音合成（参数来自 pipeline.toml）"
     )
     p.add_argument("--plan", action="store_true", help="只看排期不实跑")
     p.add_argument("--force", action="store_true", help="忽略缓存")
@@ -989,9 +989,9 @@ def main() -> None:
         " 薄包装不走本入口、天然无此门——那不是绕过的设计，是 tts.py 的导入边界"
         "（不可 import check_script，见 paths.py 文件头）使然；要门就走本入口",
     )
-    p = sub.add_parser("render", parents=[lang_flag], help="⑧⑨ 渲染")
+    p = sub.add_parser("render", parents=[lang_flag], help="⑨⑩ 渲染")
     p.add_argument("--final", action="store_true", help="终渲（默认草渲）")
-    p = sub.add_parser("qa", parents=[lang_flag], help="⑧ 抽帧 QA（恒单语言）")
+    p = sub.add_parser("qa", parents=[lang_flag], help="⑨ 抽帧 QA（恒单语言）")
     p.add_argument(
         "--video",
         help="渲染产物路径，**按分集工程目录解析**（本入口以 cwd=<工程> 启动 "
@@ -1022,7 +1022,7 @@ def main() -> None:
     sub.add_parser(
         "all", parents=[lang_flag], help="build→check→tts→captions→render(草渲) 一键链"
     )
-    sub.add_parser("stages", help="打印九阶段声明表（与工程无关）")
+    sub.add_parser("stages", help="打印阶段声明表（与工程无关）")
     args = ap.parse_args()
 
     if args.series is not None and args.project != ".":
@@ -1103,7 +1103,7 @@ def main() -> None:
         "clean-samples": lambda: cmd_clean_samples(root, cfg),
     }[args.cmd]()
     # 总完成行 = 汇总：全部语言成功才打「完成」，否则点名失败语言（完成行=产物
-    # 成功，references/09；语言级完成行已由 per_lang 在各语言成功后分打）。
+    # 成功，references/10；语言级完成行已由 per_lang 在各语言成功后分打）。
     if _FAILED_LANGS:
         print(
             f"\n>> {args.cmd} 未完成（失败语言：{'、'.join(_FAILED_LANGS)}，"

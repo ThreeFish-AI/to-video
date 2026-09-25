@@ -1,6 +1,6 @@
-# Stage ⑨ 终渲与交付（skill 规格 · 09）
+# Stage ⑩ 终渲与交付（skill 规格 · 10）
 
-> 前置：Stage ⑧ 的自动体检零 FAIL 且人工目检通过；文稿与音频已冻结（B 遍完成）。
+> 前置：Stage ⑨ 的自动体检零 FAIL 且人工目检通过；文稿与音频已冻结（B 遍完成）。
 
 ## 终渲
 
@@ -30,7 +30,7 @@ cd $P/video
 即整片渲染是**分钟级**，远快于配音（同集 TTS 2.1 小时）。排期上「渲染慢」是错觉——
 真正的长尾在配音；渲染可以放心多轮迭代（改一处场景重渲全片只要 8 分钟）。
 
-渲染主机约束：**macOS + PingFang SC/Songti SC/SF Mono 系统字体**（三集未内嵌 CJK 字体，Linux/CI 渲染不在支持范围；重启触发器见 [07 事实条（字体可复现性）](./07-remotion-implementation.md)——渲染迁 Linux/CI，或 Remotion 5.0 将 validateFontIsLoaded 默认翻 true 时必须内嵌子集字体）。
+渲染主机约束：**macOS + PingFang SC/Songti SC/SF Mono 系统字体**（三集未内嵌 CJK 字体，Linux/CI 渲染不在支持范围；重启触发器见 [08 事实条（字体可复现性）](./08-remotion-implementation.md)——渲染迁 Linux/CI，或 Remotion 5.0 将 validateFontIsLoaded 默认翻 true 时必须内嵌子集字体）。
 
 ## 交付件清单
 
@@ -60,7 +60,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver
 - **配置渠道**：`--root ~/Documents/video`（一次性 / prompt 指定）或 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video`（持久统一配置，可写 shell profile / Claude Code settings env）。根路径是机器属性，不写进受版本控制的 toml（同 tts.server / tts-store 立场）；两渠道皆无时 deliver 大声退出并列出用法。
 - **agent 契约**：用户在 prompt 中给出目标路径时，`render --final` 成功后**显式**执行 `pipeline.py --project $P deliver --root <路径>`，并建议用户以 env 固化。`render --final` 刻意不自动串联 deliver——本规格把编排层 `>> render 完成` 标记钉为判完成唯一信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号。
 - 先 `deliver --dry-run` 预览目的地与下一版本号，确认后再实投。
-- **收尾关服务**：deliver 成功后，按 [06-tts-voice.md](./06-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时）——制片会话不留常驻服务。
+- **收尾关服务**：deliver 成功后，按 [07-tts-voice.md](./07-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时）——制片会话不留常驻服务。
 
 ## 平台合规（发布前自查）
 
@@ -94,4 +94,4 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
    `$T/scripts/archify_manifest.py --project $P`。
 5. **build / check**：`pipeline.py build` 重建 narration.json 派生物 → `pipeline.py check`
    （含画面文字复述口播门与 archify 覆盖门）→ `video/` 内 `tsc --noEmit`。
-6. **render**：草渲 + 抽帧 QA（[references/08](./08-render-qa.md)）→ 终渲（本文件上文）。
+6. **render**：草渲 + 抽帧 QA（[references/09](./09-render-qa.md)）→ 终渲（本文件上文）。

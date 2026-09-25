@@ -5,7 +5,7 @@
 
 此前全链路是「单语言单槽位」：narration.json / audio/{id}.mp3 / captions.srt /
 final.mp4 各只有一个路径，语言相关常数（tts lang 码、edge 音色、长度单位）散落
-在各消费者里硬编码。双语化把语言建模为与九阶段正交的独立维度，分三层（RSI-004）：
+在各消费者里硬编码。双语化把语言建模为与阶段序列正交的独立维度，分三层（RSI-004）：
 
   机制（本模块）  语言注册表 + 路径派生规则 + 长度单位——纯函数、零 IO
   策略（config）  pipeline.toml 的 narration.langs / [narration.en] / [tts.en]

@@ -4,12 +4,13 @@
     {
       "id": 1,
       "prompt": "想把 ReAct 这篇论文做成一期科普视频 https://arxiv.org/abs/2210.03629 ，工作区就用 ~/videos/ws（之前 init 过了）。配音先不用我自己的声音，用 edge 的预置音色就行，片长 3 分钟左右。这次先把稿子这层弄完，check 跑过了就停，tts 先别跑，我看完稿子再说。",
-      "expected_output": "在 ~/videos/ws 内用 scaffold.py 建集（如 episodes/react-video），该集 pipeline.toml 设 tts.engine=edge、时长预算窗约 3 分钟；按 Stage ① A 型规格取证 ReAct（arXiv:2210.03629），落 research/paper-notes.md（来源引用 + 断言锚到论文章节/图表号或英文原句）；撰写 planning.md、narration.md（`## Pn 幕名` 分幕 + `- [pn-01]` 一句一行）与覆盖全部句 id 的 storyboard.md；依序跑 pipeline.py build → check，有 FAIL 就改源稿重跑，直到 check 零 FAIL 并报告；止步于 Stage ④，不启动 TTS 正式合成（至多 tts --plan），并给出下一步建议。",
+      "expected_output": "在 ~/videos/ws 内用 scaffold.py 建集（如 episodes/react-video），该集 pipeline.toml 设 tts.engine=edge、时长预算窗约 3 分钟；按 Stage ① A 型规格取证 ReAct（arXiv:2210.03629），落 research/paper-notes.md（来源引用 + 断言锚到论文章节/图表号或英文原句）；撰写 planning.md、narration.md（`## Pn 幕名` 分幕 + `- [pn-01]` 一句一行）与覆盖全部句 id 的 storyboard.md；逐字稿过 ④ 双重校验后按 Stage ⑤ 成文优化规格润色（幕内空行分 beat，事实与句 id 不动，改动句回 ④A 复核）再切镜；依序跑 pipeline.py build → check，有 FAIL 就改源稿重跑，直到 check 零 FAIL 并报告；止步于内容层（①–⑥），不启动 TTS 正式合成（至多 tts --plan），并给出下一步建议。",
       "files": [],
       "assertions": [
         "在 ~/videos/ws（含 .to-video-root 哨兵）内以 `scaffold.py <slug>-video --title …` 建集，而非手工 mkdir 或拷贝骨架；分集目录名以 -video 结尾，且该集 pipeline.toml 的 tts.engine 被设为 edge",
         "产出 research/paper-notes.md：头部含 ReAct 来源引用（作者 + arXiv:2210.03629），断言带论文章节/图表号或英文原句锚点；narration.md 中凡出现的基准名与数字（如 HotpotQA、FEVER、ALFWorld、WebShop 及成功率提升幅度）都能在 notes 中找到对应条目",
         "script/narration.md 由 agent 撰写，采用 `## P0 <幕名>` 分幕 + `- [p0-01] <一句>` 一句一行，句 id 以本幕小写幕名为前缀且全片唯一；同时写有覆盖全部句 id 的 script/storyboard.md",
+        "narration.md 体现了 Stage ⑤ 成文优化：幕内按一个想法一段用空行分出 beat（每段 2–8 句），没有以逗号或顿号收尾、语义要到下一行才完整的半句；agent 产出或引用了改动表（句 id + 规则编号 + 理由），并对改动句做过 ④A 真实性复核（RISKY=0）",
         "以 `uv run --no-project <skill 根或 ~/videos/ws>/scripts/pipeline.py --project <分集目录> build` 及同形态的 `check` 依序执行（最后一次改 narration.md / storyboard.md 之后重跑 build 再 check），最终 check 退出码为 0，agent 引用输出报告零 FAIL",
         "narration.json / chapters.json 只由 build 生成：transcript 中没有对 narration.json 或 manifest.json 的直接 Write/Edit；中途 check 若报 FAIL，修的是 narration.md / storyboard.md 源稿，而非派生物或门阈值",
         "遵守「check 过了就停」：未执行不带 --plan 的 `pipeline.py tts`、直调 scripts/tts.py 或 `pipeline.py all`，分集内无新生成的配音 mp3；收尾给出下一步（如审稿后 tts --plan）"
@@ -32,7 +33,7 @@
     {
       "id": 3,
       "prompt": "~/videos/ws 里 hello-video 那集草渲 qa 已经全绿了，帮我出终版然后交付。成片放 ~/Documents/video 下面，以后都放这儿，别每次都让我说一遍。",
-      "expected_output": "确认前置（⑧ qa 零 FAIL，可重跑 qa 复核）后执行 `pipeline.py --project <hello-video> render --final`，以 `>> render 完成` 标记或退出码 0 判完成（可接 captions 导出 srt/vtt）；随后显式执行 `pipeline.py --project <hello-video> deliver --root ~/Documents/video`（可先 --dry-run 预览）；针对「以后都放这儿」，说明交付根是机器属性，给出在 ~/.zshrc 等 shell profile 或 Claude Code settings env 中 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video` 的做法，绝不写进 pipeline.toml / to-video.toml；最后报告归档路径 `~/Documents/video/<系列id>/<集标题> v1.mp4`（首投 v1、同字节重投跳过）。若本集未登记 series.json，deliver 会大声退出，agent 应如实点名并引导登记，而非绕过或伪造路径。",
+      "expected_output": "确认前置（⑨ qa 零 FAIL，可重跑 qa 复核）后执行 `pipeline.py --project <hello-video> render --final`，以 `>> render 完成` 标记或退出码 0 判完成（可接 captions 导出 srt/vtt）；随后显式执行 `pipeline.py --project <hello-video> deliver --root ~/Documents/video`（可先 --dry-run 预览）；针对「以后都放这儿」，说明交付根是机器属性，给出在 ~/.zshrc 等 shell profile 或 Claude Code settings env 中 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video` 的做法，绝不写进 pipeline.toml / to-video.toml；最后报告归档路径 `~/Documents/video/<系列id>/<集标题> v1.mp4`（首投 v1、同字节重投跳过）。若本集未登记 series.json，deliver 会大声退出，agent 应如实点名并引导登记，而非绕过或伪造路径。",
       "files": [],
       "assertions": [
         "`render --final` 在 qa 零 FAIL 的前提下执行（引用既有或重跑的 qa 结果），并以编排层 `>> render 完成` 标记或进程退出码 0 判定完成，而不是以 `Rendered N/N` 帧计数判定",

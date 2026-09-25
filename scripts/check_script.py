@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""④⑤ 内容门：分镜覆盖性、时长预算、淡入不变式——公共管线版本。
+"""④⑥ 内容门：分镜覆盖性、时长预算、淡入不变式——公共管线版本。
 
 机械化三件此前靠人眼/散文守着的事：
   1. storyboard 的 beat 句 id 区间必须**覆盖**本幕每一句（无缺句），重叠仅允许
@@ -741,7 +741,7 @@ def check_motion(root: Path, msgs: list[str]) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="④⑤ 内容门：覆盖性/预算/淡入不变式")
+    ap = argparse.ArgumentParser(description="④⑥ 内容门：覆盖性/预算/淡入不变式")
     ap.add_argument("--project", default=".", help="视频工程根目录")
     ap.add_argument(
         "--lang",

@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](LICENSE) [![Platform: macOS](https://img.shields.io/badge/platform-macOS-333333.svg)](#三安装)
 
-读透一份信源，交付一支 1080p30 的科普视频——由 AI Agent 执行、人做评审决策的九阶段流水线。
+读透一份信源，交付一支 1080p30 的科普视频——由 AI Agent 执行、人做评审决策的十阶段流水线。
 
-**to-video** 是一个可安装的 agent Skill（Claude Code 等）加 Python / Remotion 工具链：把「信源精读 → 逐字稿 → 配音 → 代码动画 → 终渲」固化为九个带通过门的阶段。内容层四个写作阶段产出**可回溯的逐字稿**（每句口播都能落到信源证据），生产层五个工具阶段完成声音克隆配音、React 场景动画、抽帧质检与终渲交付。全片派生自文本单一事实源——改稿后 `build → tts → render` 一条链重跑，全程不打开任何剪辑软件。
+**to-video** 是一个可安装的 agent Skill（Claude Code 等）加 Python / Remotion 工具链：把「信源精读 → 逐字稿 → 配音 → 代码动画 → 终渲」固化为十个带通过门的阶段。内容层（①–⑥）的写作阶段产出**可回溯、像人写的逐字稿**（每句口播都能落到信源证据），生产层（⑦–⑩）的工具阶段完成声音克隆配音、React 场景动画、抽帧质检与终渲交付。全片派生自文本单一事实源——改稿后 `build → tts → render` 一条链重跑，全程不打开任何剪辑软件。
 
 <p align="center">
   <img src="docs/assets/demo/hello-video.gif" width="88%" alt="Demo：顶部分段章节进度条段宽随时长、填充跨段推进，标题 spring 入场、能力标签错峰弹入——画面、配音、字幕全部由代码生成">
@@ -24,10 +24,10 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture/pipeline-layers-dark.png">
-  <img src="docs/assets/architecture/pipeline-layers-light.png" alt="九阶段双层流水线：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿单一事实源 → ④ 双重校验 → ⑤ 分镜表；生产层（工具驱动）由 ③ 下行 ⑥ TTS 合成、由 ⑤ 下行 ⑦ Remotion 场景实现，二者汇合经 ⑧ 草渲 + 抽帧 QA 迭代修正，最终 ⑨ 终渲交付 1080p30">
+  <img src="docs/assets/architecture/pipeline-layers-light.png" alt="十阶段双层流水线：内容层（文档驱动）① 信源精读取证 → ② 策划案 → ③ 逐字稿单一事实源 → ④ 双重校验 → ⑤ 成文优化 → ⑥ 分镜表；生产层（工具驱动）由 ⑤ 定稿后下行 ⑦ TTS 合成、由 ⑥ 下行 ⑧ Remotion 场景实现，二者汇合经 ⑨ 草渲 + 抽帧 QA 迭代修正，最终 ⑩ 终渲交付 1080p30">
 </picture>
 
-①–⑤ 为**内容层**（写作产物，由人/代理撰写），⑥–⑨ 为**生产层**（由工具执行）：
+①–⑥ 为**内容层**（写作产物，由人/代理撰写），⑦–⑩ 为**生产层**（由工具执行）：
 
 | 阶段 | 产出 · 通过门 |
 | --- | --- |
@@ -35,13 +35,14 @@
 | ② 策划案生成 | planning.md 六节齐 |
 | ③ 逐字稿写作 | narration.md（全片单一事实源），`build` 派生 narration.json |
 | ④ 双重校验 | 真实性 + 易懂性双门（`check`）：RISKY=0 且 REWRITE=0 |
-| ⑤ 分镜表生成 | beat 覆盖率无缺句（`check`，含分镜↔代码互比） |
-| ⑥ TTS 配音 | 逐句 mp3 + 时长 manifest（`tts`，幂等续跑），`captions` 导出 srt/vtt |
-| ⑦ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 + 运动层铁律 |
-| ⑧ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`）零 FAIL，含尾幕渐黑必查 |
-| ⑨ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径，实测时长落在预算窗内 |
+| ⑤ 成文优化 | 研究笔记 / 策划案 / 逐字稿 / 分镜按「结构 → 衔接 → 句子 → 词句」四层改成人写模样，只改表达不改事实：成文评审 REWRITE=0 且改动句复核 RISKY=0 |
+| ⑥ 分镜表生成 | beat 覆盖率无缺句（`check`，含分镜↔代码互比） |
+| ⑦ TTS 配音 | 逐句 mp3 + 时长 manifest（`tts`，幂等续跑），`captions` 导出 srt/vtt |
+| ⑧ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 + 运动层铁律 |
+| ⑨ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`）零 FAIL，含尾幕渐黑必查 |
+| ⑩ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径，实测时长落在预算窗内 |
 
-九阶段的唯一声明源是 [`references/stages.toml`](references/stages.toml)，本表是它的人读视图；每阶段的代理规格见 [`references/`](references/)。
+全部阶段的唯一声明源是 [`references/stages.toml`](references/stages.toml)，本表是它的人读视图；每阶段的代理规格见 [`references/`](references/)。
 
 ## 三、安装
 
@@ -128,18 +129,18 @@ EOF
 
 # 6) 放入两幕场景组件，并在 $P/video/src/Main.tsx 注册（加 import {P0} 与 {P1}；
 #    给刻意留空的 SCENE_COMPONENTS 表各填一行 `P0: P0,` / `P1: P1,`，键 = 幕名
-#    ——每幕必须注册，漏一幕渲染即报错；规格见 references/07）
+#    ——每幕必须注册，漏一幕渲染即报错；规格见 references/08）
 cp $T/assets/quickstart/P0.tsx $T/assets/quickstart/P1.tsx "$P/video/src/scenes/"
 
-# 7) ③④⑤ 内容流水线：逐字稿派生（narration.json + 章节标签 chapters.json）
+# 7) ③④⑥ 内容流水线：逐字稿派生（narration.json + 章节标签 chapters.json）
 #    + 内容门（时长预算 / 分镜覆盖 / 读法陷阱）
 uv run --no-project $W/scripts/pipeline.py --project $P build
 uv run --no-project $W/scripts/pipeline.py --project $P check
 
-# 8) ⑥ 配音（edge 引擎按分集包装器契约直调，三句秒级；克隆模式见 tts --plan）
+# 8) ⑦ 配音（edge 引擎按分集包装器契约直调，三句秒级；克隆模式见 tts --plan）
 cd "$P" && uv run --no-project --with edge-tts --with mutagen scripts/tts.py
 
-# 9) ⑧ 草渲 + 抽帧体检（先装分集依赖；产物 $P/out/draft.mp4）
+# 9) ⑨ 草渲 + 抽帧体检（先装分集依赖；产物 $P/out/draft.mp4）
 cd "$P/video" && pnpm install
 cd "$W"
 uv run --no-project $W/scripts/pipeline.py --project $P render
@@ -152,9 +153,9 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 
 | 文档 | 内容 |
 | --- | --- |
-| [SKILL.md](SKILL.md) | Skill 路由壳：任务分流、工作流、九阶段速查、关键不变量、运行时陷阱、按需加载 |
+| [SKILL.md](SKILL.md) | Skill 路由壳：任务分流、工作流、十阶段速查、关键不变量、运行时陷阱、按需加载 |
 | [references/PIPELINE.md](references/PIPELINE.md) | 机制 SSOT：脚本清单、pipeline.toml 字段表、路径变量与环境变量、复用边界 |
-| [references/](references/) | 九阶段规格（`01`–`09` 每阶段一份，可直接作为子代理 prompt）与声音克隆、读音、建模等手册 |
+| [references/](references/) | 阶段规格（`01`–`10` 每阶段一份，文件号 = 阶段序号，可直接作为子代理 prompt）与声音克隆、读音、建模等手册 |
 | [RSI.md](RSI.md) | RSI 自改进回路：Skill 缺陷/改进的台账登记、子代理协议、四道门核验与 PR 回流 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本史与迁移记录 |
 
@@ -162,7 +163,7 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 
 ## 六、相邻 Skill
 
-同一作者的配套技能：[guided-learn](https://github.com/ThreeFish-AI/guided-learn)（信源精读方法论，阶段 ① 的上游能力）、[archify](https://github.com/tt-a1i/archify)（架构图绘制与动效录制，阶段 ⑦ 的图例资产来源、覆盖门的消费对象）。
+同一作者的配套技能：[guided-learn](https://github.com/ThreeFish-AI/guided-learn)（信源精读方法论，阶段 ① 的上游能力）、[archify](https://github.com/tt-a1i/archify)（架构图绘制与动效录制，阶段 ⑧ 的图例资产来源、覆盖门的消费对象）。
 
 ## 七、致谢
 

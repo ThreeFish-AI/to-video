@@ -113,9 +113,9 @@ def blend(
 ) -> list[dict]:
     """部分 manifest 混合时间轴：已合成句用实测时长，其余按语速外推。
 
-    长跑中途的分幕复检（references/08「TTS 长跑期间做，不要等成片」）只有部分句子
+    长跑中途的分幕复检（references/09「TTS 长跑期间做，不要等成片」）只有部分句子
     合成完：`measured` 取部分 manifest（或逐句 mp3 实测）的 `{id: durationSec}`，
-    未合成句以 `length_fn(text) / chars_per_sec` 外推——这是 references/08 步骤 1 的
+    未合成句以 `length_fn(text) / chars_per_sec` 外推——这是 references/09 步骤 1 的
     机械化。
 
     `length_fn` 是外推的长度口径：缺省 len（zh 数字符，既有黄金行为）；en 传

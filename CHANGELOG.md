@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Breaking（阶段重编号，RSI-011；建议发版 3.0.0）
+
+- 新增正式阶段 **⑤ 成文优化**（④ 双重校验之后、分镜之前），原 ⑤–⑨ 顺移为 ⑥–⑩，规格文件同步改名：`05-storyboard.md → 06-storyboard.md`、`06-tts-voice.md → 07-tts-voice.md`、`07-remotion-implementation.md → 08-remotion-implementation.md`、`08-render-qa.md → 09-render-qa.md`、`09-final-render.md → 10-final-render.md`（`git mv` 保留历史）。外部指向旧文件名的链接会 404；负责方的已发布集只有 1 处外链，且原本就是 404。
+- frozen 骨架有 5 个文件的**纯注释**指针随改名更新（`NarrationAudio.tsx`、`Subtitle.tsx`、`ChapterProgress.tsx`、`SceneFade.tsx`、`motion/window.ts`），md5 随之变化；另有 seeded 档的 `theme.ts`（.tmpl）、`motifs.tsx`、`README.md`（.tmpl）同步更新。**自适配**：当代集整组拷齐模板后跑 `tsc --noEmit`（仅注释变化，行为零改动）；未拷齐的集 `verify_skeleton --strict` 会报 STALE，且 `render --lang en` 预检直比 NarrationAudio / Subtitle / ChapterProgress 字节、会拦下英文渲染——需要出英文版前先拷齐。停在旧代的集按工作区 `[[skeleton.drift]]` 登记。
+- `pipeline.py` 的 `status` 行与各子命令 help 里的阶段序号随之顺移（⑥→⑦ 配音、⑧→⑨ 草渲、⑨→⑩ 终渲；`check` 标为 ④⑥ 内容门）；`stages` 子命令打印 10 行。
+
+### Added
+
+- **Stage ⑤ 成文优化**规格 [references/05-prose-refinement.md](references/05-prose-refinement.md)：把 AI 稿件改成像人写、适合人读也适合人听的样子。四层 pass 按编辑行业层级自顶向下执行（L1 结构 → L2 衔接 → L3 句子 → L4 词句），每层写明改什么、不改什么；硬护栏冻结事实、数字、限定词、归属句和句 id；四类稿件各有专属规则（逐字稿：幕内空行分 beat、不把一句话切成两行、悬置只留给真悬念、misconception 先行、开环回扣；策划案：结论先行、小标题写成判断句；研究笔记：主旨段结论先行、取证锚点不动；分镜：只写看得见的、旁白讲画面给不了的）；中文去机器味检查表 Z1–Z13；改动表逐条附规则编号，改动句回 ④A 复核。通过门：「成文评审 REWRITE=0 且改动句复核 RISKY=0」。authored 阶段、**刻意不加内容类机器门**（用户决策：语料里书面腔禁词零命中，结构层问题无法用正则可靠判断）。
+- 幕内空行分段成为正式写法（03 格式契约）：`build` 本就跳过空行，零机制成本。
+- 设计依据 [docs/research/prose-refinement.md](docs/research/prose-refinement.md)（14 集 2303 句语料取证、IEEE 引用、落位 / 插入位置 / 执法力度三组比选）与新图 `prose-refinement--passes`（archify HTML + dark/light PNG + mermaid 源）。
+- 文档完整性门 `test_spec_references_resolve`（附检测器自检）：用户可见文案（脚本、规格、手册、模板含注释、README、research、mermaid 源）里点名的 `references/NN-*.md` 必须存在——现有链接门查不到注释与散文里的路径，重编号时漏改一处就是一条死指引。
+
+### Changed
+
+- 执法测试去数字化：`test_stage_numbers_align_spec_files` 从 4 组硬编码元组泛化为「每个阶段文件号 == 序号」；`test_router_table_covers_every_skill` 的行数从写死 `9` 改为 `len(stages())`；速查节标题匹配「阶段速查」而非「九阶段速查」。RSI.md 不变量 1、8、11 同步改写为不带数字的表述——以后再增删阶段，不必再改不变量本身。
+- SKILL.md：description 改为「十阶段流水线」并点名成文优化；速查表 10 行；任务分流新增「润色成稿」一行；工作流注释标出 ④→⑤ 的位置。01 / 02 / 03 / 04 / 06 规格各加一条指向 ⑤ 的指针（④ 写明与 ⑤ 的分工；03 头部版本标注改为「已过双重校验与成文优化」）。
+- `pipeline-layers` 图（mmd / archify HTML / PNG）重生成为十阶段，TTS 的上游边改为从 ⑤ 引出（配音定稿遍必须在文稿冻结后启动）；`modeling-experience--loop` 图的阶段圈号同步顺移并重新导出 PNG。
+
 ## [2.0.0] - 2026-09-25
 
 ### Breaking（移除全部历史兼容面，negentropy 侧自行适配；RSI-009）

@@ -9,9 +9,9 @@
   1. skill 指针全部真实存在（**skill 根相对**——stages.toml 与阶段规格同住
      skill 仓，双锚点架构下不再有「子项目」这个锚）
   2. commands 每一项都是 pipeline.py 真实注册的子命令
-  3. ordinal 恰好是 ①..⑨、无重无缺
+  3. ordinal 恰好是 ①..⑩、无重无缺
   4. 每篇 skill 文档的 H1 与声明（ordinal / name / 文件号）逐字相符
-  5. skill 根 SKILL.md（路由壳）的九阶段速查表覆盖全部九个 skill 文档，
+  5. skill 根 SKILL.md（路由壳）的阶段速查表覆盖全部 skill 文档（行数随声明），
      且声明「关键不变量」节（**校验而非生成**：生成物会被手改，那是更隐蔽的
      第二事实源）
 
@@ -48,7 +48,8 @@ STAGES_TOML = SKILL_ROOT / "references" / "stages.toml"
 #: 机制契约文档（路径变量 SSOT + 子命令穷举抄件）
 PIPELINE_MD = SKILL_ROOT / "references" / "PIPELINE.md"
 
-ORDINALS = "①②③④⑤⑥⑦⑧⑨"
+#: 全量圈号超集（20 以内进制即够用；阶段数从 stages() 推导，不写死——RSI-011）
+ORDINALS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫"
 
 
 def stages() -> list[dict]:
@@ -250,7 +251,7 @@ def test_pipeline_cli_registers_forwarded_flags():
         assert flag in result.stdout
 
 
-# ---------------- deliver（⑨ 交付归档） ----------------
+# ---------------- deliver（⑩ 交付归档） ----------------
 
 
 def test_deliver_stays_outside_fanout_whitelist():
@@ -261,8 +262,8 @@ def test_deliver_stays_outside_fanout_whitelist():
 
 
 def test_final_render_stage_declares_deliver():
-    """⑨ 命令声明完整性：test_commands_are_registered_subcommands 只查 ⊆ 注册表，
-    反向缺口（⑨ 删漏 deliver）由此条拦住。"""
+    """⑩ 命令声明完整性：test_commands_are_registered_subcommands 只查 ⊆ 注册表，
+    反向缺口（⑩ 删漏 deliver）由此条拦住。"""
     by_id = {st["id"]: st for st in stages()}
     assert "deliver" in by_id["final-render"]["commands"]
 
@@ -306,9 +307,11 @@ def test_fanout_complement_is_nonempty_and_keeps_destructive_out():
         )
 
 
-def test_ordinals_are_exactly_one_through_nine():
+def test_ordinals_are_a_contiguous_run_from_one():
     got = [st["ordinal"] for st in stages()]
-    assert got == list(ORDINALS), f"ordinal 应恰为 ①..⑨ 且按序声明，实际 {got}"
+    assert got == list(ORDINALS[: len(got)]), (
+        f"ordinal 应从 ① 起按序无重无缺声明，实际 {got}"
+    )
 
 
 def test_kind_is_known_and_authored_stages_own_no_generation():
@@ -335,14 +338,15 @@ def test_skill_h1_matches_declaration():
 
 
 def test_stage_numbers_align_spec_files():
-    """守住编号对齐（RSI-009）：⑥↔06-tts-voice、⑦↔07-remotion-implementation。
+    """守住编号对齐：每个阶段的规格文件号 == 其序号（RSI-009 废除错位，RSI-011 泛化）。
 
-    历史上两文件号与阶段序号错位（入链 ≥5 处曾因此保留），对齐后本条防再错位。
+    历史上 ⑥⑦ 两文件号与序号错位（入链 ≥5 处曾因此保留）；插入新阶段时整段顺移，
+    逐条硬编码的旧写法会漏掉新增序号——故按声明逐项推导，不写死任何一对。
     """
-    by_ord = {st["ordinal"]: Path(st["skill"]).name for st in stages()}
-    for ordinal, prefix in (("⑥", "06-"), ("⑦", "07-"), ("①", "01-"), ("②", "02-")):
-        assert by_ord[ordinal].startswith(prefix), (
-            f"{ordinal} 不再对应 {prefix}*，请同步所有入链"
+    for st in stages():
+        want = f"{ORDINALS.index(st['ordinal']) + 1:02d}-"
+        assert Path(st["skill"]).name.startswith(want), (
+            f"{st['ordinal']} 应对应 {want}*，实际 {st['skill']}——请同步所有入链"
         )
 
 
@@ -352,13 +356,13 @@ def _router_text() -> str:
 
 
 def _quick_reference_section(text: str) -> str:
-    """→ 「九阶段速查」节正文（该标题起，至下一个同级或更高级标题止）。
+    """→ 「阶段速查」节正文（该标题起，至下一个同级或更高级标题止）。
 
     找不到该节即报错——它和「关键不变量」节都是 SKILL.md 完整版的契约结构，
     缺席说明占位版尚未被完整版替换，而非本检测器失效。
     """
-    m = re.search(r"^(#{1,6})[^\n]*九阶段速查[^\n]*$", text, re.MULTILINE)
-    assert m, "SKILL.md 缺「九阶段速查」节——占位版尚未落地为完整版"
+    m = re.search(r"^(#{1,6})[^\n]*阶段速查[^\n]*$", text, re.MULTILINE)
+    assert m, "SKILL.md 缺「阶段速查」节——占位版尚未落地为完整版"
     rest = text[m.end() :]
     stop = re.search(rf"^#{{1,{len(m.group(1))}}}\s", rest, re.MULTILINE)
     return rest[: stop.start()] if stop else rest
@@ -369,23 +373,24 @@ SKILL_LINK_RE = re.compile(r"references/(\d{2}-[a-z-]+\.md)")
 
 
 def test_router_table_covers_every_skill():
-    """路由壳（skill 根 SKILL.md）的九阶段速查表必须链到全部九篇规格，一一对应。
+    """路由壳（skill 根 SKILL.md）的阶段速查表必须链到全部规格，一一对应。
 
-    判据三层：表内含规格链接的行恰 9 行（一阶段一行）；链接文件名无重复；
-    链接集合与 stages.toml 声明的 9 篇 skill 文件逐一相等——多链（指向已删文档）、
-    漏链（新阶段未入表）、重复（一链两用）三类漂移都会红。
+    判据三层：表内含规格链接的行数 == stages.toml 阶段数（一阶段一行，行数随声明，
+    不写死——RSI-011 插入 ⑤ 时写死的 9 即成错门）；链接文件名无重复；链接集合与
+    声明的 skill 文件逐一相等——多链（指向已删文档）、漏链（新阶段未入表）、
+    重复（一链两用）三类漂移都会红。
     """
     section = _quick_reference_section(_router_text())
     rows = [ln for ln in section.split("\n") if ln.lstrip().startswith("|")]
     linked_rows = [ln for ln in rows if SKILL_LINK_RE.search(ln)]
-    assert len(linked_rows) == 9, (
-        f"速查表应 9 行（一阶段一行），实际 {len(linked_rows)} 行含规格链接"
+    assert len(linked_rows) == len(stages()), (
+        f"速查表应 {len(stages())} 行（一阶段一行），实际 {len(linked_rows)} 行含规格链接"
     )
     names = SKILL_LINK_RE.findall(section)
     assert len(names) == len(set(names)), f"速查表规格链接重复：{sorted(names)}"
     want = {Path(st["skill"]).name for st in stages()}
     assert set(names) == want, (
-        f"速查表链接与九篇规格不一一对应：缺 {sorted(want - set(names))} / "
+        f"速查表链接与阶段规格不一一对应：缺 {sorted(want - set(names))} / "
         f"多 {sorted(set(names) - want)}"
     )
 
@@ -422,7 +427,7 @@ ROUTER_QA_RE = re.compile(r"pipeline\.py\s+--project\s+\S+\s+qa\b([^#`\n]*)")
 
 def test_router_qa_commands_pass_both_parsers(monkeypatch, tmp_path):
     """SKILL.md 的 qa 命令须过 pipeline.py 与 qa_frames.py 两层 argparse 且带 --check
-    （RSI-008 评审：裸 `qa` 在 qa_frames 处 parser.error，⑧ 修复循环到不了零 FAIL）。
+    （RSI-008 评审：裸 `qa` 在 qa_frames 处 parser.error，⑨ 修复循环到不了零 FAIL）。
 
     用真解析器判定而非文本启发式：「有 --video 却缺选择器」同样会红。
     """
@@ -451,7 +456,7 @@ def test_router_qa_commands_pass_both_parsers(monkeypatch, tmp_path):
         assert "manifest.json 不存在" in str(ei.value.code), (
             f"qa_frames 拒收参数：qa{tail}"
         )
-        assert "--check" in inner, f"qa 未带 --check，过不了 ⑧ 门：qa{tail}"
+        assert "--check" in inner, f"qa 未带 --check，过不了 ⑨ 门：qa{tail}"
 
 
 def test_router_declares_key_invariants_section():
@@ -475,7 +480,7 @@ def test_router_declares_subproject_ssot_paths():
 
 
 def test_render_and_all_never_chain_deliver(monkeypatch, tmp_path):
-    """「刻意不串联」是有测试钉住的设计决策——完成行 `>> render 完成` 是 references/09
+    """「刻意不串联」是有测试钉住的设计决策——完成行 `>> render 完成` 是 references/10
     钉死的判完成信号，串联外部写操作会在失败时产生混合信号（见 cmd_deliver 注释）。"""
     import pipeline
 
@@ -505,7 +510,7 @@ def test_doctor_reports_deliver_root_presence(monkeypatch, tmp_path, capsys):
 def test_doctor_offline_tts_server_is_warning_not_failure(
     monkeypatch, tmp_path, capsys
 ):
-    """服务按需启停（references/06「服务生命周期」）：离线是常态，doctor 报 ⚠️ 不置失败。
+    """服务按需启停（references/07「服务生命周期」）：离线是常态，doctor 报 ⚠️ 不置失败。
 
     其余检查全绿时退出码必须为 0——离线计入失败会让 doctor 在正常关停态恒红，
     反过来诱导 Agent 预启动服务。

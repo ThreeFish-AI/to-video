@@ -1,6 +1,6 @@
-# 九阶段唯一声明（机制事实源）
+# 阶段唯一声明（机制事实源）
 #
-# 此前「有哪九个阶段」同时声明在四处：references/01–09 的散文标题、pipeline.py 的
+# 此前「有哪些阶段」同时声明在四处：references/NN-*.md 的散文标题、pipeline.py 的
 # 子命令、README §一 的 mermaid 图、以及 .agent 路由壳的速查表。四份声明可以
 # 各自漂移，且已经漂移。本文件把它变成显式数据（文件号与阶段序号一一对齐，
 # RSI-009 起由 tests/test_stages.py 执法），不再靠读者自己撞见。
@@ -11,11 +11,10 @@
 #
 # 字段语义：
 #   id       稳定 slug，身份与序号解耦（改序号不影响引用）
-#   ordinal  展示序号（① … ⑨）
+#   ordinal  展示序号（① … ⑩）
 #   skill    规格文档指针，**子项目相对**（轻量指针，不复制正文）
 #   kind     authored = 产出物由人/代理撰写；tooled = 产出物由工具生成。
-#            这是本文件唯一真正新增的信息：它解释了「9 阶段 vs 10 个子命令
-#            不是 1:1」——authored 阶段本就不该有子命令。注意 ⑦ 虽在生产层，
+#            这是本文件唯一真正新增的信息：它解释了「阶段数与子命令数不是 1:1」——authored 阶段本就不该有子命令。注意 ⑧ 虽在生产层，
 #            但每集 3000–8000 行场景代码是创作而非生成，故为 authored。
 #   commands 归属本阶段的 pipeline.py 子命令（空 = 该阶段不经单入口执行）
 #   gate     通过门（散文，与阶段规格中的判据同源；SKILL.md 速查表门列逐字抄录，测试执法）
@@ -62,48 +61,59 @@ commands = ["check"]
 gate = "RISKY=0 且 REWRITE=0"
 
 [[stage]]
-id = "storyboard"
+id = "prose-refinement"
 ordinal = "⑤"
+name = "成文优化"
+# 与 ④ 正交：④ 判「对不对、懂不懂」，⑤ 只改表达（结构 / 衔接 / 句子 / 词汇四层 pass），
+#   事实与句 id 集合冻结；改动句回跑 ④A 复核（RSI-011）。刻意不设机器门（用户决策）。
+skill = "references/05-prose-refinement.md"
+kind = "authored"
+commands = []
+gate = "成文评审 REWRITE=0 且改动句复核 RISKY=0"
+
+[[stage]]
+id = "storyboard"
+ordinal = "⑥"
 name = "分镜表生成"
-skill = "references/05-storyboard.md"
+skill = "references/06-storyboard.md"
 kind = "authored"
 commands = ["check"]
 gate = "beat 覆盖率无缺句（--check-scenes 分镜↔代码互比）"
 
 [[stage]]
 id = "tts-voice"
-ordinal = "⑥"
+ordinal = "⑦"
 name = "TTS 配音：声音克隆决策树"
-skill = "references/06-tts-voice.md"
+skill = "references/07-tts-voice.md"
 kind = "tooled"
 commands = ["tts", "captions"]
 gate = "refs 指纹门 + 试听定档 + ETA 排期"
 
 [[stage]]
 id = "remotion-scenes"
-ordinal = "⑦"
+ordinal = "⑧"
 name = "Remotion 场景实现"
 # commands 为空是实情——tsc 与 remotion 均直调 ./node_modules/.bin/
 #   （防污染根 workspace），不经 pipeline.py。
-skill = "references/07-remotion-implementation.md"
+skill = "references/08-remotion-implementation.md"
 kind = "authored"
 commands = []
 gate = "tsc --noEmit 零错误 + 七条渲染红线 + 运动层铁律"
 
 [[stage]]
 id = "render-qa"
-ordinal = "⑧"
+ordinal = "⑨"
 name = "草渲 + 抽帧 QA"
-skill = "references/08-render-qa.md"
+skill = "references/09-render-qa.md"
 kind = "tooled"
 commands = ["render", "qa"]
 gate = "qa --check 自动体检零 FAIL（含尾幕渐黑必查）"
 
 [[stage]]
 id = "final-render"
-ordinal = "⑨"
+ordinal = "⑩"
 name = "终渲与交付"
-skill = "references/09-final-render.md"
+skill = "references/10-final-render.md"
 kind = "tooled"
 commands = ["render", "captions", "deliver"]
 gate = "实测时长落在 pipeline.toml 的预算窗内"
