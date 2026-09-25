@@ -357,7 +357,7 @@ def test_i2_honours_the_overridable_class(tmp_path):
 
     I2 若不认档位，「全系列都行使许可」就会报 STALE —— 而**单集系列行使一次即是
     全系列**。于是档位声明的「只报 INFO，不 FAIL」变成只在多集系列成立，等于
-    把许可撤回一半，并逼人为一次合法覆写去登记 [[drift]]。
+    把许可撤回一半，并逼人为一次合法覆写去登记 [[skeleton.drift]]。
     """
     rel = "video/src/timing.json"
     assert rel in skeleton()["classes"]["overridable"], "档位前提变了，本用例该更新"
@@ -385,13 +385,20 @@ def test_template_carries_no_workspace_registry():
     """模板零登记出厂：skill 侧出现 drift/generation 即集名泄入机制侧。"""
     import verify_skeleton as vs
 
-    leaked = [k for k in vs.REGISTRY_KEYS if k in skeleton()]
+    leaked = [k for k in vs.LEAK_KEYS if k in skeleton()]
     assert not leaked, (
         f"skill 模板含登记表 {leaked}——应写进工作区 $W/to-video.toml 的 [skeleton]"
     )
 
 
-def test_skill_side_registry_is_refused(tmp_path):
+@pytest.mark.parametrize(
+    "table",
+    [
+        "drift",  # 旧版 skill 侧写法
+        "skeleton.drift",  # 照抄 skeleton.toml 格式说明里的工作区示例（RSI-010 评审回归）
+    ],
+)
+def test_skill_side_registry_is_refused(tmp_path, table):
     """**正控**：skill 侧写登记 ⇒ 大声退出并指路工作区。静默忽略会让登记者
     误以为已豁免；与工作区合并读取则是两处登记的 split-brain。"""
     skill = mirror_skill(tmp_path)
@@ -399,8 +406,8 @@ def test_skill_side_registry_is_refused(tmp_path):
     toml = skill / "assets" / "video-skeleton" / "skeleton.toml"
     with toml.open("a", encoding="utf-8") as fh:
         fh.write(
-            '\n[[drift]]\nepisode = "x-video"\npath = "video/src/types.ts"\n'
-            'reason = "旧版 skill 侧写法"\n'
+            f'\n[[{table}]]\nepisode = "x-video"\npath = "video/src/types.ts"\n'
+            'reason = "skill 侧误登记"\n'
         )
     r = run(skill / "scripts" / "verify_skeleton.py", cwd=ws)
     assert r.returncode != 0, f"skill 侧登记被静默接受：\n{r.stdout}"
@@ -804,7 +811,7 @@ def test_chapter_progress_mount_is_load_bearing():
 # ── 骨架分代（generation）：旧代原子组豁免的表合法性 + 正控 ─────────────────
 #
 # 「一次模板升级 = 一代」：分代文件是原子组（半同步 tsc 必红），故豁免只对
-# 「整组停在旧代」放行。与 [[drift]] 的分工：drift 钉该集**特有**偏离（一集
+# 「整组停在旧代」放行。与 [[skeleton.drift]] 的分工：drift 钉该集**特有**偏离（一集
 # 一文件一指纹），generation 钉**模板升级遗留**的整组旧态（一组文件一组指纹，
 # 按显式花名册退役）。正控沿双锚点沙箱形态（mirror_skill + flat_ws），注入的
 # 分代登记写进沙箱工作区 to-video.toml 的 [skeleton]——真实 legacy 指纹指向真实
@@ -974,7 +981,7 @@ def test_generation_exempt_does_not_leak_beyond_roster(tmp_path):
 
 def test_generation_mismatched_legacy_still_fails(tmp_path):
     """**正控 (d)**：旧代指纹 ≠ 登记值 ⇒ 仍红——分代豁免同样钉指纹，登记值与
-    实际不符即失效（同 [[drift]] 纪律：防「登记一次、永久免检」）。"""
+    实际不符即失效（同 [[skeleton.drift]] 纪律：防「登记一次、永久免检」）。"""
     skill, ws, _legacy = _gen_sandbox(tmp_path)
     inject_generation(
         ws,
@@ -991,7 +998,7 @@ def test_generation_mismatched_legacy_still_fails(tmp_path):
 
 def test_generation_mixed_sees_drift_held_files(tmp_path):
     """**正控 (e)**：drift 放行的旧文件同样是原子组成员——真树形态是花名册集的
-    Main/Subtitle/ChapterProgress 由 [[drift]] 钉住。整组未动 ⇒ 放行（停旧代）；
+    Main/Subtitle/ChapterProgress 由 [[skeleton.drift]] 钉住。整组未动 ⇒ 放行（停旧代）；
     除 drift 文件外全部同步 ⇒ GENERATION-MIXED 点名 drift 文件（此前 drift 文件
     不入表，组内只剩 new，--strict 全绿且汇总误计「已同步」，而此形态 tsc 已红）。"""
     import verify_skeleton as vs
@@ -1021,10 +1028,10 @@ def test_generation_mixed_sees_drift_held_files(tmp_path):
 
 
 def test_generation_does_not_override_drift_registry(tmp_path):
-    """drift 优先于 generation：文件被 [[drift]] 钉住其它指纹的集，即使当前
+    """drift 优先于 generation：文件被 [[skeleton.drift]] 钉住其它指纹的集，即使当前
     指纹 == 旧代登记值也按 drift 语义报 DRIFT-CHANGED，旧代豁免不兜底——特有
     偏离比代际滞后更需要盯。真树稳定形态：9 集 Subtitle 停剥句号前代，由
-    [[drift]] 61df1a5e08e2 钉住而非 generation legacy。A 同步到新代（I1 参照
+    [[skeleton.drift]] 61df1a5e08e2 钉住而非 generation legacy。A 同步到新代（I1 参照
     稳定取模板指纹）+ B 纯旧代，才能确定性走到 DRIFT-CHANGED 分支。"""
     rel = "video/src/components/Subtitle.tsx"
     skill = mirror_skill(tmp_path)

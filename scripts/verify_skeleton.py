@@ -46,6 +46,8 @@ TEMPLATE = paths.SKILL / "assets" / "video-skeleton"
 SKELETON_TOML = TEMPLATE / "skeleton.toml"
 #: 登记表键：条目指向具体集（内容），只许住工作区 to-video.toml 的 [skeleton]。
 REGISTRY_KEYS = ("drift", "generation")
+#: skill 侧 skeleton.toml 禁现的顶层键：旧表名 + 照抄工作区示例的 skeleton 前缀形态。
+LEAK_KEYS = (*REGISTRY_KEYS, "skeleton")
 
 #: Main.tsx 的每集内容：场景 import 行 + SCENE_COMPONENTS 注册表条目。
 #: 用归一化而非插入标记注释——后者要改动 4 个已发布集的 A 档邻近文件。
@@ -158,11 +160,11 @@ def load_registry(skel: dict) -> dict:
 
     登记指向具体集（内容），随内容走而不随模板分发：skill 侧 skeleton.toml 出现
     登记键即大声退出——静默忽略会让登记者以为已豁免，合并两处则是 split-brain。"""
-    if leaked := [k for k in REGISTRY_KEYS if k in skel]:
+    if leaked := [k for k in LEAK_KEYS if k in skel]:
         sys.exit(
             f"FAIL: {SKELETON_TOML} 含登记表 {leaked}——合法偏离登记在工作区 "
             "$W/to-video.toml 的 [[skeleton.drift]] / [[skeleton.generation]]"
-            "（字段不变、表名加 skeleton. 前缀即可搬运；格式见 skeleton.toml"
+            "（整段移入该文件，旧表名加 skeleton. 前缀、字段不变；格式见 skeleton.toml"
             "「合法偏离登记」节），skill 模板不携带集名"
         )
     ws_toml = paths.WORKSPACE / "to-video.toml"
@@ -309,7 +311,7 @@ def main() -> int:
             # 空条件性质正是 I2 存在的理由，两者对逃逸口的语义必须一致）。
             # 同理 I2 必须**尊重档位**：`overridable` 的覆写许可在 I1 只换来 INFO，
             # 若 I2 仍判 STALE，则「全系列都行使许可」——而**单集系列行使一次即是**
-            # ——会让 --strict 变红，逼人为一次合法覆写去登记 [[drift]]，等于把
+            # ——会让 --strict 变红，逼人为一次合法覆写去登记 [[skeleton.drift]]，等于把
             # 档位声明的许可撤回一半（timing.json 恰是文档鼓励「改节奏只动 JSON」
             # 的那个文件，claude-code-explained 今天恰是单集系列）。
             unreg = [

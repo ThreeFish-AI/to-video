@@ -520,7 +520,7 @@ _SCENE_COMMENT_RE = re.compile(r"^\s*(?://|/\*|\*|\{/\*)")
 #: 场景文件名的幕前缀：P0Cost.tsx → P0。
 _SCENE_FILE_RE = re.compile(r"^(P\d+)")
 #: 逐处豁免：命中行或其上一行注 `caption-dup-ok: <理由>`（理由必填）→ 降为 WARN
-#: 留痕。逃逸口必须存在且必须被记录（同 skeleton.toml [[drift]] 立场）。
+#: 留痕。逃逸口必须存在且必须被记录（同骨架漂移登记 [[skeleton.drift]] 立场）。
 _DUP_OK_RE = re.compile(r"caption-dup-ok[:：](.*)$")
 #: 「部分覆盖 / 整句包含」判据的最短长度——短字面量作为子串天然会撞进长句（标签、
 #: 单词级锚点），短句也天然会落进长字面量，不设门会误伤。

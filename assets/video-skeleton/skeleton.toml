@@ -101,7 +101,7 @@ frozen = [
   "video/src/components/Subtitle.tsx",
   "video/src/components/SceneFade.tsx",
   # 顶部分段章节进度条：全片 overlay 纯机械 chrome（同 Subtitle 性质），跨集一致
-  # 即产品意图（「本 skill 制的视频统一配备」）；停用/魔改走 [[drift]] 逃逸口。
+  # 即产品意图（「本 skill 制的视频统一配备」）；停用/魔改走工作区 [[skeleton.drift]] 逃逸口。
   "video/src/components/ChapterProgress.tsx",
   "video/src/components/cards.tsx",
   "scripts/build_narration.py",
