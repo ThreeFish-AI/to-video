@@ -49,7 +49,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
 import langs  # noqa: E402
-from pron_marks import has_marks, load_vocab, strip_marks, validate  # noqa: E402
+from pron_marks import (  # noqa: E402
+    PRON_MARK_RE,
+    has_marks,
+    load_vocab,
+    strip_marks,
+    validate,
+)
 
 LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$")
 #: 幕标题文字此前被丢弃；现为顶部分段进度条（ChapterProgress）的数据面，
@@ -237,8 +243,10 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
                 f"{cues_path.name}: say.{sid} 与正文不一致（只许改标点，改字请回 narration.md）"
             )
             continue
-        # 保留标注再比：标注的集合/位置/读音须与正文逐个一致（只查「有无」会放过删改）
-        if _strip_punct(say) != _strip_punct(src):
+        # 保留标注再比：标注的集合/位置/读音须与正文逐个一致（只查「有无」会放过删改）；
+        # 去标点会连标注内部一起剥（`<行|HANG，2>` ≡ `<行|HANG2>`），故标注本体另行逐字全等
+        same_marks = PRON_MARK_RE.findall(say) == PRON_MARK_RE.findall(src)
+        if not same_marks or _strip_punct(say) != _strip_punct(src):
             errors.append(
                 f"{cues_path.name}: say.{sid} 发音标注与正文不一致（须原样携带 <字|读音>）"
             )

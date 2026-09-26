@@ -224,6 +224,19 @@ def test_split_block_pcm_floor_when_silence_short():
     assert clips[0][0].shape[0] == 1030
 
 
+def test_split_block_pcm_last_clip_fades_in_at_cut():
+    """末段起点即末个切点：静音只是低于阈值（非零底噪），须与中间段同样淡入，否则起播阶跃。"""
+    import numpy as np
+
+    sr = 1000
+    pcm = np.full(2500, 0.01, np.float32)  # 全程底噪：切点处样本非零
+    clips = tts.split_block_pcm(pcm, sr, [(1.0, 1.5)], discard_sec=0.32)
+    fade = int(sr * 0.005)
+    for clip, _ in clips:
+        assert clip[0] == 0.0 and clip[-1] == 0.0
+        assert clip[fade] == np.float32(0.01)  # 淡变只罩 5ms，不改长度与正文幅度
+
+
 def test_split_block_pcm_tail_pad():
     import numpy as np
 
@@ -530,6 +543,11 @@ def test_apply_cues_pins_every_pron_mark(tmp_path):
     for say, ok in (
         ("<重|CHONG2>新定义，行业。", False),  # 丢 <行|HANG2>
         ("<重|ZHONG4>新定义，<行|HANG2>业！", False),  # 改读音
+        (
+            "<重|CHONG2>新定义，<行|HANG，2>业！",
+            False,
+        ),  # 读音内插标点（去标点比对会剥掉）
+        ("<重|CHONG2>新定义，<行|HANG2。>业！", False),
         ("<重|CHONG2>新定义，<行|HANG2>业！", True),
     ):
         items = [{"id": "p0-01", "scene": "P0", "text": "重新定义行业。"}]
@@ -645,15 +663,18 @@ def test_apply_cues_rejects_unknown_ids(tmp_path):
     assert any("不是本稿句 id" in e for e in errs)
 
 
-def test_steady_with_block_style_is_rejected(tmp_path):
-    """--steady 逐句升束与块合成冲突：进程级退出非零并点名冲突。"""
+def _story_steady_plan(tmp_path, lang: str = "zh"):
+    """--style story --steady p0-01 --plan 的子进程结果（纯本地，不连服务）。"""
     import subprocess
 
     script = Path(__file__).resolve().parents[1] / "scripts" / "tts.py"
     proj = tmp_path / "proj"
     (proj / "script").mkdir(parents=True)
-    (proj / "script" / "narration.json").write_text(
-        '[{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]',
+    sfx, text = (
+        ("", "想让 AI 自己改进自己。") if lang == "zh" else (".en", "Hello there.")
+    )
+    (proj / "script" / f"narration{sfx}.json").write_text(
+        f'[{{"id": "p0-01", "scene": "P0", "text": "{text}"}}]',
         encoding="utf-8",
     )
     (proj / "video" / "src").mkdir(parents=True)
@@ -663,7 +684,7 @@ def test_steady_with_block_style_is_rejected(tmp_path):
     )
     ref = tmp_path / "ref.wav"
     ref.write_bytes(b"x" * 16)
-    r = subprocess.run(
+    return subprocess.run(
         [
             sys.executable,
             str(script),
@@ -673,6 +694,8 @@ def test_steady_with_block_style_is_rejected(tmp_path):
             "indextts",
             "--ref",
             str(ref),
+            "--narration-lang",
+            lang,
             "--style",
             "story",
             "--steady",
@@ -684,8 +707,21 @@ def test_steady_with_block_style_is_rejected(tmp_path):
         check=False,
         cwd=tmp_path,
     )
+
+
+def test_steady_with_block_style_is_rejected(tmp_path):
+    """--steady 逐句升束与块合成冲突：进程级退出非零并点名冲突。"""
+    r = _story_steady_plan(tmp_path)
     assert r.returncode != 0
     assert "冲突" in (r.stderr + r.stdout)
+
+
+def test_steady_allowed_when_en_falls_back_to_sentences(tmp_path):
+    """EN 版 story 档回退逐句合成，与 --steady 不冲突：须照常按混合档排期。"""
+    r = _story_steady_plan(tmp_path, lang="en")
+    assert r.returncode == 0, r.stderr
+    assert "回退逐句" in r.stderr
+    assert "束宽 3" in r.stdout  # --steady 命中句按 --steady-beams 3 排期
 
 
 # ---------------- 块合成主流程（stub 服务端）----------------

@@ -291,7 +291,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 - **停顿**：切分时句界静音正中丢弃恰好 `sentenceGapSec`，时间轴再加回同值 ⇒ 听感＝自然停顿原值；块末尾垫 0.18s + 0.32s 句距 ＝ 0.5s 块间停顿。**不改时间轴、不改 frozen 模板。**
 - **缓存**：块＝缓存单位（摘要含块后缀）——**改一句重录整块**（无台本段偶尔连带同窗邻块，至多 7 句；14 集对拍 94.7% 仅本块）；插/删句会重排同一段内其后各窗——台本块起点是硬边界，可把波及收在段内；seed 固定 4242（定档 take 可复现），换 take 用 `--seed-offset`。
 - **重制存量集**（旧档 → story）：改 pipeline.toml `style = "story"` + 补写该集 cues.toml + 显式 `--allow-voice-switch`。
-- `--steady` 与 story 冲突（逐句升束 vs 一个请求一块），硬拒；显式 `--num-beams` 仍可。
+- `--steady` 与 story 冲突（逐句升束 vs 一个请求一块），硬拒；显式 `--num-beams` 仍可。EN 版回退逐句，`--steady` 照常可用。
 - 切分失败自动逐句兜底（沿用块情绪、尾垫只给末句；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检（low_vram 路径不支持）。
 
 ## 五、小样试听与逐集合成

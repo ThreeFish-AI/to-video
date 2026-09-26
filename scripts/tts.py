@@ -1324,6 +1324,8 @@ def block_digest_suffix(
 
     `split=vN` 版本化块文本拼接与切分算法（v2：软停顿结尾不再补 `。`；v3：收引号前
     的标点计入末字、逐句兜底仅末句补尾垫）——算法改变合成结果而成员文本不变时，靠它换键。
+    换键口径：改了送合成文本或切段时长（⇒ 时间轴）才递增；静音内的样本级淡变（如末段
+    补 5ms 淡入）时长不变、听感不可辨，不换键——否则存量音频会为不可听差异整块重录。
     """
     payload = "\x1f".join(member_texts) + f"\x1f{discard!r}\x1f{tail_pad!r}\x1fsplit=v3"
     return hashlib.sha1(payload.encode()).hexdigest()[:12]
@@ -1438,7 +1440,7 @@ def plan_block_cuts(
 
 
 def split_block_pcm(pcm, sr: int, runs, discard_sec: float, tail_pad_sec: float = 0.0):
-    """按切点把块 PCM 切成 N 段：每界从静音正中丢弃 discard_sec，两侧 5ms 淡入淡出。
+    """按切点把块 PCM 切成 N 段：每界从静音正中丢弃 discard_sec，每段两端 5ms 淡入淡出。
 
     discard 的语义：时间轴随后会加回 sentenceGapSec ⇒ 听感＝自然停顿原值；
     静音不足 gap+2m 时退化为丢 S−2m（下限 0.06 s 余量）。末段统一补尾垫。
@@ -1461,7 +1463,8 @@ def split_block_pcm(pcm, sr: int, runs, discard_sec: float, tail_pad_sec: float 
         out.append((clip, nat))
         cursor = cut_start + d
     clip = pcm[int(cursor * sr) :].copy()
-    if len(clip) > 2 * fade:
+    if len(clip) > 2 * fade:  # 末段起点即末个切点（静音≠零值）：与中间段同口径两端淡变
+        clip[:fade] *= np.linspace(0, 1, fade)
         clip[-fade:] *= np.linspace(1, 0, fade)
     if tail_pad_sec > 0:
         clip = np.concatenate([clip, np.zeros(int(tail_pad_sec * sr), np.float32)])
@@ -1909,11 +1912,9 @@ async def main() -> None:
 
         # ── 段落演绎（story 档）：块模式解析 ─────────────────────────────
         # 块=同幕连续句一次合成（句间自然停顿），服务端切回逐句 mp3。仅预设声明 block
-        # 时启用；EN 未验证（07-tts-voice 跨语种须试听）回退逐句；--steady 的逐句升束
+        # 时启用；EN 未验证（06-tts-voice 跨语种须试听）回退逐句；--steady 的逐句升束
         # 与「块=一个请求」冲突，硬拒。
         block_cfg = (STYLE_PRESETS.get(style_name) or {}).get("block")
-        if block_cfg and args.steady:
-            parser.error("--steady 的逐句升束与块合成（story 档）冲突：整块同一束宽")
         if block_cfg and tts_lang != "ZH":
             print(
                 "提示：story 档块合成未在 EN 验证（跨语种须试听，见 references/06-tts-voice.md），"
@@ -1921,6 +1922,9 @@ async def main() -> None:
                 file=sys.stderr,
             )
             block_cfg = None
+        # 须排在 EN 回退之后：回退逐句的 EN 版与 --steady 并不冲突
+        if block_cfg and args.steady:
+            parser.error("--steady 的逐句升束与块合成（story 档）冲突：整块同一束宽")
         perform_punct = bool(block_cfg and block_cfg.get("perform_punct"))
         # 句界丢弃量＝时间轴句距（时间轴随后加回 ⇒ 听感＝自然停顿原值）。
         # 直读 timing.json（不 import 兄弟模块），缺文件/缺键回退机制常数 0.32。
