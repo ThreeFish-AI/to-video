@@ -629,6 +629,53 @@ def test_apply_cues_malformed_tables_are_reported_not_raised(tmp_path):
         assert "cue" not in items[0]
 
 
+def test_apply_cues_rejects_unknown_tables_and_keys(tmp_path):
+    """拼错的表名/键名须拒收：否则台本静默失效（[blocks] 整表丢、alhpa 回落预设 α）。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for body, needle in (
+        ('[blocks.p0-01]\nemo = "happy:1"\n', "未知表/键 blocks"),
+        ("[takes]\np0-01 = 1\n", "未知表/键 takes"),
+        ('[says]\np0-01 = "想让 AI 自己改进自己！"\n', "未知表/键 says"),
+        ('[block.p0-01]\nemo = "happy:1"\nalhpa = 0.5\n', "未知键 alhpa"),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+        cues.write_text(body, encoding="utf-8")
+        n_block, _, errs = bn.apply_cues(tmp_path, items)
+        assert n_block == 0 and any(needle in e for e in errs), (body, errs)
+        assert "cue" not in items[0] and "take" not in items[0]
+    # 正控：认得的键照常落盘
+    items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+    cues.write_text('[block.p0-01]\nemo = "happy:1"\nalpha = 0.4\n', encoding="utf-8")
+    n_block, _, errs = bn.apply_cues(tmp_path, items)
+    assert errs == [] and n_block == 1 and items[0]["cue"]["alpha"] == 0.4
+
+
+def test_apply_cues_dash_is_punctuation(tmp_path):
+    """`——` 是停顿标点（tts_text → `，`）：say 换掉或新增破折号只动标点，须放行；
+    夹在两数字之间同样按分隔符判定（删掉即改读数，仍拒）。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for text, say, ok in (
+        ("这是——一个问题。", "这是…一个问题！", True),
+        ("这是一个问题。", "这是——一个问题。", True),
+        ("从2020——2026年。", "从2020…2026年。", True),
+        ("从2020——2026年。", "从20202026年。", False),
+        ("这是——一个问题。", "这是——一个难题。", False),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": text}]
+        cues.write_text(f'[say]\np0-01 = "{say}"\n', encoding="utf-8")
+        _, n_say, errs = bn.apply_cues(tmp_path, items)
+        if ok:
+            assert errs == [] and n_say == 1, say
+        else:
+            assert any("只许改标点" in e for e in errs), say
+
+
 def test_status_tracks_cues_sidecar(tmp_path, capsys):
     """只改台本不改正文：status 须报 narration.json 失鲜（否则 tts 拿旧 cue 合成）。"""
     import os

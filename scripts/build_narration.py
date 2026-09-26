@@ -156,8 +156,12 @@ def parse_md(
 #: 不夹在两数字之间 ⇒ 剥掉；夹在两数字之间且恰为单个半角 `.,:` ⇒ 数值/时刻的一部分
 #: （3.5%、1,200、10:30），原样保留；夹在两数字之间的其余标点 ⇒ 归一为分隔符（「2020，2026」
 #: 改「2020…2026」仍放行）。后两条保证 say 删小数点、往数字串里插 `，` 或删掉两数之间的
-#: 标点都比对不上——否则合成念成另一个数
-CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?.,:]+")
+#: 标点都比对不上——否则合成念成另一个数。`——` 同属停顿标点（tts_text 映射为 `，`）
+CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?.,:—]+")
+#: 台本认得的表与 [block.<句id>] 的键；其余一律拒收——拼错（[blocks]、alhpa）会让
+#: cue/take 静默失效，--plan 显示无块待重录，写稿人却以为已生效
+CUES_TABLES = ("block", "say", "take")
+CUES_BLOCK_KEYS = ("emo", "alpha")
 
 
 def _strip_punct(s: str) -> str:
@@ -186,7 +190,11 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
     errors: list[str] = []
     # 形态写错（值不是表）一律汇入错误清单，由 build 统一 FAIL 退出，不抛 traceback
     tables: dict[str, dict] = {}
-    for name in ("block", "say", "take"):
+    for name in sorted(set(cues) - set(CUES_TABLES)):
+        errors.append(
+            f"{cues_path.name}: 未知表/键 {name}（只认 {' / '.join(f'[{t}]' for t in CUES_TABLES)}）"
+        )
+    for name in CUES_TABLES:
         tbl = cues.get(name, {})
         if not isinstance(tbl, dict):
             errors.append(f"{cues_path.name}: [{name}] 须为表")
@@ -201,6 +209,13 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
         if not isinstance(spec, dict):
             errors.append(
                 f'{cues_path.name}: block.{sid} 须为表（[block.{sid}] emo = "…"）'
+            )
+            continue
+        unknown = sorted(set(spec) - set(CUES_BLOCK_KEYS))
+        if unknown:
+            errors.append(
+                f"{cues_path.name}: block.{sid} 含未知键 {'、'.join(unknown)}"
+                f"（只认 {' / '.join(CUES_BLOCK_KEYS)}）"
             )
             continue
         emo = spec.get("emo")
