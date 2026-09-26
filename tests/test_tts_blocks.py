@@ -663,6 +663,29 @@ def test_apply_cues_rejects_unknown_ids(tmp_path):
     assert any("不是本稿句 id" in e for e in errs)
 
 
+def test_apply_cues_take_is_validated_int(tmp_path):
+    """[take] 落 item["take"]；非 1–999 整数（含 bool/浮点/字符串）与未知 id 汇入错误清单。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+
+    def run(body: str):
+        items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+        cues.write_text(body, encoding="utf-8")
+        return items, bn.apply_cues(tmp_path, items)[2]
+
+    items, errs = run("[take]\np0-01 = 2\n")
+    assert errs == [] and items[0]["take"] == 2
+    for bad in ("0", "1000", "-1", "true", "1.5", '"1"'):
+        items, errs = run(f"[take]\np0-01 = {bad}\n")
+        assert "take" not in items[0] and any("1–999" in e for e in errs), bad
+    _, errs = run("[take]\np0-99 = 1\n")
+    assert any("take.p0-99 不是本稿句 id" in e for e in errs)
+    _, errs = run('take = "x"\n')
+    assert any("[take] 须为表" in e for e in errs)
+
+
 def _story_steady_plan(tmp_path, lang: str = "zh"):
     """--style story --steady p0-01 --plan 的子进程结果（纯本地，不连服务）。"""
     import subprocess
@@ -945,6 +968,142 @@ def test_plan_eta_excludes_store_recoverable_blocks(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "版本库整块直收" in r.stdout
     assert "估算墙钟约 0.0 小时" in r.stdout
+
+
+# ---------------- 台本 [take]：块级重掷 ----------------
+
+
+def test_block_sampling_offsets_only_its_block():
+    """take 只改所在块的种子（整集 --seed-offset 会改全部块）；无 take 的块口径原样。"""
+    base = {"seed": 4242}
+    plain = [dict(i) for i in P0[:2]]
+    taken = [dict(i) for i in P0[2:4]]
+    taken[1]["take"] = 3
+    assert tts.block_sampling(plain, base) == base
+    assert tts.block_sampling(taken, base) == {"seed": 4245}
+    assert base == {"seed": 4242}  # 不改入参
+
+
+def test_block_sampling_rejects_ambiguous_takes():
+    """同块两条 take（加和还是择一）歧义 ⇒ 报错；无种子口径时 take 无从生效 ⇒ 报错。"""
+    import pytest
+
+    block = [dict(i) for i in P0[:2]]
+    block[0]["take"], block[1]["take"] = 1, 2
+    with pytest.raises(ValueError, match="同一块内出现多次"):
+        tts.block_sampling(block, {"seed": 4242})
+    with pytest.raises(ValueError, match="需要种子"):
+        tts.block_sampling(block[1:], {})
+
+
+def test_block_take_reaches_request_and_digest(monkeypatch, tmp_path):
+    """take 进请求种子与成员摘要：同块加 take 即缓存失配、按新种子重录。"""
+    seeds: list[int] = []
+
+    def fake(server, text, ref, vec, alpha, df, lang, beams, weights, d, p, sampling):
+        seeds.append(sampling["seed"])
+        clips = [_clip() for _ in weights]
+        return {"split": "ok", "clips": clips, "cuts": [], "seams": []}
+
+    monkeypatch.setattr(tts, "http_synthesize_block", fake)
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    block = [dict(i) for i in P0[:2]]
+    _run_block(block, tmp_path, sampling={"seed": 4242})
+    before = (tmp_path / "p0-01.sha").read_text()
+    block[1]["take"] = 2
+    _run_block(block, tmp_path, sampling={"seed": 4242})
+    assert seeds == [4242, 4244]
+    assert (tmp_path / "p0-01.sha").read_text() != before
+
+
+def _story_plan(proj: Path, ref: Path):
+    import subprocess
+
+    return subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "tts.py"),
+            "--project",
+            str(proj),
+            "--engine",
+            "indextts",
+            "--ref",
+            str(ref),
+            "--style",
+            "story",
+            "--no-store",
+            "--plan",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=proj.parent,
+    )
+
+
+def test_plan_matches_synth_digest_with_take(monkeypatch, tmp_path):
+    """--plan 与合成同一 take 口径：带 take 合成后排期整块命中（两处各算摘要，防漂移）。"""
+    import asyncio
+    import hashlib
+    import json
+
+    proj = tmp_path / "ep"
+    (proj / "script").mkdir(parents=True)
+    items = [dict(i) for i in P0[:3]]
+    items[1]["take"] = 1
+    (proj / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    audio = proj / "video" / "public" / "audio"
+    audio.mkdir(parents=True)
+    p = tts.STYLE_PRESETS["story"]
+    monkeypatch.setattr(
+        tts,
+        "http_synthesize_block",
+        lambda *a: {"split": "ok", "clips": [_clip() for _ in a[8]], "seams": []},
+    )
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    for b in tts.plan_blocks(items, p["block"]):
+        asyncio.run(
+            tts.synth_block_indextts(
+                asyncio.Semaphore(1),
+                b,
+                False,
+                str(ref),
+                hashlib.sha1(ref.read_bytes()).hexdigest()[:12],
+                "story",
+                p["vec"],
+                p["alpha"],
+                p["df"],
+                "ZH",
+                "indextts",
+                "http://unused",
+                audio,
+                sampling={"seed": p["seed"]},
+            )
+        )
+    r = _story_plan(proj, ref)
+    assert r.returncode == 0, r.stderr
+    assert "待合成 0 块" in r.stdout
+
+
+def test_plan_rejects_two_takes_in_one_block(tmp_path):
+    """同块多条 take 在 --plan（长跑前）即报错退出。"""
+    import json
+
+    proj = tmp_path / "ep"
+    (proj / "script").mkdir(parents=True)
+    items = [dict(i) for i in P0[:2]]
+    items[0]["take"], items[1]["take"] = 1, 2
+    (proj / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    r = _story_plan(proj, ref)
+    assert r.returncode != 0 and "同一块内出现多次" in r.stderr
 
 
 def test_sample_all_styles_applies_preset_seed(tmp_path):

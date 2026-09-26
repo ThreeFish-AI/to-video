@@ -225,7 +225,7 @@ STYLE_PRESETS: dict[str, dict] = {
         # 三者叠加是根因，见 issue.md RSI-011）。
         # - vec/alpha 取 #07 g2 方向（surprised 主载 + happy）×0.28 有效注入；无台本块/
         #   未覆盖块用它，块情绪可被 script/narration.cues.toml 逐块覆盖（§4.5）。
-        # - seed 固定 4242：试听定档 take 可复现；换 take 用 --seed-offset。
+        # - seed 固定 4242：试听定档 take 可复现；单块换 take 用台本 [take]（--seed-offset 是整集口径）。
         # - block: 块上限与切分参数；perform_punct 开表演标点（……→…，tts_text）。
         "vec": [1 / 3, 0, 0, 0, 0, 0, 2 / 3, 0],
         "alpha": 0.28,
@@ -411,7 +411,7 @@ def resolve_sampling(args: argparse.Namespace) -> dict[str, float | int | bool]:
         # 采样结果上，偏移一位即可换一条而仍然可复现。
         out["seed"] = int(args.seed) + int(getattr(args, "seed_offset", 0) or 0)
     elif preset.get("seed") is not None:
-        # 预设自带种子（story：定档 take 可复现）。CLI --seed 优先；--seed-offset 同为换 take 口。
+        # 预设自带种子（story：定档 take 可复现）。CLI --seed 优先；--seed-offset 叠加（整集换 take）。
         # 经 |seed= 后缀进摘要（同 CLI 路径），故存量无种子口径零波及。
         out["seed"] = int(preset["seed"]) + int(getattr(args, "seed_offset", 0) or 0)
     return out
@@ -1003,6 +1003,26 @@ def resolve_block_vec(
     return vec, alpha, None
 
 
+def block_sampling(block_items: list[dict], sampling: dict) -> dict:
+    """块采样口径：台本 `[take]`（成员句 item["take"]）把该块种子 +N，其余块原样。
+
+    块模式的重掷单位是块：--seed-offset 作用于全局种子 ⇒ 全部块换摘要、整集重录；
+    take 只改本块 |seed= 后缀 ⇒ 只重录这一块，定稿值留在台本即可复现。
+    同块多句带 take 时歧义（加和还是择一），报错由调用方收口。
+    """
+    takes = [(i["id"], i["take"]) for i in block_items if i.get("take")]
+    if not takes:
+        return sampling
+    if len(takes) > 1:
+        raise ValueError(
+            f"台本 [take] 在同一块内出现多次（{'、'.join(s for s, _ in takes)}）："
+            "块是重掷单位，只保留一条"
+        )
+    if "seed" not in sampling:
+        raise ValueError(f"台本 [take] 需要种子口径（{takes[0][0]}）")
+    return {**sampling, "seed": sampling["seed"] + takes[0][1]}
+
+
 async def synth_block_indextts(
     sem: asyncio.Semaphore,
     block_items: list[dict],
@@ -1031,6 +1051,10 @@ async def synth_block_indextts(
         raise NonRetryableError(
             f"{bad_id} 的台本情绪有效和 Σvec×alpha 超过 0.8 上限（见 {MANUAL} §4.2）"
         )
+    try:
+        sampling = block_sampling(block_items, sampling or {})
+    except ValueError as e:
+        raise NonRetryableError(str(e)) from e
     member_texts = [synth_source_text(i) for i in block_items]
     block_text = block_synth_text(block_items)
     suffix = block_digest_suffix(member_texts, discard_sec, tail_pad_sec)
@@ -1941,7 +1965,7 @@ async def main() -> None:
                 except (ValueError, KeyError, TypeError):
                     pass
         blocks: list[list[dict]] = plan_blocks(items, block_cfg) if block_cfg else []
-        # 台本情绪护栏提前到 --plan：长跑前发现 Σvec×alpha 超界
+        # 台本护栏提前到 --plan：长跑前发现 Σvec×alpha 超界、同块多条 [take]
         if block_cfg:
             for b in blocks:
                 _, _, bad_id = resolve_block_vec(b, vec, alpha)
@@ -1949,6 +1973,10 @@ async def main() -> None:
                     parser.error(
                         f"{bad_id} 的台本情绪有效和超过 0.8 上限（见 {MANUAL} §4.2）"
                     )
+                try:
+                    block_sampling(b, sampling)
+                except ValueError as e:
+                    parser.error(str(e))
 
         if args.plan:  # 计划模式：纯本地计算，不连服务
             print(
@@ -1969,6 +1997,7 @@ async def main() -> None:
                 recoverable_members = 0
                 for b in blocks:
                     b_vec, b_alpha, _ = resolve_block_vec(b, vec, alpha)
+                    b_sampling = block_sampling(b, sampling)
                     suffix = block_digest_suffix(
                         [synth_source_text(i) for i in b],
                         discard_sec,
@@ -1989,7 +2018,7 @@ async def main() -> None:
                             beams,
                             None,
                             None,
-                            sampling,
+                            b_sampling,
                             suffix,
                             f"{k + 1}/{n}",
                         )

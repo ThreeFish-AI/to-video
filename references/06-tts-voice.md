@@ -13,10 +13,13 @@
    `--plan` 的 3 束常量刻意保守，见 [ADVANCED §6.2](INDEXTTS-2.5-ADVANCED.md)。
 5. **做任何参数 A/B 前先固定 `--seed`**：上游 `do_sample` 恒 True 且全链路无种子，同句每次
    合成都是不同的 take，不固定种子听到的差异可能只是采样噪声（实测：带种子字节一致、
-   不带则不同）。story 档预设自带 seed 4242（定档 take 可复现），换 take 用 `--seed-offset`；
+   不带则不同）。story 档预设自带 seed 4242（定档 take 可复现）；**`--seed-offset` 是整集口径**
+   ——全部块换摘要、整集重录，且 `.engine` 签名不含 seed、护栏不拦；单块换 take 用台本
+   `[take] <句id> = N`（只重录该句所在块，[VOICE-CLONING §4.5](VOICE-CLONING.md)）。
    但 **单句补配勿显式传 `--seed`**——seed 进缓存摘要，想重配一句会变成
    整集签名漂移、旧缓存被新签名覆盖（ISSUE-174）；实验性参数一律先 `--plan` 看失配面。
-   重掷循环例外：只在带 seed 的隔离 digest 上掷、定稿回存 canonical digest（§5.4 协议）。
+   重掷循环例外：只在带 seed 的隔离 digest 上掷、定稿回存 canonical digest（§5.4 协议；
+   story 档改用台本 `[take]`，定稿值留在台本即 canonical、无需回存）。
 6. **音色签名护栏**：与上次合成不一致会被 `.engine` 标记硬拦（显式 `--allow-voice-switch` 才放行）——这正是防「README 旧命令静默重录整集」的机制。
 
 ## 重制存量集（sunny-steady → story）
@@ -25,7 +28,8 @@
 1. 该集 pipeline.toml `[tts] style = "story"`；
 2. 补写该集 `script/narration.cues.toml`（按 [references/03](./03-narration.md) 台本规约通读全稿定块与情绪）；
 3. `pipeline.py tts` 需显式 `--allow-voice-switch`（换档＝整集重录 + 重渲）；
-4. 完成后按 [VOICE-CLONING §5.4](VOICE-CLONING.md) 跑句尾英文词 take 验收。
+4. 完成后按 [VOICE-CLONING §5.4](VOICE-CLONING.md) 跑句尾英文词 take 验收；不合格句在台本写
+   `[take] <句id> = 1`（再不合格递增）重跑，`--plan` 应只显示该块待合成。
 
 ## 双语配音（en 版，双语集）
 
