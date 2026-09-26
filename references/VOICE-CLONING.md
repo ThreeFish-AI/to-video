@@ -293,7 +293,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 - **换 take（重掷）**：块是重掷单位——台本 `[take] <句id> = N`（1–999）把该句所在块的种子 +N，只重录这一块；定稿值留在台本，即可复现的 canonical（同块只许一条，`--plan` 即报错）。`--seed-offset` 叠加在全局种子上，是**整集口径**（全部块换摘要、整集重录，`.engine` 签名不含 seed、护栏不拦），只用于整集 A/B。
 - **重制存量集**（旧档 → story）：改 pipeline.toml `style = "story"` + 补写该集 cues.toml + 显式 `--allow-voice-switch`。
 - `--steady` 与 story 冲突（逐句升束 vs 一个请求一块），硬拒；显式 `--num-beams` 仍可。EN 版回退逐句，`--steady` 照常可用。
-- 切分失败自动逐句兜底（沿用块情绪、尾垫只给末句；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检（low_vram 路径不支持）。
+- 切分失败自动逐句兜底（沿用块情绪、尾垫只给末句；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检——IndexTTS-2 与上游 low_vram 路径（CUDA 显存 <10 GB 自动开启，`/health` 回报 `low_vram`）不支持且重启不会变，报错点名成因并给出换档出路（本集改逐句档 `sunny`）；仅字段缺失才提示服务端代码过旧。
 
 ## 五、小样试听与逐集合成
 

@@ -1023,6 +1023,35 @@ def block_sampling(block_items: list[dict], sampling: dict) -> dict:
     return {**sampling, "seed": sampling["seed"] + takes[0][1]}
 
 
+def blocks_unsupported_hint(health: dict) -> str:
+    """/health 报告不支持块合成时的可操作诊断：三种成因处置不同，不能一律「重启」。
+
+    IndexTTS-2 与 low_vram（上游按 CUDA 显存 <10 GB 自动开启）是服务端的固有形态，
+    重启不会变——只能换 v2.5 服务/换机器，或本集改逐句档；仅字段缺失才是代码过旧。
+    """
+    fallback = '；或本集改用逐句档（pipeline.toml [tts] style = "sunny"，直调 tts.py 用 --style sunny）'
+    if "supports_blocks" not in health:
+        return (
+            "当前服务不支持块合成（story 档需要）：服务端代码过旧，请用本 skill"
+            f" 当前 tts_server.py 重启服务，见 {MANUAL} §二"
+        )
+    if health.get("version") == "2":
+        return (
+            "当前服务为 IndexTTS-2：块合成（story 档）仅在 v2.5 上验证开放"
+            f"——改用 v2.5 服务（见 {MANUAL} §二）{fallback}"
+        )
+    if health.get("low_vram"):
+        return (
+            "当前服务运行在上游 low_vram 路径（CUDA 显存 <10 GB 自动开启，重启不会变）："
+            "长文本按 40 字分段、段间定长静音会污染句界，块合成（story 档）不可用"
+            f"——换显存 ≥10 GB 的设备{fallback}"
+        )
+    return (
+        "当前服务报告不支持块合成（supports_blocks=false，未回报原因）"
+        f"——请用本 skill 当前 tts_server.py 重启服务（见 {MANUAL} §二）{fallback}"
+    )
+
+
 async def synth_block_indextts(
     sem: asyncio.Semaphore,
     block_items: list[dict],
@@ -1741,6 +1770,13 @@ async def main() -> None:
                 else "  采样 "
                 + ",".join(f"{k}={v!r}" for k, v in sorted(p["sampling"].items()))
             )
+            # 预设自带种子/块合成同样改合成口径（进摘要），不能只在表外隐身
+            if p.get("seed") is not None:
+                smp_note += f"  seed={p['seed']}"
+            if blk := p.get("block"):
+                smp_note += (
+                    f"  块合成（≤{blk['max_sentences']} 句/≤{blk['max_chars']} 字）"
+                )
             print(
                 f"{name:<14}  {p['label']:<6}  {vec:<62}  {p['alpha']:<5}  "
                 f"{eff:<8.3g}  {p['df']:<4}  {p.get('beams', 1)}{smp_note}"
@@ -1750,6 +1786,8 @@ async def main() -> None:
             "max_mel_tokens/interval_silence）未在任何预设中覆盖，"
             "均取上游默认："
             + ", ".join(f"{k}={v!r}" for k, v in SAMPLING_DEFAULTS.items())
+            + "；行尾标 seed= 的预设自带种子（覆盖 seed=None），标「块合成」的按故事块合成"
+            f"（{MANUAL} §4.5）"
         )
         return
 
@@ -2177,10 +2215,7 @@ async def main() -> None:
                 "去掉 --no-text-normalization，或改用 v2.5 服务"
             )
         if block_cfg and not health.get("supports_blocks"):
-            parser.error(
-                "当前服务不支持块合成（story 档需要）：服务端代码过旧，请用本 skill"
-                f" 当前 tts_server.py 重启服务，见 {MANUAL} §二"
-            )
+            parser.error(blocks_unsupported_hint(health))
 
         sem = asyncio.Semaphore(CONCURRENCY_INDEXTTS)
         if block_cfg:

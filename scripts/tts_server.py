@@ -447,6 +447,7 @@ async def lifespan(app: FastAPI):
         supports_duration_factor=meta["supports_duration_factor"],
         supports_text_normalization=meta["supports_text_normalization"],
         supports_blocks=meta.get("supports_blocks", False),
+        low_vram=bool(getattr(tts, "low_vram", False)),
         supports_emo_text=getattr(tts, "qwen_emo", None) is not None,
         infer_lock=asyncio.Lock(),
     )
@@ -484,6 +485,9 @@ async def health():
         # 块切分（story 档）：low_vram 路径 >40 字即分段（段间 200ms 定长静音会污染句界），
         # 不具备条件；v2 未验证亦不开放。客户端据此在旧服务上对块模式硬失败。
         "supports_blocks": STATE.get("supports_blocks", False),
+        # 上游按显存自动开启（CUDA <10 GB），重启不会变：客户端据此把「不支持块合成」
+        # 诊断为换档而非「代码过旧请重启」
+        "low_vram": STATE.get("low_vram", False),
     }
 
 

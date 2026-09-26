@@ -794,6 +794,39 @@ def test_steady_allowed_when_en_falls_back_to_sentences(tmp_path):
     assert "束宽 3" in r.stdout  # --steady 命中句按 --steady-beams 3 排期
 
 
+def test_blocks_unsupported_hint_names_the_real_cause():
+    """supports_blocks=false 的三种成因处置不同：只有字段缺失才是「代码过旧请重启」；
+    IndexTTS-2 / low_vram 重启不会变，须给出换档（逐句档）出路而非让用户空转重启。"""
+    old = tts.blocks_unsupported_hint({"ok": True, "version": "2.5"})
+    assert "代码过旧" in old
+    v2 = tts.blocks_unsupported_hint(
+        {"ok": True, "version": "2", "supports_blocks": False}
+    )
+    assert "IndexTTS-2" in v2 and "sunny" in v2 and "代码过旧" not in v2
+    low = tts.blocks_unsupported_hint(
+        {"ok": True, "version": "2.5", "supports_blocks": False, "low_vram": True}
+    )
+    assert "low_vram" in low and "sunny" in low and "重启不会变" in low
+    assert "代码过旧" not in low
+
+
+def test_list_styles_surfaces_preset_seed_and_block_mode():
+    """--list-styles 是预设口径的对外视图：story 的种子与块合成不得隐身（页脚曾称 seed=None）。"""
+    import subprocess
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "tts.py"
+    r = subprocess.run(
+        [sys.executable, str(script), "--list-styles"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    story = next(ln for ln in r.stdout.splitlines() if ln.startswith("story "))
+    assert "seed=4242" in story and "块合成" in story
+    sunny = next(ln for ln in r.stdout.splitlines() if ln.startswith("sunny "))
+    assert "seed=" not in sunny and "块合成" not in sunny  # 无种子/逐句预设不变
+
+
 # ---------------- 块合成主流程（stub 服务端）----------------
 
 
