@@ -80,6 +80,7 @@ $P/
 │   ├── planning.md         # 策划案
 │   ├── narration.md        # 逐字稿（唯一维护处，勿改 narration.json）
 │   ├── narration.json      # 派生物（build_narration.py 生成）
+│   ├── narration.cues.toml # 配音台本（可选，story 档：块边界/块情绪/表演标点；写稿阶段同产）
 │   ├── storyboard.md       # 分镜表（镜号↔句 id 区间↔画面↔动效）
 │   └── narration.en.md …   # 双语集才有：英文对齐译稿 + narration.en.json + 基线锁（见 §五「双语渲染」）
 ├── scripts/*.py            # 薄包装 → skill 解析器（保 CLI 契约）
@@ -158,7 +159,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | `tts.engine`                    |                 | `indextts`              | **策略声明**（有替代项 edge，且受 `.engine` 签名护栏约束），故保留在 toml                                                      |
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
-| `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名                                                                                                             |
+| `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎，见 VOICE-CLONING §4.5）                                                          |
 | `tts.lang`                      |                 | `ZH`                    | 机制常数（zh 主稿恒 ZH；en 版由语言自动解析为 EN，见 §五「双语渲染」）                                                          |
 | `narration.langs`               |                 | `["zh"]`                | **策略声明**：本集产出的语言版本（必含 zh）；en 需显式声明并配 `narration.en.md`                                               |
 | `narration.words_per_min`       |                 | `150`                  | 机制常数：英文含停顿等效语速（首集实测后校准）                                                                                  |

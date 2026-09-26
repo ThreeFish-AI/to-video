@@ -21,3 +21,6 @@ engine = "indextts"
 ref = "voices/{{REF}}.wav"
 ref_sha1 = "{{REF_SHA1}}"
 style = "{{STYLE}}"
+# story 档（默认）＝段落演绎：同幕连续句按块合成、块间情绪由配音台本驱动。
+# 台本（可选）：script/narration.cues.toml——写稿阶段产出，见 $T/references/VOICE-CLONING.md §4.5。
+# 重制存量集（旧档 → story）须显式 --allow-voice-switch 并补写台本。
