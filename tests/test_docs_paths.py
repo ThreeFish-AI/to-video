@@ -18,7 +18,7 @@
   3. 散文里的 Markdown 相对链接必须落到 skill 仓内真实文件——AGENTS.md 强制
      可跳转链接；把链接变量化会一次性造出十几条死链。
 
-受检面：references/PIPELINE.md + references/NN-*.md（九篇阶段规格）+ SKILL.md + 根 RSI.md
+受检面：references/PIPELINE.md + references/NN-*.md（各篇阶段规格）+ SKILL.md + 根 RSI.md
 （自改进协议，散文链接最密集的文档，纳入即受围栏/链接/变量/混锚四类执法）
 + references/MODELING-PLAYBOOK.md（RSI 建模经验沉淀面，条目指针须可跳转）。
 references/ 下的手册（VOICE-CLONING.md 等，非 NN- 阶段规格）与根 README（门面）暂不在面内
@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from paths import skill_root  # noqa: E402
 
 REFERENCES = skill_root() / "references"
-#: 九篇阶段规格（显式 NN- glob：同目录的手册不进变量/混锚规则的受检面）
+#: 阶段规格（显式 NN- glob：同目录的手册不进变量/混锚规则的受检面）
 STAGE_SPECS = "[0-9][0-9]-*.md"
 README = REFERENCES / "PIPELINE.md"
 SKILL_MD = skill_root() / "SKILL.md"
@@ -48,7 +48,7 @@ PLAYBOOK_MD = REFERENCES / "MODELING-PLAYBOOK.md"
 FENCE_RE = re.compile(r"^```")
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 #: 行内代码跨算「命令」的判据：经典命令调用形态，或直接引用了任何路径变量——
-#: 把 $ 变量写进行内跨就意味着它在充当命令（references/06 的命令历史上就写成
+#: 把 $ 变量写进行内跨就意味着它在充当命令（references/07 的命令历史上就写成
 #: 行内跨而非围栏块，只扫围栏会漏）。
 COMMAND_SPAN_RE = re.compile(r"uv run|\.venv/bin/python|\$[TWPV]\b")
 
@@ -226,7 +226,7 @@ _IGNORE_WS_CMD_RE = re.compile(r"pnpm install[\s#]+--ignore-workspace")
 _IGNORE_WS_NPMRC_RE = re.compile(r"^\s*ignore-workspace\s*=", re.M)
 
 
-#: Remotion 工具经 npx 调用（07 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
+#: Remotion 工具经 npx 调用（08 规格：一律 ./node_modules/.bin/ 直调，防 workspace 污染）。
 _NPX_TOOL_RE = re.compile(r"\bnpx\s+(?:tsc|remotion)\b")
 #: 已不存在的旧布局路径（RSI-009 起 pipeline/ 目录整体移除，任何指回都是死路径；
 #: docs/quickstart 已迁 assets/）；前一字符不许是词字符或 -，但**不排除 /**
@@ -278,6 +278,49 @@ def test_script_references_resolve():
     )
 
 
+#: 阶段规格指名：`references/NN-name.md`（前缀不限，同 _SCRIPT_REF_RE）。只认带文件名的
+#: 完整形态——`references/08 事实条` 这类简写不含文件名，由人读上下文消歧，不在门内。
+_SPEC_REF_RE = re.compile(r"(?<![\w-])references/(\d\d-[a-z][a-z0-9-]*\.md)")
+
+
+def test_spec_references_resolve():
+    """文案里点名的 references/NN-*.md 必须真实存在（RSI-013）。
+
+    插入 ⑤ 成文优化时 05–09 整段顺移为 06–10；旧文件名散落在 frozen 组件注释、
+    模板与手册里，现有链接门只查 Markdown 相对链接、查不到注释与散文里的路径，
+    漏改一处就是一条照着找不到的死指引。历史台账（issue.md）与 CHANGELOG 刻意
+    不在面内：它们记录的是当时的文件名。"""
+    have = {p.name for p in REFERENCES.glob("[0-9][0-9]-*.md")}
+    missing = []
+    for f in current_docs_and_code():
+        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            for name in _SPEC_REF_RE.findall(line):
+                if name not in have:
+                    missing.append(f"{_rel(f)}:{lineno} → references/{name}")
+    assert not missing, "点名了不存在的阶段规格（重编号后漏改？）：\n  " + "\n  ".join(
+        missing
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "hit"),
+    [
+        (
+            "见 references/08-remotion-implementation.md。",
+            "08-remotion-implementation.md",
+        ),
+        ("[06](../../references/06-storyboard.md)", "06-storyboard.md"),
+        ("$T/references/07-tts-voice.md", "07-tts-voice.md"),
+        ("见 references/08 事实条", None),
+        ("apps/x/pipeline-references/05-x.md", None),
+    ],
+)
+def test_spec_reference_detector_forms(line, hit):
+    """检测器自检：带文件名的完整指名必须命中；不含文件名的简写不命中。"""
+    found = _SPEC_REF_RE.findall(line)
+    assert (found[0] if found else None) == hit
+
+
 def test_no_instruction_to_add_ignore_workspace():
     """用户可见文案不得教人加 `--ignore-workspace`（RSI-005）。
 
@@ -301,8 +344,8 @@ def test_no_instruction_to_add_ignore_workspace():
 
 
 def current_docs_and_code() -> list[Path]:
-    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + mermaid 图源
-    （首行 `%% source:` 指回文档章节）+ docs/research（设计依据文档，编号对齐后
+    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + 知识索引 + mermaid
+    图源（首行 `%% source:` 指回文档章节）+ docs/research（设计依据文档，编号对齐后
     `skills/NN` 简写会被误读为同号新规格）。frozen 档不再豁免：2.0.0 起模板即唯一
     事实源（RSI-009），陈旧注释一律清到现行路径。issue 台账与 CHANGELOG 是历史
     记录，不在面内。"""
@@ -311,6 +354,7 @@ def current_docs_and_code() -> list[Path]:
         *user_facing_files(),
         *REFERENCES.glob("*.md"),
         skill_root() / "README.md",
+        docs / ".agents" / "knowledge-map.md",
         *(docs / "assets" / "mermaid").glob("*.mmd"),
         *(docs / "research").glob("*.md"),
     }
@@ -318,7 +362,7 @@ def current_docs_and_code() -> list[Path]:
 
 
 def test_no_npx_for_remotion_tools():
-    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 07 命令闭环矛盾。"""
+    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 08 命令闭环矛盾。"""
     offenders = [
         f"{_rel(f)}:{no}"
         for f in current_docs_and_code()
@@ -377,8 +421,8 @@ _PIPELINE_SECTION_REF_RE = re.compile(
 
 
 def test_pipeline_section_refs_resolve():
-    """具名章节指针须落到 PIPELINE.md 真实标题（RSI-009 评审：09 规格曾指向不存在的
-    「字体可复现性」节——该事实条在 07；链接可达门只验文件，不验节名）。"""
+    """具名章节指针须落到 PIPELINE.md 真实标题（RSI-009 评审：10 规格曾指向不存在的
+    「字体可复现性」节——该事实条在 08；链接可达门只验文件，不验节名）。"""
     headings = [
         ln
         for ln in README.read_text(encoding="utf-8").splitlines()

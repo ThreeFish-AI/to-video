@@ -350,7 +350,7 @@ def test_registered_episode_no_orphan_message(tmp_path):
 
 
 def test_same_hex_within_series_fails(tmp_path):
-    """系列内两集共用同一 accent 是视觉契约违规（references/07「已用色错开」）。"""
+    """系列内两集共用同一 accent 是视觉契约违规（references/08「已用色错开」）。"""
     clash = {**EP2, "accents": [EP1["accents"][0]]}
     ws = build_workspace(tmp_path, [S("t", EP1, clash)], {})
     rc, out = run_check(ws)
@@ -367,7 +367,7 @@ def test_same_hex_across_series_passes(tmp_path):
 
 
 def test_occupied_hex_info_line_present(tmp_path):
-    """每系列刷一行已用色登记（references/07 登记表的机器化输出）。"""
+    """每系列刷一行已用色登记（references/08 登记表的机器化输出）。"""
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
     rc, out = run_check(ws)
     assert rc == 0 and "INFO 规则4：t 已用色" in out

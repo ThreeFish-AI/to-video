@@ -24,7 +24,7 @@ schema 是「pipeline.py 与 check_script.py 里 `.get()` 调用的并集」：�
   - 策略声明（engine）有可见替代项（edge），且 `.engine` 音色签名护栏让它语义
     承重 → **保留在 toml**，它是一条决策记录而非默认值。
   - 机器属性（server）→ 只给默认值 + 环境变量覆盖，永不写进受版本控制的 toml
-    （沿用 references/09 对并发度已立的同一原则）。
+    （沿用 references/10 对并发度已立的同一原则）。
 
 发现性由 `pipeline.py doctor` 打印带来源标记的配置表补偿（`git config --list
 --show-origin` 的标准做法），而不是靠把默认值抄回每个 toml。
@@ -313,7 +313,7 @@ def validate(
 
     `scope` = 需要执法**必填性与取值域**的节名集合，None = 全部。边界管理：
     每个消费者只校验自己消费的东西。内容门（check_script）不该因为「还没挑配音
-    样本」而拒绝检查分镜覆盖性——那是把 TTS 的前置条件强加给 ④⑤ 阶段。
+    样本」而拒绝检查分镜覆盖性——那是把 TTS 的前置条件强加给 ④⑥ 阶段。
     未知键 WARN 始终全局报告：typo 检测对谁都有用，且只是 WARN。
     「节应为表」同属边界之内、按 scope 分流：越界者降为 WARN——理由与上一条相反
     （它本来是 FAIL），故不能靠「只是 WARN」豁免，只能靠降级。

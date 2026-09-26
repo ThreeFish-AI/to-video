@@ -781,7 +781,7 @@ def test_caption_duplication_en_checks_english_subtitle_face(project):
 
 def test_check_scenes_en_reports_untranslated_literals(project):
     """--check-scenes --lang en：未翻译画面文字报告（WARN-only）。已翻译片段
-    （带 en 的 <L>、references/07 的 t({zh, en}) 字面对）剥除后不报；缺 en 的 <L>
+    （带 en 的 <L>、references/08 的 t({zh, en}) 字面对）剥除后不报；缺 en 的 <L>
     （回落中文）与 <Label> 之类同前缀标签照报。"""
     setup_en(project)
     write_scene(

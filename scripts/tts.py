@@ -1974,12 +1974,12 @@ async def main() -> None:
 
         # ── 段落演绎（story 档）：块模式解析 ─────────────────────────────
         # 块=同幕连续句一次合成（句间自然停顿），服务端切回逐句 mp3。仅预设声明 block
-        # 时启用；EN 未验证（06-tts-voice 跨语种须试听）回退逐句；--steady 的逐句升束
+        # 时启用；EN 未验证（07-tts-voice 跨语种须试听）回退逐句；--steady 的逐句升束
         # 与「块=一个请求」冲突，硬拒。
         block_cfg = (STYLE_PRESETS.get(style_name) or {}).get("block")
         if block_cfg and tts_lang != "ZH":
             print(
-                "提示：story 档块合成未在 EN 验证（跨语种须试听，见 references/06-tts-voice.md），"
+                "提示：story 档块合成未在 EN 验证（跨语种须试听，见 references/07-tts-voice.md），"
                 "EN 本次回退逐句合成",
                 file=sys.stderr,
             )

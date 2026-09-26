@@ -240,7 +240,7 @@ def _outside_fences(text: str) -> list[str]:
 
 
 def long_reference_docs() -> list[Path]:
-    """Agent 按需加载的规格面：机制契约、RSI 协议、九篇阶段规格。两本已带
+    """Agent 按需加载的规格面：机制契约、RSI 协议、各篇阶段规格。两本已带
     `## 目录` 锚点列表的手册以人读为主，保持原格式、不在此列。"""
     refs = SKILL_ROOT / "references"
     docs = [refs / "PIPELINE.md", SKILL_ROOT / "RSI.md"]

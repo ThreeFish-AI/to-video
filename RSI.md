@@ -1,6 +1,6 @@
 # RSI：递归自改进回路（Skill 自身缺陷与改进的协议）
 
-> RSI（Recursive Self-Improvement）是**元回路**：作用对象是本 Skill 仓自身（规格、脚本、模板、流程、制度），与九阶段视频流水线正交——视频内容的质量问题走 Stage ④/⑧ 既有 QA 回路，不进本协议；唯一的内容侧例外是**可跨集复用的建模经验**，走第十节「建模经验分支」沉淀进有界手册。本文件可直接作为 RSI 子代理的 prompt 底稿（同阶段规格先例）；触发分流的一句话判据见 [SKILL.md](SKILL.md)「自改进回路（RSI）」节。
+> RSI（Recursive Self-Improvement）是**元回路**：作用对象是本 Skill 仓自身（规格、脚本、模板、流程、制度），与阶段化视频流水线正交——视频内容的质量问题走 Stage ④/⑨ 既有 QA 回路，不进本协议；唯一的内容侧例外是**可跨集复用的建模经验**，走第十节「建模经验分支」沉淀进有界手册。本文件可直接作为 RSI 子代理的 prompt 底稿（同阶段规格先例）；触发分流的一句话判据见 [SKILL.md](SKILL.md)「自改进回路（RSI）」节。
 
 **目录**：一、触发与分流 · 二、登记 · 三、子代理协议 · 四、四道门 · 五、两种处理模式 · 六、PR 规范 · 七、失败出路 · 八、降级路径 · 九、不变量保护清单 · 十、建模经验分支
 
@@ -10,7 +10,7 @@
 
 | 现象 | 归属 | 去处 |
 |---|---|---|
-| 断言与信源不符、黑帧、覆盖门 FAIL、字幕错位 | 视频内容问题 | 既有 QA 回路（[04](references/04-verification.md) 校验清零 / [08](references/08-render-qa.md) 修复回路），**不进 RSI** |
+| 断言与信源不符、黑帧、覆盖门 FAIL、字幕错位 | 视频内容问题 | 既有 QA 回路（[04](references/04-verification.md) 校验清零 / [09](references/09-render-qa.md) 修复回路），**不进 RSI** |
 | 脚本崩溃/误报/漏报、文档命令复制即跑失败、契约不清致代理误用、模板与执法测试矛盾、规格与实现漂移 | Skill 自身缺陷 | RSI |
 | 用户提出「这个流程/制度/方法可以更好」 | Skill 自身改进项 | RSI |
 | 用户对某个**建模方法**（概念 → 画面/母题/构图/动效强度）明确认可或否决、或主 Agent 自评认可，且可跨集复用 | 建模经验 | RSI 建模经验分支（第十节）：追加手册候选区，攒批策展 |
@@ -86,17 +86,17 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 
 清单是**索引不是事实源**——每条一句话判由，正文 SSOT 各归其位（防第二事实源）：
 
-1. 阶段序号与规格文件号一一对齐（⑥↔`06`、⑦↔`07`；RSI-009 起废除历史错位），严禁再引入错位（执法：`test_stage_numbers_align_spec_files`）。
+1. 阶段序号与规格文件号一一对齐（第 N 阶段 ↔ `NN-*.md`；RSI-009 废除历史错位，RSI-013 插入 ⑤ 时整段顺移），严禁再引入错位；新增或删除阶段 = 规格整段改名 + 全仓入链同步（执法：`test_stage_numbers_align_spec_files`、`test_spec_references_resolve`）。
 2. `narration.md` 唯一 SSOT；narration.json / manifest.json / chapters.json 是派生物，不得开「直改派生物」的口子。
 3. frozen Remotion skeleton：改 frozen 文件 = 改模板 + 全集同步 + `verify_skeleton.py` 字节级过；不得只改某一集的复制件。
 4. 运动层 `video/src/motion/` frozen 且不读 theme token。
 5. `timing.json` 时序 SSOT（TS/Python 双语共读），不得在任何一侧内联时序常数。
 6. 「复制不共享」边界：Python 实现只住 `$T/scripts/`，工作区 / 分集 scripts 只许薄包装。
 7. config SCHEMA 是默认值唯一来源，toml 只写偏离；机器属性永不进 toml。
-8. 九阶段 gates 与 [stages.toml](references/stages.toml) 同源（SKILL.md 速查表门列逐字抄录，执法：`test_router_gates_match_stages`）；不新增阶段状态机。
+8. 全部阶段 gates 与 [stages.toml](references/stages.toml) 同源（SKILL.md 速查表门列逐字抄录，执法：`test_router_gates_match_stages`）；不新增阶段状态机。
 9. `deliver` 刻意不串联 `render --final`、不入扇出白名单（完成行信号契约 + 破坏性命令显式执行）。
 10. 命令四变量锚定：`$T` 命令不混工作区字面量；变量定义只在 [references/PIPELINE.md](references/PIPELINE.md)（执法：`test_docs_paths.py`）。
-11. SKILL.md 路由壳纪律：只给路由、指针与不变量、速查表恰 9 行、不复制正文；frontmatter 只用 Agent Skills 规范六字段且须过官方校验器口径（执法：[test_skill_spec](tests/test_skill_spec.py)）。
+11. SKILL.md 路由壳纪律：只给路由、指针与不变量、速查表行数 = stages.toml 阶段数（一阶段一行）、不复制正文；frontmatter 只用 Agent Skills 规范六字段且须过官方校验器口径（执法：[test_skill_spec](tests/test_skill_spec.py)）。
 12. 双锚点：skill 根自 `__file__` 找 SKILL.md、工作区根由哨兵搜索；静默猜根被禁止。
 13. 声音样本生物特征纪律：不入库只存指纹；RSI 材料与示例不得引导样本路径进仓。
 14. 许可与依赖纪律：pyproject 刻意无 `[project]`（依赖走 `--with`）；不引入未审计第三方依赖或新许可冲突。
@@ -104,18 +104,18 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 
 ## 十、建模经验分支（有界经验库的策展协议）
 
-作用对象是 [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md)：沉淀「画什么、怎么隐喻」的策略层经验，与 references/07「怎么动」的机制层正交。设计依据与证据见 [研究文档](docs/research/modeling-experience-distillation.md)。
+作用对象是 [references/MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md)：沉淀「画什么、怎么隐喻」的策略层经验，与 references/08「怎么动」的机制层正交。设计依据与证据见 [研究文档](docs/research/modeling-experience-distillation.md)。
 
 **信号与角色**（Generator / Reflector / Curator 分权，防自评自改）：
 
-- **Generator = 制片主 Agent**：②⑤ 设计前读手册；分镜采用条目时标注〔M-xxx〕；收到显式信号当场往候选区追加一行 `- 〔±号来源〕<集目录名>#<镜号>：…`（`〔+用户〕` 认可 / `〔-用户〕` 否决 / `〔+主〕` 主 Agent 自评认可；主 Agent 不单独否决），不改条目。
-- **Reflector + Curator = 策展子代理**（fresh context）：默认在 ⑨ 交付后、候选区非空时启动一次（攒批），同一时刻至多一个策展 PR 在途；逐条给出处置 ADD / EDIT / VOTE±1 / MERGE / DISCARD，提交态候选区恒为空。删并既有条目 ≥3 条或触发压缩时，另起独立核验子代理（同第三节分级）。
+- **Generator = 制片主 Agent**：②⑥ 设计前读手册；分镜采用条目时标注〔M-xxx〕；收到显式信号当场往候选区追加一行 `- 〔±号来源〕<集目录名>#<镜号>：…`（`〔+用户〕` 认可 / `〔-用户〕` 否决 / `〔+主〕` 主 Agent 自评认可；主 Agent 不单独否决），不改条目。
+- **Reflector + Curator = 策展子代理**（fresh context）：默认在 ⑩ 交付后、候选区非空时启动一次（攒批），同一时刻至多一个策展 PR 在途；逐条给出处置 ADD / EDIT / VOTE±1 / MERGE / DISCARD，提交态候选区恒为空。删并既有条目 ≥3 条或触发压缩时，另起独立核验子代理（同第三节分级）。
 - **交接**（每条信号只计一次）：候选行是 `$T` 主检出的未提交追加，建自 HEAD 的 worktree 看不到——主代理须把候选行**原文**随输入契约交给策展子代理；PR 合入前这些行留在主检出作在途记录（PR 被丢弃则顺延进下一批）；合入后 pull `$T` 前撤掉已交出的行（期间无新追加即 `git -C $T checkout -- references/MODELING-PLAYBOOK.md`；有则先摘出新行、同法还原、pull 后原样追加回）。否则 pull 被本地改动拦住，或同一 VOTE 在下一批重复计入。
 - 信号强度：用户显式认可/否决为强信号；主 Agent 自评为弱信号，只能新增 w=1 的试行条目，不能单独推动晋升（存储的错误经验会被后续照抄放大）。
 
 **权重生命周期**：新条目 w=2（用户认可）或 w=1（仅主 Agent）；复用后被认可 +1、被否决或返工 −1；w≤0 必须移出。**晋升定式**须 w ≥ `PROMOTE_W`、证覆盖 ≥ `PROMOTE_EPISODES` 集（门执法），且含 ≥1 次用户信号（门不可见，由核验子代理对照条目去向表核对）。
 
-**四门映射**（不新增门）：G1 信号属实（显式信号 + 可复查锚点：候选须 `集目录名#镜号`，条目「证」可放宽为 `集目录名[#镜号]`——多镜综合的经验允许不点名单镜）/ G2 可迁移且不重复（抽象为「概念结构 → 视觉形式」，同键合并，不重述 07 机制与红线）/ G3 `check_playbook.py` 零 ERROR 零 WARN 且 pytest 全绿（越过 `HIGH` 须在同一 PR 内压到 `TARGET`） / G4 PR 附**条目去向表**（每个被删/并编号 → 去向 + 理由）。
+**四门映射**（不新增门）：G1 信号属实（显式信号 + 可复查锚点：候选须 `集目录名#镜号`，条目「证」可放宽为 `集目录名[#镜号]`——多镜综合的经验允许不点名单镜）/ G2 可迁移且不重复（抽象为「概念结构 → 视觉形式」，同键合并，不重述 08 机制与红线）/ G3 `check_playbook.py` 零 ERROR 零 WARN 且 pytest 全绿（越过 `HIGH` 须在同一 PR 内压到 `TARGET`） / G4 PR 附**条目去向表**（每个被删/并编号 → 去向 + 理由）。
 
 **压缩阶梯**（字数 ≥ `HIGH` 触发，逐级执行、达 ≤ `TARGET` 即停；数值只在 check_playbook.py，失真由小到大）：
 
@@ -126,6 +126,6 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 5. **冷退**：试行、w 最低、最久未更新且**非唯一覆盖**其概念类型者移出（保能力删除：先删被包含者，唯一覆盖者最后动）；
 6. **措辞精简**：只压「非/据/证」等附属字段，「当/故/验」语义不得丢。
 
-**禁令**：整文件或整节重写（ACE 实测整体重写致上下文坍缩、准确率跌破无适应基线）；为腾预算把条目搬进 references/07 等规格正文（转移熵而非减熵）；删唯一覆盖或高 w 条目凑数。
+**禁令**：整文件或整节重写（ACE 实测整体重写致上下文坍缩、准确率跌破无适应基线）；为腾预算把条目搬进 references/08 等规格正文（转移熵而非减熵）；删唯一覆盖或高 w 条目凑数。
 
 **回潮信号**（递归纠偏）：被淘汰或归纳掉的条目，其同键候选再次出现 ⇒ 判为过度压缩，恢复原条目（w 重置为 2）并在 PR 点名——压缩阶梯本身也受经验反馈约束。

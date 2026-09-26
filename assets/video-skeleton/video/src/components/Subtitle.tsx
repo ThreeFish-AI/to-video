@@ -38,7 +38,7 @@ const displayText = (t: string, lang: Lang) =>
  *  字号用 @remotion/layout-utils 的 fitText 真实测量（替代此前手写的全角 1.0/半角
  *  0.55 宽度估算与魔法阈值）。validateFontIsLoaded 保持 4.x 默认 false——系统字体
  *  栈无 loadFont() promise 可等；⚠️ Remotion 5.0 起该开关默认翻 true，届时若仍未
- *  内嵌字体会开始抛错（重启触发器见 references/07 事实条（字体可复现性））。
+ *  内嵌字体会开始抛错（重启触发器见 references/08 事实条（字体可复现性））。
  *  zh 恒单行（逐像素沿用既有渲染）；en 单行 fitText ≥ 30 用单行（盒几何仍走
  *  en 档），放不下则回落两行 + textWrap balance 均衡断行。 */
 export const Subtitle: React.FC<{timed: TimedSentence[]}> = ({timed}) => {

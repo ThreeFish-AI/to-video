@@ -179,7 +179,7 @@ def test_scope_limits_required_key_enforcement(tmp_path):
     """边界管理：每个消费者只校验自己消费的东西。
 
     内容门（check_script，scope={"narration"}）**不得**因为「还没挑配音样本」
-    就拒绝检查分镜覆盖性——那是把 TTS 的前置条件强加给 ④⑤ 阶段。
+    就拒绝检查分镜覆盖性——那是把 TTS 的前置条件强加给 ④⑥ 阶段。
     这条曾经真的破过：全量校验让三个既有内容门用例直接变红。
     """
     root = _write(
@@ -223,7 +223,7 @@ def test_non_table_section_out_of_scope_degrades_to_warn(tmp_path):
     """「节应为表」这条 FAIL 必须同样受 scope 约束。
 
     此前它无条件进 `fails`：把 `tts` 写成标量时，`check_script.py`
-    （scope={"narration"}）会以 1 退出——④⑤ 内容门因为一个**它不消费的节**
+    （scope={"narration"}）会以 1 退出——④⑥ 内容门因为一个**它不消费的节**
     而拒绝检查分镜覆盖性，正是 scope 机制要挡住的形态（同
     `test_scope_limits_required_key_enforcement` 的必填性那一半）。
     降级而非丢弃：畸形节对谁都值得知道，只是不该替别人拦门。

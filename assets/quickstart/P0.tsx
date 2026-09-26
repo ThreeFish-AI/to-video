@@ -2,7 +2,7 @@
 // 动效全部来自 frozen 运动层与 cards 原语：FadeUp = spring 淡入上移，delay 做错峰。
 // 解析器契约：`const w = (fromId, toId?) => beatWindow(...)` 与 at() 的字面形态勿改
 // （check_script.py 的 SCENE_CALL_RE 只认 w('id','id')）。真实制作规格见
-// references/07-remotion-implementation.md。
+// references/08-remotion-implementation.md。
 import React from 'react';
 import {AbsoluteFill, Sequence} from 'remotion';
 import {FadeUp, Pill} from '../components/cards';

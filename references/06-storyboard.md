@@ -1,6 +1,6 @@
-# Stage ⑤ 分镜表生成（skill 规格 · 05）
+# Stage ⑥ 分镜表生成（skill 规格 · 06）
 
-> Stage ⑤：把逐字稿切「镜」，产出 `script/storyboard.md`——Remotion 场景组件的实现规格。
+> Stage ⑥：把逐字稿切「镜」，产出 `script/storyboard.md`——Remotion 场景组件的实现规格。
 
 ## 产出结构
 
@@ -43,16 +43,17 @@ slug 或该图任一章 label）与场景代码 cue 构成**双向对账**的两
 
 ## 切镜规则
 
-- 一「镜」（beat）= 一段连续句 id（2–8 句）共享同一主画面；镜内动效随句推进。
+- 一「镜」（beat）= 一段连续句 id（2–8 句）共享同一主画面；镜内动效随句推进。逐字稿幕内已按空行分好 beat（⑤ 成文优化产物）时，镜界优先沿空行切。
 - 句 id 区间必须**覆盖该幕全部句子、无交叠无遗漏**（组件内以 `beatWindow(sentences, sceneFrom, from, to)` 取窗口）。
 - 每镜「画面」写清：主体元素、布局、色彩（用契约色名）、出现的角标；「动效」写清：入场方式、随句节奏的推进（生长/高亮/计数）。
 - **画面文字不复述口播**：每句口播已由 frozen Subtitle 烧录在底部字幕带，金句卡 / 清单条 / 判词条若与该句逐字相同，观众看到的是上下两层同一句话。画面文字只放字幕给不了的东西——关键词、数字、标签、结构（如口播「门槛跟着风险走——够不上就升级」→ 画面「门槛随风险 · 升级留人」）。执法：`pipeline.py check`（`all` 同链；缺省执法，无需 flag；en 版对英文字幕同样执法）逐字重合即 FAIL（判据见 `check_script.py` 的 `check_caption_duplication` docstring，RSI-007）；章节标题卡、同幕回扣等刻意复述，在该行或上一行注 `caption-dup-ok: <理由>` 逐处豁免，降为 WARN 留痕。
 - 风险/反转段显式标注色调切换（如「画面转红调」）。
 - 采用 [建模手册](MODELING-PLAYBOOK.md) 条目的镜，在「画面/动效」列标注〔M-xxx〕——策展复盘按此计数（至迭代：每次复用都是一次再验证）。
-- **顶部安全带 y<56 由章节条占用**（见 [07-remotion-implementation.md](./07-remotion-implementation.md)「顶部章节进度条」）：
+- **顶部安全带 y<56 由章节条占用**（见 [08-remotion-implementation.md](./08-remotion-implementation.md)「顶部章节进度条」）：
   各幕画面内容 y≥56 起；SceneTag 维持 top:64 不变。
 
 ## 验收
 
 - 逐幕核对句 id 连续性（首个 beat 起于本幕第一句，末个 beat 止于本幕最后一句，相邻 beat 区间无缝衔接）；
-- 每镜画面均可在 Remotion 用现有公共组件 + 少量定制实现（不出现无法代码化的素材需求）。
+- 每镜画面均可在 Remotion 用现有公共组件 + 少量定制实现（不出现无法代码化的素材需求）；
+- 定稿前按 [05 成文优化](./05-prose-refinement.md) 第七节过一遍画面 / 动效列的写法（现在时、只写看得见的、旁白讲画面给不了的）；句区间与各类机器可读标注不动。

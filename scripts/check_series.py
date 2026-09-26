@@ -41,7 +41,7 @@
   - 规则 2/3/4 **按系列内判定**——两个系列的发布顺序互相无关，同一文件（知识
     索引 / CHANGELOG / series.md）同时提及多个系列属正常形态；episode 的
     `1..N` 连续性也只在系列内成立。撞色同理：色相错开是系列内视觉契约
-    （references/07「与已用色撞车」登记表按系列维护），**跨系列撞色是接受态**
+    （references/08「与已用色撞车」登记表按系列维护），**跨系列撞色是接受态**
     ——实测真树 #4A9EFF（self-evolution）与 #4ADE80（claude-code 系）同处
     蓝/绿邻域；expand 的二维平行列表天然按系列分组，跨系列互不可见。
 
@@ -302,7 +302,7 @@ def rule_manifest_integrity(series_list: list[dict], msgs: list[str]) -> None:
     """规则 4：清单完整性——episode 连续性按系列内判定，slug 全局唯一。
 
     撞色只按系列内、且只认**精确同值**（不做色相邻近 WARN）：「色相与已用色
-    错开」是 references/07 定义的系列内视觉契约，references/07 的登记表也按系列维护；
+    错开」是 references/08 定义的系列内视觉契约，references/08 的登记表也按系列维护；
     跨系列撞色是接受态（见模块 docstring 多系列语义）。色相邻近则是弹性建议
     ——判据松一分就漏、紧一分就假报（蓝 #4A9EFF 与青 #2DD4BF 本就相邻共存），
     假报一多门就会被关掉（ISSUE-167 防范 3 的教训）。
@@ -348,7 +348,7 @@ def rule_manifest_integrity(series_list: list[dict], msgs: list[str]) -> None:
                 msgs.append(
                     f"FAIL 规则4：系列内撞色 {hexv} 同时出现在 {slugs[0]} 与 {slugs[1]}"
                 )
-        #: 供下一集选色参考（references/07 的「已用色」登记表在此机器化）；
+        #: 供下一集选色参考（references/08 的「已用色」登记表在此机器化）；
         #: 空系列不刷（无信息量的输出行只会稀释信噪比）。
         if by_hex:
             msgs.append(
@@ -417,7 +417,7 @@ def rule_renderability(series_list: list[dict], msgs: list[str]) -> None:
     """规则 6：storyboard 已定稿的集，注册表 ↔ 场景文件双向对齐。
 
     触发条件是 `script/storyboard.md` **存在**——storyboard 是场景拆解的 SSOT
-    （references/05→07 的交接物），它落地之前 scenes/ 留空是合法的脚手架期状态
+    （references/06→08 的交接物），它落地之前 scenes/ 留空是合法的脚手架期状态
     （scaffold 刻意不生成 scenes/），此刻执法只会把门变成「一建工程就红」。
 
     判据方向不对称是刻意的：**注册 → 文件是 FAIL**（注册了却不存在的场景，
