@@ -89,6 +89,13 @@ def build_jobs(
     return [resolve_style(args)]
 
 
+def perform_punct_of(style: str) -> bool:
+    """该档是否开表演标点（story 的 block.perform_punct，`……`→`…`）：小样送合成的文本须与
+    管线块合成同口径，否则含 `……` 的试听句念法与成片不一致。"""
+    block = (STYLE_PRESETS.get(style) or {}).get("block") or {}
+    return bool(block.get("perform_punct"))
+
+
 def check_server(
     server: str,
     need_duration_factor: bool,
@@ -153,6 +160,7 @@ def synthesize_one(
     out_dir: Path,
     stem: str | None = None,
     sampling: dict | None = None,
+    perform: bool = False,
 ) -> dict:
     """合成一档并落盘 → {style, path, duration, wall, rtf}。失败即退出（小样无需容错累积）。"""
     out = out_dir / f"{stem or name}.mp3"
@@ -163,7 +171,7 @@ def synthesize_one(
         try:
             audio, fmt = http_synthesize(
                 args.server,
-                tts_text(args.text),
+                tts_text(args.text, perform=perform),
                 str(args.ref),
                 vec,
                 alpha,
@@ -476,7 +484,19 @@ def main() -> None:
     ref_sha1 = hashlib.sha1(ref.read_bytes()).hexdigest()[
         :12
     ]  # 与缓存摘要同前缀，便于与 .sha 对账
-    print(f">> 文本（预处理后）：{tts_text(args.text)}")
+    plain = tts_text(args.text)
+    perform_styles = [n for n, *_ in jobs if perform_punct_of(n)]
+    performed = tts_text(args.text, perform=True)
+    if len(perform_styles) < len(jobs):
+        print(f">> 文本（预处理后）：{plain}")
+    if perform_styles and (performed != plain or len(perform_styles) == len(jobs)):
+        # 表演标点档（story）送合成的文本与其余档不同（`……` 留作 `…`）：分行回显，不混为一谈
+        tag = (
+            ""
+            if len(perform_styles) == len(jobs)
+            else f" · {'、'.join(perform_styles)}"
+        )
+        print(f">> 文本（预处理后{tag}）：{performed}")
     print(f">> 参考样本：{ref}（sha1 {ref_sha1}）")
     if args.emo_ref:
         print(f">> 情感参考音频：{args.emo_ref}（音色仍取上面的参考样本）")
@@ -539,6 +559,7 @@ def main() -> None:
             if not args.label
             else (args.label if len(jobs) == 1 else f"{args.label}-{name}"),
             sampling=sampling_of[name],
+            perform=perform_punct_of(name),
         )
         for name, vec, alpha, df, beams in jobs
     ]
