@@ -283,20 +283,6 @@ def test_script_references_resolve():
 _SPEC_REF_RE = re.compile(r"(?<![\w-])references/(\d\d-[a-z][a-z0-9-]*\.md)")
 
 
-def spec_reference_files() -> list[Path]:
-    """阶段规格引用的受检面 = 用户照做面 + 全部现行文档（references/ 手册、根 README、
-    knowledge-map、research、mermaid 图源）——重编号时这些都会被人照着点开。"""
-    docs = skill_root() / "docs"
-    extra = [
-        *REFERENCES.glob("*.md"),
-        skill_root() / "README.md",
-        docs / ".agents" / "knowledge-map.md",
-        *(docs / "research").glob("*.md"),
-        *(docs / "assets" / "mermaid").glob("*.mmd"),
-    ]
-    return sorted(set(user_facing_files()) | {p for p in extra if p.is_file()})
-
-
 def test_spec_references_resolve():
     """文案里点名的 references/NN-*.md 必须真实存在（RSI-011）。
 
@@ -306,7 +292,7 @@ def test_spec_references_resolve():
     不在面内：它们记录的是当时的文件名。"""
     have = {p.name for p in REFERENCES.glob("[0-9][0-9]-*.md")}
     missing = []
-    for f in spec_reference_files():
+    for f in current_docs_and_code():
         for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             for name in _SPEC_REF_RE.findall(line):
                 if name not in have:
@@ -358,8 +344,8 @@ def test_no_instruction_to_add_ignore_workspace():
 
 
 def current_docs_and_code() -> list[Path]:
-    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + mermaid 图源
-    （首行 `%% source:` 指回文档章节）+ docs/research（设计依据文档，编号对齐后
+    """现行文案面 = 用户照做面 + references/ 全部手册 + 根 README + 知识索引 + mermaid
+    图源（首行 `%% source:` 指回文档章节）+ docs/research（设计依据文档，编号对齐后
     `skills/NN` 简写会被误读为同号新规格）。frozen 档不再豁免：2.0.0 起模板即唯一
     事实源（RSI-009），陈旧注释一律清到现行路径。issue 台账与 CHANGELOG 是历史
     记录，不在面内。"""
@@ -368,6 +354,7 @@ def current_docs_and_code() -> list[Path]:
         *user_facing_files(),
         *REFERENCES.glob("*.md"),
         skill_root() / "README.md",
+        docs / ".agents" / "knowledge-map.md",
         *(docs / "assets" / "mermaid").glob("*.mmd"),
         *(docs / "research").glob("*.md"),
     }

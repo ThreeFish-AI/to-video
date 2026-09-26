@@ -22,7 +22,7 @@ allowed-tools: Read Write Edit Glob Grep Bash
 |---|---|---|
 | 全新制作一集 | 下节「工作流」逐步过门；进入每个阶段前读速查表对应规格 | 阶段规格 |
 | 改稿迭代（已有集改口播） | 只改 `narration.md` → `build` → `check` → `tts`（逐句内容寻址缓存，只重合成改动句）→ `render` + `qa`；只改画面则跳过 `tts`；需交付时接工作流第 7 步 | 速查表 ③④⑨ |
-| 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④A 复核 → `build` → `check` | 速查表 ⑤ |
+| 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④ 复核 → `build` → `check` | 速查表 ⑤ |
 | 出英文版 / 双语 | `pipeline.toml` 声明 `narration.langs = ["zh","en"]` + 句 id 对齐的译稿 `narration.en.md`；tts/render/captions/deliver 显式加 `--lang en`（build/check 缺省覆盖全部声明语言，产物加 `.en` 后缀） | [PIPELINE.md §五「双语渲染」](references/PIPELINE.md) |
 | 交付归档 | 终渲后显式 `deliver`；根路径 `--root`（一次性）或 env `TO_VIDEO_DELIVER_ROOT`（持久，写进 shell profile 而非 toml） | 速查表 ⑩ |
 | 环境 / 状态排障 | `pipeline.py doctor`（配置、时序 SSOT、样本指纹、IndexTTS 服务自检）/ `pipeline.py status`（阶段新鲜度） | [PIPELINE.md §三](references/PIPELINE.md) |
