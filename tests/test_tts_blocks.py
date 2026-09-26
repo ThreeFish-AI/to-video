@@ -629,6 +629,85 @@ def test_apply_cues_malformed_tables_are_reported_not_raised(tmp_path):
         assert "cue" not in items[0]
 
 
+def test_apply_cues_rejects_unknown_tables_and_keys(tmp_path):
+    """拼错的表名/键名须拒收：否则台本静默失效（[blocks] 整表丢、alhpa 回落预设 α）。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for body, needle in (
+        ('[blocks.p0-01]\nemo = "happy:1"\n', "未知表/键 blocks"),
+        ("[takes]\np0-01 = 1\n", "未知表/键 takes"),
+        ('[says]\np0-01 = "想让 AI 自己改进自己！"\n', "未知表/键 says"),
+        ('[block.p0-01]\nemo = "happy:1"\nalhpa = 0.5\n', "未知键 alhpa"),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+        cues.write_text(body, encoding="utf-8")
+        n_block, _, errs = bn.apply_cues(tmp_path, items)
+        assert n_block == 0 and any(needle in e for e in errs), (body, errs)
+        assert "cue" not in items[0] and "take" not in items[0]
+    # 正控：认得的键照常落盘
+    items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+    cues.write_text('[block.p0-01]\nemo = "happy:1"\nalpha = 0.4\n', encoding="utf-8")
+    n_block, _, errs = bn.apply_cues(tmp_path, items)
+    assert errs == [] and n_block == 1 and items[0]["cue"]["alpha"] == 0.4
+
+
+def test_apply_cues_dash_is_punctuation(tmp_path):
+    """`——` 是停顿标点（tts_text → `，`）：say 换掉或新增破折号只动标点，须放行；
+    夹在两数字之间同样按分隔符判定（删掉即改读数，仍拒）。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+    for text, say, ok in (
+        ("这是——一个问题。", "这是…一个问题！", True),
+        ("这是一个问题。", "这是——一个问题。", True),
+        ("从2020——2026年。", "从2020…2026年。", True),
+        ("从2020——2026年。", "从20202026年。", False),
+        ("这是——一个问题。", "这是——一个难题。", False),
+    ):
+        items = [{"id": "p0-01", "scene": "P0", "text": text}]
+        cues.write_text(f'[say]\np0-01 = "{say}"\n', encoding="utf-8")
+        _, n_say, errs = bn.apply_cues(tmp_path, items)
+        if ok:
+            assert errs == [] and n_say == 1, say
+        else:
+            assert any("只许改标点" in e for e in errs), say
+
+
+def test_reading_traps_scan_say_synth_text(tmp_path):
+    """say 只换标点也能踩读法陷阱（两数之间 `、`→`—` 读成「减」）：陷阱门须扫合成面，
+    同一陷阱两面都中只报一次；无 say 的句子（含发音标注句）报文逐字不变。"""
+    import build_narration as bn
+    import check_script as cs
+
+    _write_md(tmp_path)
+    items = [
+        {"id": "p0-01", "scene": "P0", "text": "从2020、2026年，模型变大了。"},
+        {"id": "p0-02", "scene": "P0", "text": "从2020—2026年，模型变大了。"},
+        {
+            "id": "p0-03",
+            "scene": "P0",
+            "text": "银行很重要。",
+            "ttsText": "银<行|HANG2>很重要。",
+        },
+    ]
+    (tmp_path / "script" / "narration.cues.toml").write_text(
+        '[say]\np0-01 = "从2020—2026年，模型变大了！"\n'
+        'p0-02 = "从2020—2026年，模型变大了！"\n',
+        encoding="utf-8",
+    )
+    _, n_say, errs = bn.apply_cues(tmp_path, items)
+    assert errs == [] and n_say == 2  # 去标点比对放行（两数之间标点归一为分隔符）
+    msgs: list[str] = []
+    cs.check_reading_traps(items, msgs)
+    assert [m.split("：")[0] for m in msgs] == [
+        "FAIL 句 p0-01的合成文本（台本 [say]） 命中读法陷阱 '0—2'",
+        "FAIL 句 p0-02 命中读法陷阱 '0—2'",
+    ]
+
+
 def test_status_tracks_cues_sidecar(tmp_path, capsys):
     """只改台本不改正文：status 须报 narration.json 失鲜（否则 tts 拿旧 cue 合成）。"""
     import os
@@ -661,6 +740,29 @@ def test_apply_cues_rejects_unknown_ids(tmp_path):
     )
     _, _, errs = bn.apply_cues(tmp_path, items)
     assert any("不是本稿句 id" in e for e in errs)
+
+
+def test_apply_cues_take_is_validated_int(tmp_path):
+    """[take] 落 item["take"]；非 1–999 整数（含 bool/浮点/字符串）与未知 id 汇入错误清单。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    cues = tmp_path / "script" / "narration.cues.toml"
+
+    def run(body: str):
+        items = [{"id": "p0-01", "scene": "P0", "text": "想让 AI 自己改进自己。"}]
+        cues.write_text(body, encoding="utf-8")
+        return items, bn.apply_cues(tmp_path, items)[2]
+
+    items, errs = run("[take]\np0-01 = 2\n")
+    assert errs == [] and items[0]["take"] == 2
+    for bad in ("0", "1000", "-1", "true", "1.5", '"1"'):
+        items, errs = run(f"[take]\np0-01 = {bad}\n")
+        assert "take" not in items[0] and any("1–999" in e for e in errs), bad
+    _, errs = run("[take]\np0-99 = 1\n")
+    assert any("take.p0-99 不是本稿句 id" in e for e in errs)
+    _, errs = run('take = "x"\n')
+    assert any("[take] 须为表" in e for e in errs)
 
 
 def _story_steady_plan(tmp_path, lang: str = "zh"):
@@ -722,6 +824,39 @@ def test_steady_allowed_when_en_falls_back_to_sentences(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "回退逐句" in r.stderr
     assert "束宽 3" in r.stdout  # --steady 命中句按 --steady-beams 3 排期
+
+
+def test_blocks_unsupported_hint_names_the_real_cause():
+    """supports_blocks=false 的三种成因处置不同：只有字段缺失才是「代码过旧请重启」；
+    IndexTTS-2 / low_vram 重启不会变，须给出换档（逐句档）出路而非让用户空转重启。"""
+    old = tts.blocks_unsupported_hint({"ok": True, "version": "2.5"})
+    assert "代码过旧" in old
+    v2 = tts.blocks_unsupported_hint(
+        {"ok": True, "version": "2", "supports_blocks": False}
+    )
+    assert "IndexTTS-2" in v2 and "sunny" in v2 and "代码过旧" not in v2
+    low = tts.blocks_unsupported_hint(
+        {"ok": True, "version": "2.5", "supports_blocks": False, "low_vram": True}
+    )
+    assert "low_vram" in low and "sunny" in low and "重启不会变" in low
+    assert "代码过旧" not in low
+
+
+def test_list_styles_surfaces_preset_seed_and_block_mode():
+    """--list-styles 是预设口径的对外视图：story 的种子与块合成不得隐身（页脚曾称 seed=None）。"""
+    import subprocess
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "tts.py"
+    r = subprocess.run(
+        [sys.executable, str(script), "--list-styles"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    story = next(ln for ln in r.stdout.splitlines() if ln.startswith("story "))
+    assert "seed=4242" in story and "块合成" in story
+    sunny = next(ln for ln in r.stdout.splitlines() if ln.startswith("sunny "))
+    assert "seed=" not in sunny and "块合成" not in sunny  # 无种子/逐句预设不变
 
 
 # ---------------- 块合成主流程（stub 服务端）----------------
@@ -947,6 +1082,142 @@ def test_plan_eta_excludes_store_recoverable_blocks(tmp_path):
     assert "估算墙钟约 0.0 小时" in r.stdout
 
 
+# ---------------- 台本 [take]：块级重掷 ----------------
+
+
+def test_block_sampling_offsets_only_its_block():
+    """take 只改所在块的种子（整集 --seed-offset 会改全部块）；无 take 的块口径原样。"""
+    base = {"seed": 4242}
+    plain = [dict(i) for i in P0[:2]]
+    taken = [dict(i) for i in P0[2:4]]
+    taken[1]["take"] = 3
+    assert tts.block_sampling(plain, base) == base
+    assert tts.block_sampling(taken, base) == {"seed": 4245}
+    assert base == {"seed": 4242}  # 不改入参
+
+
+def test_block_sampling_rejects_ambiguous_takes():
+    """同块两条 take（加和还是择一）歧义 ⇒ 报错；无种子口径时 take 无从生效 ⇒ 报错。"""
+    import pytest
+
+    block = [dict(i) for i in P0[:2]]
+    block[0]["take"], block[1]["take"] = 1, 2
+    with pytest.raises(ValueError, match="同一块内出现多次"):
+        tts.block_sampling(block, {"seed": 4242})
+    with pytest.raises(ValueError, match="需要种子"):
+        tts.block_sampling(block[1:], {})
+
+
+def test_block_take_reaches_request_and_digest(monkeypatch, tmp_path):
+    """take 进请求种子与成员摘要：同块加 take 即缓存失配、按新种子重录。"""
+    seeds: list[int] = []
+
+    def fake(server, text, ref, vec, alpha, df, lang, beams, weights, d, p, sampling):
+        seeds.append(sampling["seed"])
+        clips = [_clip() for _ in weights]
+        return {"split": "ok", "clips": clips, "cuts": [], "seams": []}
+
+    monkeypatch.setattr(tts, "http_synthesize_block", fake)
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    block = [dict(i) for i in P0[:2]]
+    _run_block(block, tmp_path, sampling={"seed": 4242})
+    before = (tmp_path / "p0-01.sha").read_text()
+    block[1]["take"] = 2
+    _run_block(block, tmp_path, sampling={"seed": 4242})
+    assert seeds == [4242, 4244]
+    assert (tmp_path / "p0-01.sha").read_text() != before
+
+
+def _story_plan(proj: Path, ref: Path):
+    import subprocess
+
+    return subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "tts.py"),
+            "--project",
+            str(proj),
+            "--engine",
+            "indextts",
+            "--ref",
+            str(ref),
+            "--style",
+            "story",
+            "--no-store",
+            "--plan",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=proj.parent,
+    )
+
+
+def test_plan_matches_synth_digest_with_take(monkeypatch, tmp_path):
+    """--plan 与合成同一 take 口径：带 take 合成后排期整块命中（两处各算摘要，防漂移）。"""
+    import asyncio
+    import hashlib
+    import json
+
+    proj = tmp_path / "ep"
+    (proj / "script").mkdir(parents=True)
+    items = [dict(i) for i in P0[:3]]
+    items[1]["take"] = 1
+    (proj / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    audio = proj / "video" / "public" / "audio"
+    audio.mkdir(parents=True)
+    p = tts.STYLE_PRESETS["story"]
+    monkeypatch.setattr(
+        tts,
+        "http_synthesize_block",
+        lambda *a: {"split": "ok", "clips": [_clip() for _ in a[8]], "seams": []},
+    )
+    monkeypatch.setattr(tts, "mp3_duration", lambda _p: 2.0)
+    for b in tts.plan_blocks(items, p["block"]):
+        asyncio.run(
+            tts.synth_block_indextts(
+                asyncio.Semaphore(1),
+                b,
+                False,
+                str(ref),
+                hashlib.sha1(ref.read_bytes()).hexdigest()[:12],
+                "story",
+                p["vec"],
+                p["alpha"],
+                p["df"],
+                "ZH",
+                "indextts",
+                "http://unused",
+                audio,
+                sampling={"seed": p["seed"]},
+            )
+        )
+    r = _story_plan(proj, ref)
+    assert r.returncode == 0, r.stderr
+    assert "待合成 0 块" in r.stdout
+
+
+def test_plan_rejects_two_takes_in_one_block(tmp_path):
+    """同块多条 take 在 --plan（长跑前）即报错退出。"""
+    import json
+
+    proj = tmp_path / "ep"
+    (proj / "script").mkdir(parents=True)
+    items = [dict(i) for i in P0[:2]]
+    items[0]["take"], items[1]["take"] = 1, 2
+    (proj / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    r = _story_plan(proj, ref)
+    assert r.returncode != 0 and "同一块内出现多次" in r.stderr
+
+
 def test_sample_all_styles_applies_preset_seed(tmp_path):
     """--all-styles 逐档解析采样口径：story 档带预设 seed，其余档不被波及。"""
     import os
@@ -970,10 +1241,41 @@ def test_sample_all_styles_applies_preset_seed(tmp_path):
     assert "seed=" not in lines["sunny"]
 
 
+def test_sample_story_sends_perform_punct_text(monkeypatch, tmp_path):
+    """story 小样与管线块合成同一合成文本口径（`……`→`…`）；其余档仍按默认映射 `。`。"""
+    import importlib
+
+    (tmp_path / ".to-video-root").write_text("", encoding="utf-8")
+    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    ts = importlib.import_module("tts_sample")
+    sent: list[str] = []
+
+    def fake_synth(server, text, *a, **k):
+        sent.append(text)
+        return b"fake", "mp3"
+
+    monkeypatch.setattr(ts, "http_synthesize", fake_synth)
+    monkeypatch.setattr(ts, "check_server", lambda *a, **k: None)
+    monkeypatch.setattr(ts, "mp3_duration", lambda p: 1.0)
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    argv = ["tts_sample.py", "--ref", str(ref), "--text", "他停了一下……然后笑了。"]
+    monkeypatch.setattr(
+        sys, "argv", [*argv, "--all-styles", "--out-dir", str(tmp_path)]
+    )
+    ts.main()
+    by_style = dict(zip(tts.STYLE_PRESETS, sent))
+    assert by_style["story"] == "他停了一下…然后笑了。"
+    assert by_style["sunny"] == "他停了一下。然后笑了。"
+
+
 # ---------------- 进度监视：mtime 聚簇 ----------------
 
 
-def _progress(tmp_path, texts: list[str], mtimes: list[float]) -> str:
+def _progress(
+    tmp_path, texts: list[str], mtimes: list[float], extra: tuple[str, ...] = ()
+) -> str:
     """造工程：前 len(mtimes) 句已产出（mp3 mtime 按给定序列），跑 tts_progress 取 stdout。"""
     import json
     import os
@@ -995,7 +1297,7 @@ def _progress(tmp_path, texts: list[str], mtimes: list[float]) -> str:
         os.utime(p, (base + t, base + t))
     script = Path(__file__).resolve().parents[1] / "scripts" / "tts_progress.py"
     r = subprocess.run(
-        [sys.executable, str(script), "--project", str(tmp_path)],
+        [sys.executable, str(script), "--project", str(tmp_path), *extra],
         capture_output=True,
         text=True,
         check=True,
@@ -1025,3 +1327,17 @@ def test_progress_single_cluster_reports_insufficient_samples(tmp_path):
     """单簇但跨度 ≥1s（连续 <1s 间隔串起）：无墙钟样本，报不足而非 StatisticsError。"""
     out = _progress(tmp_path, ["甲" * 5] * 4, [0, 0.6, 1.2])
     assert "样本不足" in out
+
+
+def test_progress_block_walls_are_per_sentence(tmp_path):
+    """块口径：簇墙钟 ÷ 簇内句数折回每句，滚动窗口按句数取尾部簇（不是按簇数）。"""
+    # 簇 A 2 句 @0 → 簇 B 3 句 @30（每句 10s）→ 簇 C 3 句 @90（每句 20s）
+    mt = [0, 0.2, 30, 30.2, 30.4, 90, 90.2, 90.4]
+    texts = ["甲" * 10] * 10
+    out = _progress(tmp_path, texts, mt)
+    assert "块合成按簇内句数折算" in out
+    assert "均值 15.0s · 滚动6句中位 15.0s" in out
+    # --window 3：尾部 3 句＝只取末簇 C，而不是末 3 簇
+    (tmp_path / "w").mkdir()
+    out = _progress(tmp_path / "w", texts, mt, ("--window", "3"))
+    assert "滚动3句中位 20.0s" in out and "秒/字：滚动3句中位 2.000" in out

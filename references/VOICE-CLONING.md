@@ -286,13 +286,14 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 
 - **块划分**：幕界 + 台本块起点为硬边界；其余自动划分（按位置切 6 句定长窗、1 句尾窗并入前窗，窗内 ≤3 句、≤90 字取可行的最少块数）；台本块超限被拆开时，子块沿用块首情绪。块文本按原稿标点拼接，`，：、——` 结尾原样保留（续接语气），无标点结尾才补 `。`（收引号/括号不算末字，`！”` 按 `！` 判定）。EN 未验证，story 档下自动回退逐句。
 - **块情绪**：台本 `[block.<句id>] emo = "afraid:0.18,surprised:0.12"`（方向归一 Σ=1，强度＝预设 α0.28，可 `alpha=` 覆盖）；无台本块用预设向量（happy 1/3 + surprised 2/3）。
-- **表演标点**：`[say] <句id> = "…"` 只进合成文本（校验与正文去标点全等，字幕不动）；story 档下 `……` 保留为 `…`（上游按标点给拖长停顿）。
+- **表演标点**：`[say] <句id> = "…"` 只进合成文本（校验与正文去标点全等，`——` 计入标点；字幕不动；读法陷阱门同扫 say 文本）；story 档下 `……` 保留为 `…`（上游按标点给拖长停顿，`tts_sample --style story` 小样同口径）。
 - **台本文件**：`script/narration.cues.toml`，**写稿阶段与 narration.md 一同产出**（[references/03](./03-narration.md) 规约）；`build_narration.py` 校验后落进 narration.json（`blockStart`/`cue`/`ttsText`），无台本文件时输出与旧版逐字节一致。
 - **停顿**：切分时句界静音正中丢弃恰好 `sentenceGapSec`，时间轴再加回同值 ⇒ 听感＝自然停顿原值；块末尾垫 0.18s + 0.32s 句距 ＝ 0.5s 块间停顿。**不改时间轴、不改 frozen 模板。**
-- **缓存**：块＝缓存单位（摘要含块后缀）——**改一句重录整块**（无台本段偶尔连带同窗邻块，至多 7 句；14 集对拍 94.7% 仅本块）；插/删句会重排同一段内其后各窗——台本块起点是硬边界，可把波及收在段内；seed 固定 4242（定档 take 可复现），换 take 用 `--seed-offset`。
+- **缓存**：块＝缓存单位（摘要含块后缀）——**改一句重录整块**（无台本段偶尔连带同窗邻块，至多 7 句；14 集对拍 94.7% 仅本块）；插/删句会重排同一段内其后各窗——台本块起点是硬边界，可把波及收在段内；seed 固定 4242（定档 take 可复现）。
+- **换 take（重掷）**：块是重掷单位——台本 `[take] <句id> = N`（1–999）把该句所在块的种子 +N，只重录这一块；定稿值留在台本，即可复现的 canonical（同块只许一条，`--plan` 即报错）。`--seed-offset` 叠加在全局种子上，是**整集口径**（全部块换摘要、整集重录，`.engine` 签名不含 seed、护栏不拦），只用于整集 A/B。
 - **重制存量集**（旧档 → story）：改 pipeline.toml `style = "story"` + 补写该集 cues.toml + 显式 `--allow-voice-switch`。
 - `--steady` 与 story 冲突（逐句升束 vs 一个请求一块），硬拒；显式 `--num-beams` 仍可。EN 版回退逐句，`--steady` 照常可用。
-- 切分失败自动逐句兜底（沿用块情绪、尾垫只给末句；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检（low_vram 路径不支持）。
+- 切分失败自动逐句兜底（沿用块情绪、尾垫只给末句；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检——IndexTTS-2 与上游 low_vram 路径（CUDA 显存 <10 GB 自动开启，`/health` 回报 `low_vram`）不支持且重启不会变，报错点名成因并给出换档出路（本集改逐句档 `sunny`）；仅字段缺失才提示服务端代码过旧。
 
 ## 五、小样试听与逐集合成
 
@@ -461,7 +462,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 
 **a) 标注兜底（治本）**：句尾英文词读法一律 CMU 音素标注，**不赌采样**——narration.md 写 `<Context|K AA1 N T EH2 K S T>`（英文专名走 pron_marks.py 的 ARPAbet 通道，拼写须过 `pron_marks.validate`）。锁音素的两处要点：**重音数字落在首音节元音**（`AA1`）、**辅音簇收尾不带元音**（`K S T`）——正是防「尾音节多读/复读」的两个自由度。`strip_marks` 后 `text`（字幕/字数）零变化、仅 `ttsText` 变 ⇒ digest 自然只重配该句，其余句子缓存零波及。
 
-**b) 重掷循环**：标注锁音素但**韵律仍随机**（`do_sample` 恒 True，同句同参数每次仍是不同 take——实测首轮标注 take 又踩同型缺陷），50% 缺陷率意味着盲掷不可收敛。`--seed` + `--seed-offset` 即**重掷原语**：固定种子后 take 可复现，偏移一位即换一条新 take（仍可复现）；循环掷至无偏验证（§c）通过，**定稿 take 回存标注版 canonical digest**。注意 seed 进缓存摘要（§六）：重掷只在带 seed 的隔离 digest 上做，定稿回存 canonical 后恢复正常无种子口径并 `--plan` 确认归零——**勿把整集留在 seeded 签名上**（ISSUE-174：显式 seed 使全部存量句摘要失配，单句补配变整集重录）。
+**b) 重掷循环**：标注锁音素但**韵律仍随机**（`do_sample` 恒 True，同句同参数每次仍是不同 take——实测首轮标注 take 又踩同型缺陷），50% 缺陷率意味着盲掷不可收敛。`--seed` + `--seed-offset` 即**重掷原语**：固定种子后 take 可复现，偏移一位即换一条新 take（仍可复现）；循环掷至无偏验证（§c）通过，**定稿 take 回存标注版 canonical digest**。注意 seed 进缓存摘要（§六）：重掷只在带 seed 的隔离 digest 上做，定稿回存 canonical 后恢复正常无种子口径并 `--plan` 确认归零——**勿把整集留在 seeded 签名上**（ISSUE-174：显式 seed 使全部存量句摘要失配，单句补配变整集重录）。**story 档（块模式）不走隔离-回存**：canonical 摘要本身含 seed 4242 与块后缀，重掷单位是块——在台本写 `[take] <句id> = N` 逐次递增重跑（只重录该块，§4.5），定稿值留在台本即 canonical；勿用 `--seed-offset`（整集口径）。
 
 **c) 无偏 ASR 验证（本节最大教训）**：**凡 ASR 验证一律禁传 `initial_prompt`——喂期望答案 = 判据自证**。实测：传 `initial_prompt="…Horizon Context。"` 时坏 take 被判「干净」，去掉 prompt 后同一 take 立即现形（转写 "Context Tabbed"）；prompt 只可用于格式引导，绝不可含被测内容。whisper small **不可用于裁决**（对 TTS 短音频尾 token 幻觉率高，只够 §2.3 那类方向性实验）；裁决组合 = whisper **medium zh+en 双档**转写与逐字稿 diff + **尾部能量/ZCR**（独立齿擦音簇 ZCR>0.25 即多余尾簇）+ **成片内嵌波形与源 take 包络互相关 ≥0.99**（证明成片用的就是该 take、无编码级新增）。判定标准：双档转写与逐字稿一致 + 尾部无多余有声单元。
 
@@ -475,10 +476,11 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 | 引擎 | 摘要公式 |
 |---|---|
 | edge（历史不变） | `sha1(voice\|rate\|text)` |
-| indextts | `sha1(indextts\|engine_tag\|ref_sha1前12位\|lang\|style\|vec\|alpha\|df\|text[\|beams=N][\|emoref=情感样本sha1前12位][\|emotext=描述原文])` |
+| indextts | `sha1(indextts\|engine_tag\|ref_sha1前12位\|lang\|style\|vec\|alpha\|df\|text[\|beams=N][\|emoref=情感样本sha1前12位][\|emotext=描述原文][\|<采样键>=值…][\|block=<块后缀12位>\|k/n])` |
 
-- 方括号内为**可选后缀，仅在该项被使用时才拼入**（`--num-beams 1` / 无情感音频 / 无情感描述时省略）——这样新增能力不会失效任何存量缓存（已对已上线三集 189 句逐句核对：摘要 100% 不变）；
+- 方括号内为**可选后缀，仅在该项被使用时才拼入**（`--num-beams 1` / 无情感音频 / 无情感描述 / 采样全默认 / 逐句模式时省略）——这样新增能力不会失效任何存量缓存（已对已上线三集 189 句逐句核对：摘要 100% 不变）；
 - 情感样本按**内容 SHA1** 入键，换一段情感录音会自动失效缓存，与 `--ref` 同口径；
+- 采样后缀按键名字母序 `|key=repr(值)`（含 `|seed=N`；story 档预设种子与台本 `[take]` 偏移都经此入键）；块后缀仅 story 块模式追加：`block=` 取成员句合成文本 + 切分参数 + 算法版本的 sha1 前 12 位（改任一句 ⇒ 整块换键），`k/n` 为块内句位（无 `pos=` 前缀）；
 - sidecar `{id}.sha` 与 `{id}.mp3` 一一对应、单槽位：换引擎/风格/样本/语速 = 全量重合成（一个句 id 只有一个 mp3 槽位，这是 Remotion 契约决定的）；
 - 模型/服务升级后想强制刷新全部音频：`--engine-tag v2.5b`（自定义标记进摘要）；
 - 中断后续跑：直接重跑同命令（已完成句子全部命中缓存跳过）。

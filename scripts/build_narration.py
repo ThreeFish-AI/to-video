@@ -148,14 +148,20 @@ def parse_md(
 #       —— 该 id 是一个故事块的起点；块内情绪由 tts.py 归一后使用（§4.5）。
 #   [say] <句id> = "…表演标点版…" —— 仅合成文本（ttsText），字幕取 text 不变；
 #       校验「去标点后与 text 全等、发音标注逐个原样」，改字必须回 narration.md 改。
+#   [take] <句id> = N —— take 验收的重掷：该句所在块种子 +N（1–999），只重录这一块；
+#       定稿值留在台本即 canonical（块模式的 §5.4 口径）。
 # 无该文件 ⇒ narration.json 与今日逐字节一致（存量集零波及）；en 构建不消费台本
 # （story 档 EN 回退逐句）。
 #: 「只许改标点」的比较口径，按标点**串**整体判定（逐字符判定会被 `3……5` 绕过）：
 #: 不夹在两数字之间 ⇒ 剥掉；夹在两数字之间且恰为单个半角 `.,:` ⇒ 数值/时刻的一部分
 #: （3.5%、1,200、10:30），原样保留；夹在两数字之间的其余标点 ⇒ 归一为分隔符（「2020，2026」
 #: 改「2020…2026」仍放行）。后两条保证 say 删小数点、往数字串里插 `，` 或删掉两数之间的
-#: 标点都比对不上——否则合成念成另一个数
-CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?.,:]+")
+#: 标点都比对不上——否则合成念成另一个数。`——` 同属停顿标点（tts_text 映射为 `，`）
+CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?.,:—]+")
+#: 台本认得的表与 [block.<句id>] 的键；其余一律拒收——拼错（[blocks]、alhpa）会让
+#: cue/take 静默失效，--plan 显示无块待重录，写稿人却以为已生效
+CUES_TABLES = ("block", "say", "take")
+CUES_BLOCK_KEYS = ("emo", "alpha")
 
 
 def _strip_punct(s: str) -> str:
@@ -184,7 +190,11 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
     errors: list[str] = []
     # 形态写错（值不是表）一律汇入错误清单，由 build 统一 FAIL 退出，不抛 traceback
     tables: dict[str, dict] = {}
-    for name in ("block", "say"):
+    for name in sorted(set(cues) - set(CUES_TABLES)):
+        errors.append(
+            f"{cues_path.name}: 未知表/键 {name}（只认 {' / '.join(f'[{t}]' for t in CUES_TABLES)}）"
+        )
+    for name in CUES_TABLES:
         tbl = cues.get(name, {})
         if not isinstance(tbl, dict):
             errors.append(f"{cues_path.name}: [{name}] 须为表")
@@ -199,6 +209,13 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
         if not isinstance(spec, dict):
             errors.append(
                 f'{cues_path.name}: block.{sid} 须为表（[block.{sid}] emo = "…"）'
+            )
+            continue
+        unknown = sorted(set(spec) - set(CUES_BLOCK_KEYS))
+        if unknown:
+            errors.append(
+                f"{cues_path.name}: block.{sid} 含未知键 {'、'.join(unknown)}"
+                f"（只认 {' / '.join(CUES_BLOCK_KEYS)}）"
             )
             continue
         emo = spec.get("emo")
@@ -253,6 +270,17 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
             continue
         base["ttsText"] = say
         n_say += 1
+    for sid, n in tables["take"].items():
+        if sid not in by_id:
+            errors.append(f"{cues_path.name}: take.{sid} 不是本稿句 id")
+            continue
+        # take 序号（块种子偏移）；bool 是 int 子类，须单独排除
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 999:
+            errors.append(
+                f"{cues_path.name}: take.{sid} 须为 1–999 的整数（take 序号）"
+            )
+            continue
+        by_id[sid]["take"] = n
     return n_block, n_say, errors
 
 
@@ -516,9 +544,12 @@ def main() -> None:
             f"发音标注: {marked} 句带 ttsText（字数与字幕仍取剥离后的 text）"
             + ("" if vocab else "；未找到 pinyin.vocab，已跳过「音节是否在表内」告警")
         )
-    if n_block or n_say:
+    n_take = sum(1 for i in items if "take" in i)
+    if n_block or n_say or n_take:
         print(
-            f"配音台本: {n_block} 个块起点/情绪 · {n_say} 句表演标点（story 档消费，见 VOICE-CLONING §4.5）"
+            f"配音台本: {n_block} 个块起点/情绪 · {n_say} 句表演标点"
+            + (f" · {n_take} 处块重掷" if n_take else "")
+            + "（story 档消费，见 VOICE-CLONING §4.5）"
         )
     if lang != langs.PRIMARY:
         # 基线锁：记录「翻译时主稿长什么样」——主稿事后改稿 ⇒ 译稿失鲜可测
