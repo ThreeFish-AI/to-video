@@ -22,7 +22,7 @@ allowed-tools: Read Write Edit Glob Grep Bash
 |---|---|---|
 | 全新制作一集 | 下节「工作流」逐步过门；进入每个阶段前读速查表对应规格 | 阶段规格 |
 | 改稿迭代（已有集改口播） | 只改 `narration.md` → `build` → `check` → `tts`（逐句内容寻址缓存，只重合成改动句）→ `render` + `qa`；只改画面则跳过 `tts`；需交付时接工作流第 7 步 | 速查表 ③④⑨ |
-| 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④ 复核 → `build` → `check` | 速查表 ⑤ |
+| 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④ 复核 → `build` → `check`（尚无分镜时改跑 `--pre-tts` 门，见 05 第九节） | 速查表 ⑤ |
 | 出英文版 / 双语 | `pipeline.toml` 声明 `narration.langs = ["zh","en"]` + 句 id 对齐的译稿 `narration.en.md`；tts/render/captions/deliver 显式加 `--lang en`（build/check 缺省覆盖全部声明语言，产物加 `.en` 后缀） | [PIPELINE.md §五「双语渲染」](references/PIPELINE.md) |
 | 交付归档 | 终渲后显式 `deliver`；根路径 `--root`（一次性）或 env `TO_VIDEO_DELIVER_ROOT`（持久，写进 shell profile 而非 toml） | 速查表 ⑩ |
 | 环境 / 状态排障 | `pipeline.py doctor`（配置、时序 SSOT、样本指纹、IndexTTS 服务自检）/ `pipeline.py status`（阶段新鲜度） | [PIPELINE.md §三](references/PIPELINE.md) |
@@ -72,7 +72,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 | ② 策划案 | 受众/结构/视觉契约（色彩语义映射本集核心概念） | [02](references/02-planning.md) | —（authored） | planning.md 六节齐 |
 | ③ 逐字稿 | `narration.md` ★单一事实源 | [03](references/03-narration.md) | `build` | build_narration.py 通过（narration.json 是派生物） |
 | ④ 双重校验 | 真实性回溯 + 易懂性 | [04](references/04-verification.md) | `check` | RISKY=0 且 REWRITE=0 |
-| ⑤ 成文优化 | 四稿按结构→衔接→句子→词句四层 pass 改成人写模样；只改表达不改事实 | [05](references/05-prose-refinement.md) | —（authored；改后 `build` + `check`） | 成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0 |
+| ⑤ 成文优化 | 四稿按结构→衔接→句子→词句四层 pass 改成人写模样；只改表达不改事实 | [05](references/05-prose-refinement.md) | —（authored；改后 `build` + `check`，无分镜时 `check_script.py --pre-tts`） | 成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0 |
 | ⑥ 分镜表 | 镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效；beat 覆盖性 | [06](references/06-storyboard.md) | `check --check-scenes` | beat 覆盖率无缺句（--check-scenes 分镜↔代码互比） |
 | ⑦ TTS 配音 | 声音克隆（IndexTTS-2.5；备选 edge 预置音色，manifest 契约一致） | [07](references/07-tts-voice.md) | `tts --plan` / `captions` | refs 指纹门 + 试听定档 + ETA 排期 |
 | ⑧ Remotion 场景 | 代码动画实现；动效走 `src/motion/` 运动模型 | [08](references/08-remotion-implementation.md) | 工程内直调 `tsc --noEmit` 与 motion 测试 | tsc --noEmit 零错误 + 七条渲染红线 + 运动层铁律 |
