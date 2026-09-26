@@ -86,7 +86,7 @@ uv run --no-project --with pytest --with numpy --with pillow --with mutagen --wi
 
 清单是**索引不是事实源**——每条一句话判由，正文 SSOT 各归其位（防第二事实源）：
 
-1. 阶段序号与规格文件号一一对齐（第 N 阶段 ↔ `NN-*.md`；RSI-009 废除历史错位，RSI-011 插入 ⑤ 时整段顺移），严禁再引入错位；新增或删除阶段 = 规格整段改名 + 全仓入链同步（执法：`test_stage_numbers_align_spec_files`、`test_spec_references_resolve`）。
+1. 阶段序号与规格文件号一一对齐（第 N 阶段 ↔ `NN-*.md`；RSI-009 废除历史错位，RSI-013 插入 ⑤ 时整段顺移），严禁再引入错位；新增或删除阶段 = 规格整段改名 + 全仓入链同步（执法：`test_stage_numbers_align_spec_files`、`test_spec_references_resolve`）。
 2. `narration.md` 唯一 SSOT；narration.json / manifest.json / chapters.json 是派生物，不得开「直改派生物」的口子。
 3. frozen Remotion skeleton：改 frozen 文件 = 改模板 + 全集同步 + `verify_skeleton.py` 字节级过；不得只改某一集的复制件。
 4. 运动层 `video/src/motion/` frozen 且不读 theme token。

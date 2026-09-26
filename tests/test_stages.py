@@ -48,7 +48,7 @@ STAGES_TOML = SKILL_ROOT / "references" / "stages.toml"
 #: 机制契约文档（路径变量 SSOT + 子命令穷举抄件）
 PIPELINE_MD = SKILL_ROOT / "references" / "PIPELINE.md"
 
-#: 全量圈号超集（20 以内进制即够用；阶段数从 stages() 推导，不写死——RSI-011）
+#: 全量圈号超集（20 以内进制即够用；阶段数从 stages() 推导，不写死——RSI-013）
 ORDINALS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫"
 
 
@@ -338,7 +338,7 @@ def test_skill_h1_matches_declaration():
 
 
 def test_stage_numbers_align_spec_files():
-    """守住编号对齐：每个阶段的规格文件号 == 其序号（RSI-009 废除错位，RSI-011 泛化）。
+    """守住编号对齐：每个阶段的规格文件号 == 其序号（RSI-009 废除错位，RSI-013 泛化）。
 
     历史上 ⑥⑦ 两文件号与序号错位（入链 ≥5 处曾因此保留）；插入新阶段时整段顺移，
     逐条硬编码的旧写法会漏掉新增序号——故按声明逐项推导，不写死任何一对。
@@ -376,7 +376,7 @@ def test_router_table_covers_every_skill():
     """路由壳（skill 根 SKILL.md）的阶段速查表必须链到全部规格，一一对应。
 
     判据三层：表内含规格链接的行数 == stages.toml 阶段数（一阶段一行，行数随声明，
-    不写死——RSI-011 插入 ⑤ 时写死的 9 即成错门）；链接文件名无重复；链接集合与
+    不写死——RSI-013 插入 ⑤ 时写死的 9 即成错门）；链接文件名无重复；链接集合与
     声明的 skill 文件逐一相等——多链（指向已删文档）、漏链（新阶段未入表）、
     重复（一链两用）三类漂移都会红。
     """

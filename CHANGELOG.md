@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Breaking（阶段重编号，RSI-011；建议发版 3.0.0）
+### Breaking（阶段重编号，RSI-013；建议发版 3.0.0）
 
 - 新增正式阶段 **⑤ 成文优化**（④ 双重校验之后、分镜之前），原 ⑤–⑨ 顺移为 ⑥–⑩，规格文件同步改名：`05-storyboard.md → 06-storyboard.md`、`06-tts-voice.md → 07-tts-voice.md`、`07-remotion-implementation.md → 08-remotion-implementation.md`、`08-render-qa.md → 09-render-qa.md`、`09-final-render.md → 10-final-render.md`（`git mv` 保留历史）。外部指向旧文件名的链接会 404；负责方的已发布集只有 1 处外链，且原本就是 404。
 - frozen 骨架有 5 个文件的**纯注释**指针随改名更新（`NarrationAudio.tsx`、`Subtitle.tsx`、`ChapterProgress.tsx`、`SceneFade.tsx`、`motion/window.ts`），md5 随之变化；另有 seeded 档的 `theme.ts`（.tmpl）、`motifs.tsx`、`README.md`（.tmpl）同步更新。**自适配**：当代集整组拷齐模板后跑 `tsc --noEmit`（仅注释变化，行为零改动）；未拷齐的集 `verify_skeleton --strict` 会报 STALE，且 `render --lang en` 预检直比 NarrationAudio / Subtitle / ChapterProgress 字节、会拦下英文渲染——需要出英文版前先拷齐。停在旧代的集按工作区 `[[skeleton.drift]]` 登记。
@@ -12,16 +12,26 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Stage ⑤ 成文优化**规格 [references/05-prose-refinement.md](references/05-prose-refinement.md)：把 AI 稿件改成像人写、适合人读也适合人听的样子。四层 pass 按编辑行业层级自顶向下执行（L1 结构 → L2 衔接 → L3 句子 → L4 词句），每层写明改什么、不改什么；硬护栏冻结事实、数字、限定词、归属句和句 id；四类稿件各有专属规则（逐字稿：幕内空行分 beat、不把一句话切成两行（已有分镜的集跨 id 搬运前须回查画面锚点）、悬置只留给真悬念、misconception 先行、开环回扣；策划案：结论先行、小标题写成判断句；研究笔记：主旨段结论先行、取证锚点不动；分镜：只写看得见的、旁白讲画面给不了的）；中文去机器味检查表 Z1–Z13；改动表逐条附规则编号，改完由独立子代理按具名规则做成文评审（判 REWRITE 须给规则编号），改动句再回 ④ 复核（A 节四级判定 + B 节前三条，与 ④ 同口径；改前留底：已 commit 的稿件钉住基准 SHA，未 commit 的复制副本）。通过门：「成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0」。authored 阶段、**刻意不加内容类机器门**（用户决策：语料里书面腔禁词零命中，结构层问题无法用正则可靠判断）。
+- **Stage ⑤ 成文优化**规格 [references/05-prose-refinement.md](references/05-prose-refinement.md)：把 AI 稿件改成像人写、适合人读也适合人听的样子。四层 pass 按编辑行业层级自顶向下执行（L1 结构 → L2 衔接 → L3 句子 → L4 词句），每层写明改什么、不改什么；硬护栏冻结事实、数字、限定词、归属句和句 id；四类稿件各有专属规则（逐字稿：幕内空行分 beat、不把一句话切成两行（已有分镜的集跨 id 搬运前须回查画面锚点）、悬置只留给真悬念、misconception 先行、开环回扣；策划案：结论先行、小标题写成判断句；研究笔记：主旨段结论先行、取证锚点不动；分镜：只写看得见的、旁白讲画面给不了的）；中文去机器味检查表 Z1–Z13；改动表逐条附规则编号，改完由独立子代理按具名规则做成文评审（判 REWRITE 须给规则编号），改动句再回 ④ 复核（A 节四级判定 + B 节前三条，与 ④ 同口径；改前留底：已 commit 的稿件钉住基准 SHA，未 commit 的复制副本）；与 story 配音台本联动（改了字的句同步台本 `[say]`，beat 首句对齐台本块起点）。通过门：「成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0」。authored 阶段、**刻意不加内容类机器门**（用户决策：语料里书面腔禁词零命中，结构层问题无法用正则可靠判断）。
 - 幕内空行分段成为正式写法（03 格式契约）：`build` 本就跳过空行，零机制成本。
 - 设计依据 [docs/research/prose-refinement.md](docs/research/prose-refinement.md)（14 集 2303 句语料取证、IEEE 引用、落位 / 插入位置 / 执法力度三组比选）与新图 `prose-refinement--passes`（archify HTML + dark/light PNG + mermaid 源）。
 - 文档完整性门 `test_spec_references_resolve`（附检测器自检）：用户可见文案（脚本、规格、手册、模板含注释、README、research、mermaid 源）里点名的 `references/NN-*.md` 必须存在——现有链接门查不到注释与散文里的路径，重编号时漏改一处就是一条死指引。
+- `story` 段落演绎档成为新集默认配音（RSI-011）：合成单位从「句」升为「故事块」——同幕连续句（≤3 句 / ≤90 字，幕界断块）拼一次 `/synthesize`，上游单段连续生成 ⇒ 句间自然停顿与跨句韵律弧，替代逐句合成的「朗读感」。服务端新增块切分（`BlockSpec`：按各句发音量权重的期望位 DP 匹配句界静音——句界 0.31–0.55s 与逗号 0.14–0.42s 区间重叠，取最长静音会切错；句界静音正中丢弃恰好 `sentenceGapSec`、时间轴加回同值，frozen 模板与时间轴零改动；块末尾垫对齐 0.5s 块间停顿；`/health` 新增 `supports_blocks` 能力位，low_vram 路径不支持），切分失败逐句兜底（沿用块情绪、按块成员摘要缓存，manifest 标 `blockSplit:"fallback"`）。**配音台本** `script/narration.cues.toml`（写稿阶段与 narration.md 同产，skills/03 导演规则：按故事弧分块、块间换情绪、表演标点只改标点不改字）：`build_narration.py` 读取校验（去标点全等 / 标注保留 / 未知 id 拒绝）后落 `blockStart`/`cue`/`ttsText`，**无台本文件输出逐字节不变**（存量集零波及）；无台本时自动分块 + 预设向量（happy 1/3 + surprised 2/3 × 0.28）兜底。缓存：块=缓存单位（摘要追加 `|block=<sha12>|pos=k/n`，改一句重录整块；`block=None` 与存量摘要逐字节一致），预设自带 seed 4242（定档 take 可复现，`--seed-offset` 换 take）；`--steady` 与块模式硬冲突；`tts_text` 新增 `perform` 口径（story 档 `……`→`…` 保留拖长停顿，默认映射不动）；EN 未验证自动回退逐句；tts_progress 按 mtime 聚簇适配一请求多句。14 个存量集仍锁 sunny-steady（用户确认），重制流程见 references/07。验证：真管线复现第三轮试听 #07 定档 take（4 块音频时长逐块一致、演绎度/音色门/CER 全在噪声内），P1 17 句自动分块 0 fallback；14 集存量摘要与 tts-store 逐句比对 100% 一致。
 
 ### Changed
 
 - 执法测试去数字化：`test_stage_numbers_align_spec_files` 从 4 组硬编码元组泛化为「每个阶段文件号 == 序号」；`test_router_table_covers_every_skill` 的行数从写死 `9` 改为 `len(stages())`；速查节标题匹配「阶段速查」而非「九阶段速查」。RSI.md 不变量 1、8、11 同步改写为不带数字的表述——以后再增删阶段，不必再改不变量本身。
 - SKILL.md：description 改为「十阶段流水线」并点名成文优化；速查表 10 行；任务分流新增「润色成稿」一行；工作流注释标出 ④→⑤ 的位置。01 / 02 / 03 / 04 / 06 规格各加一条指向 ⑤ 的指针（④ 写明与 ⑤ 的分工；03 头部版本标注改为「已过双重校验与成文优化」）。
 - `pipeline-layers` 图（mmd / archify HTML / PNG）重生成为十阶段，TTS 的上游边改为从 ⑤ 引出（配音定稿遍必须在文稿冻结后启动）；`modeling-experience--loop` 图的阶段圈号同步顺移并重新导出 PNG。
+
+### Fixed
+
+- story 块合成评审回归二（RSI-011）：自动分块的块数下界不可行时整段退化逐句（14 集语料单句块 619→3，旧可行划分零改写）；台本段超限拆开后子块丢失台本情绪；`，：、——` 结尾被补成 `，。` 双标点（块后缀 `split=v2` 换键）；`--plan` 块口径 ETA 未扣版本库可回收块；整块本地命中不回填版本库；`tts_sample --all-styles` 丢失 story 预设 seed。
+- story 块合成评审回归三（RSI-011）：台本 `[say]` 可悄悄删改发音标注（改为保留标注比对，逐个钉死）；切分失败逐句兜底时每句都补尾垫（改为仅末句）；收引号结尾拼出 `！”。` 双标点（语料 3/2303 句）——后两项块后缀 `split=v3` 换键；`pipeline.py status` 未把 `narration.cues.toml` 计入 narration.json 新鲜度。
+- story 块合成评审回归四（RSI-011）：无台本段自动分块为整段全局 DP，改一个字即可让整段块界平移、整幕重录——改为 6 句定长窗内 DP（1 句尾窗并入前窗），14 集对拍改字爆炸半径 max 34→7 句、p95 11→3，块数 836→858（+2.6%）；台本 `[say]` 去标点比对把数字里的 `.`/`,`/`:` 也当标点剥掉，删小数点（3.5%→35%）能过校验——改为夹在两数字之间的不剥；`[block]` 值写成字符串、`alpha` 非数值时 build 抛 traceback——改为汇入 FAIL 清单。
+- story 块合成评审回归五（RSI-011）：台本 cue 方向归一后 Σ 为 1+1ulp 时 `alpha = 0.8` 被本地与服务端 Σ×α≤0.8 护栏误拒——改为 α>0.8 才报错、踩边界时把最大分量逐 ulp 下调；`[say]` 往数字串里插全角标点（`1200`→`12，00`）或删两数之间的标点能过校验——改为按标点串整体判定。
+- story 块合成评审回归六（RSI-011）：`[say]` 往发音标注内部插标点（`<行|HANG，2>`）能过「逐个原样」校验——去标点比对连标注内部一起剥，已追加标注本体逐字全等；块切分末段（起点即末个切点，静音≠零值）只淡出不淡入，起播有底噪阶跃——改为每段两端淡变（时长不变、不换键）；EN 版 story 档已回退逐句合成，`--steady` 仍被当作与块合成冲突而拒——冲突检查移到 EN 回退之后。
+- 文档勘误（RSI-012）：`tts_server.py` 注释与 ADVANCED §3.1 此前声称「向量与情感音频同传时，音频仍会以 (1−Σw) 权重混进最终 emovec」——错误。上游 `infer_v2_5.py:582-585` 只要给了 `emo_vector` 就把 `emo_audio_prompt` 置 None，**音频被整个丢弃**（同传与纯向量输出逐字节一致的实测佐证）；`(1−Σw)` 份额实际来自本人样本的情感编码。生产行为无影响（服务本就拒绝同传），但曾误导第三轮试听中一个对照组的标签（#07「博主语调 × 段落」实为纯本人音色的段落演绎）。
 
 ## [2.0.0] - 2026-09-25
 

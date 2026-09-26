@@ -284,7 +284,7 @@ _SPEC_REF_RE = re.compile(r"(?<![\w-])references/(\d\d-[a-z][a-z0-9-]*\.md)")
 
 
 def test_spec_references_resolve():
-    """文案里点名的 references/NN-*.md 必须真实存在（RSI-011）。
+    """文案里点名的 references/NN-*.md 必须真实存在（RSI-013）。
 
     插入 ⑤ 成文优化时 05–09 整段顺移为 06–10；旧文件名散落在 frozen 组件注释、
     模板与手册里，现有链接门只查 Markdown 相对链接、查不到注释与散文里的路径，

@@ -116,7 +116,11 @@ def main() -> int:
     #: 实例化的新集连 `build`（Stage ③，与 TTS 无关）都跑不起来。指纹不符仍由
     #: doctor 与 tts.py 的 --expect-ref-sha1 硬拦，占位不会被误当成真值。
     ap.add_argument("--ref-sha1", default="TODOTODOTODO", help="样本 12 位指纹")
-    ap.add_argument("--style", default="sunny-steady", help="风格预设档名")
+    ap.add_argument(
+        "--style",
+        default="story",
+        help="风格预设档名（默认 story 段落演绎：块合成+台本，见 VOICE-CLONING §4.5）",
+    )
     ap.add_argument("--force", action="store_true", help="目标已存在时仍继续（危险）")
     ap.add_argument(
         "--init-workspace",

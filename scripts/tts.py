@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import json
 import math
@@ -216,6 +217,28 @@ STYLE_PRESETS: dict[str, dict] = {
         "df": 1.05,
         "beams": 3,
     },
+    "story": {
+        "label": "段落演绎",
+        # 2026-09-25 第三轮试听定档（#07，试听页 .context/voice-audition/v3/）：合成单位从
+        # 「句」升为「故事块」——同幕连续句拼一次请求，上游 front.py 合并短句为单段 ⇒
+        # 句间韵律连续 + 自然停顿，替代逐句合成的「朗读感」（逐句/单一情绪/恒定句距
+        # 三者叠加是根因，见 issue.md RSI-011）。
+        # - vec/alpha 取 #07 g2 方向（surprised 主载 + happy）×0.28 有效注入；无台本块/
+        #   未覆盖块用它，块情绪可被 script/narration.cues.toml 逐块覆盖（§4.5）。
+        # - seed 固定 4242：试听定档 take 可复现；换 take 用 --seed-offset。
+        # - block: 块上限与切分参数；perform_punct 开表演标点（……→…，tts_text）。
+        "vec": [1 / 3, 0, 0, 0, 0, 0, 2 / 3, 0],
+        "alpha": 0.28,
+        "df": 1.0,
+        "beams": 1,
+        "seed": 4242,
+        "block": {
+            "max_sentences": 3,
+            "max_chars": 90,
+            "tail_pad_sec": 0.18,
+            "perform_punct": True,
+        },
+    },
 }
 
 
@@ -259,11 +282,15 @@ SAMPLING_RANGES: dict[str, tuple[float, float]] = {
 }
 
 
-def tts_text(text: str, lang: str = "ZH") -> str:
+def tts_text(text: str, lang: str = "ZH", perform: bool = False) -> str:
     """口播文本微调：破折号换为逗号停顿，避免 TTS 念成怪音。
 
     全角映射仅对主语言（ZH）生效：en 稿经 check_script 禁全角标点门，此处原样
     透传是纵深防御——`——` 会被换成全角逗号混进英文文本。
+
+    perform=True（段落演绎档）：`……` 保留为单个 `…` 而非压成 `。`——上游把 `…`
+    当独立 token 并给拖长停顿（front.py 标点表），是「表演标点」的一部分；默认
+    映射不动（存量 2 集含 `……`，改全局会令其重合成出不同音频而摘要不变）。
 
     注意这是**唯一**的程序化文本预处理：数字/百分号/量词的读法由上游中文归一化
     （wetext）承担，多音字与英文专名读音由逐字稿里的发音标注 `<字|读音>` 承担。
@@ -271,7 +298,8 @@ def tts_text(text: str, lang: str = "ZH") -> str:
     """
     if lang != "ZH":
         return text
-    return text.replace("——", "，").replace("……", "。")
+    text = text.replace("——", "，")
+    return text.replace("……", "…") if perform else text.replace("……", "。")
 
 
 def synth_source_text(item: dict) -> str:
@@ -359,9 +387,8 @@ def resolve_sampling(args: argparse.Namespace) -> dict[str, float | int | bool]:
     这类同样影响韵律的旋钮理应能随风格走；但**任何写进预设的值都会改摘要 ⇒ 整集重录**，
     故当前所有预设都不带 sampling，待 A/B 拿到证据后再定档。
     """
-    preset_sampling: dict = (
-        STYLE_PRESETS.get(args.style, {}).get("sampling", {}) if args.style else {}
-    )
+    preset: dict = STYLE_PRESETS.get(args.style, {}) if args.style else {}
+    preset_sampling: dict = preset.get("sampling", {})
     out: dict[str, float | int | bool] = {}
     for key in SAMPLING_CLI:
         cli_val = getattr(args, key, None)
@@ -383,6 +410,10 @@ def resolve_sampling(args: argparse.Namespace) -> dict[str, float | int | bool]:
         # --seed-offset 是「换一条 take」的逃生口：固定种子会把某句锁死在一条可能不佳的
         # 采样结果上，偏移一位即可换一条而仍然可复现。
         out["seed"] = int(args.seed) + int(getattr(args, "seed_offset", 0) or 0)
+    elif preset.get("seed") is not None:
+        # 预设自带种子（story：定档 take 可复现）。CLI --seed 优先；--seed-offset 同为换 take 口。
+        # 经 |seed= 后缀进摘要（同 CLI 路径），故存量无种子口径零波及。
+        out["seed"] = int(preset["seed"]) + int(getattr(args, "seed_offset", 0) or 0)
     return out
 
 
@@ -648,6 +679,8 @@ def digest_indextts(
     emo_ref_sha1: str | None = None,
     emo_text: str | None = None,
     sampling: dict | None = None,
+    block: str | None = None,
+    pos: str | None = None,
 ) -> str:
     vec_str = ",".join(repr(x) for x in vec) if vec else "none"
     # 束宽/情感来源/采样参数改变合成结果，须入键；未使用时省略字段——沿用历史摘要格式，
@@ -655,9 +688,12 @@ def digest_indextts(
     beams_part = "" if num_beams == 1 else f"|beams={num_beams}"
     emo_part = f"|emoref={emo_ref_sha1}" if emo_ref_sha1 else ""
     emo_part += f"|emotext={emo_text}" if emo_text else ""
+    # 块模式（story 档）：块=缓存单位——block 后缀由成员文本+切分参数派生，改任一句
+    # 即整块换摘要；pos 区分块内句位。仅块模式追加，逐句口径逐字节不变。
+    block_part = f"|block={block}|{pos}" if block else ""
     return hashlib.sha1(
         f"indextts|{engine_tag}|{ref_sha1}|{lang}|{style}|{vec_str}|{alpha!r}|{df!r}|{text}"
-        f"{beams_part}{emo_part}{sampling_suffix(sampling)}".encode()
+        f"{beams_part}{emo_part}{sampling_suffix(sampling)}{block_part}".encode()
     ).hexdigest()
 
 
@@ -880,6 +916,560 @@ async def synth_indextts(
     if local_hit and not store_has(store, slug, sid, digest):
         store_deposit(mp3, sid, digest, store, slug)
     return {**item, "durationSec": round(duration, 3)}
+
+
+# ---------------- 段落演绎（story 档）：块请求与块合成 ----------------
+
+
+def http_synthesize_block(
+    server: str,
+    text: str,
+    ref: str,
+    vec: list[float],
+    alpha: float,
+    df: float,
+    lang: str,
+    num_beams: int,
+    weights: list[float],
+    discard_sec: float,
+    tail_pad_sec: float,
+    sampling: dict | None = None,
+) -> dict:
+    """块模式 POST /synthesize → JSON {clips:[{audio,durationSec,format}], cuts, seams, split}。
+
+    块音频在服务端按句界切回 N 个 mp3（b64）。超时 1800 s：块 ≈3 句音频 12–18 s，
+    忙时热节流可把单块推理推过逐句口径的 600 s。
+    """
+    payload: dict = {
+        "text": text,
+        "ref_path": ref,
+        "emo_vector": vec,
+        "emo_alpha": alpha,
+        "duration_factor": df,
+        "lang": lang,
+        "num_beams": num_beams,
+        "block": {
+            "weights": weights,
+            "discard_sec": discard_sec,
+            "tail_pad_sec": tail_pad_sec,
+        },
+    }
+    if sampling:
+        payload.update(sampling)
+    req = urllib.request.Request(
+        f"{server}/synthesize",
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=1800) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        detail = _http_error_detail(e)
+        if 400 <= e.code < 500:
+            raise NonRetryableError(f"HTTP {e.code}: {detail}") from e
+        raise RuntimeError(f"HTTP {e.code}: {detail}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"连接失败: {e.reason}") from e
+
+
+def resolve_block_vec(
+    block_items: list[dict], preset_vec: list[float], preset_alpha: float
+) -> tuple[list[float], float, str | None]:
+    """块情感：台本 cue（块首句 item["cue"]）优先，否则预设向量。
+
+    cue 方向归一到 Σ=1、强度取 cue.alpha 或预设 α——与 #07 的「名义 Σ0.35×α0.8」
+    在上游 4 位截断后逐位等价（0.35×0.8 = 1×0.28），故可复现定档 take。
+    返回 (vec, alpha, 出错的句 id|None)；α>0.8（方向已归一，有效和即 α）时返回错误 id 由调用方报错。
+    """
+    cue = block_items[0].get("cue")
+    if not cue:
+        return list(preset_vec), preset_alpha, None
+    vec = parse_emo_vector(cue["emo"])
+    total = sum(vec)
+    if total <= 0:
+        return list(preset_vec), preset_alpha, block_items[0]["id"]
+    vec = [x / total for x in vec]
+    alpha = float(cue.get("alpha", preset_alpha))
+    if alpha > 0.8:
+        return vec, alpha, block_items[0]["id"]
+    # 归一后 Σ 浮点可能是 1.0000000000000002：α=0.8 时 Σ×α 以 1 ulp 之差撞本地与服务端的
+    # ≤0.8 护栏（build 已放行同一台本）。仅此情形把最大分量逐 ulp 下调（≤2 步），上游 4 位
+    # 截断下无可听差异；未超界的块向量与摘要逐位不变
+    top = max(range(len(vec)), key=vec.__getitem__)
+    while sum(vec) * alpha > 0.8:
+        vec[top] = math.nextafter(vec[top], 0.0)
+    return vec, alpha, None
+
+
+async def synth_block_indextts(
+    sem: asyncio.Semaphore,
+    block_items: list[dict],
+    force: bool,
+    ref: str,
+    ref_sha1: str,
+    style: str,
+    preset_vec: list[float],
+    preset_alpha: float,
+    df: float,
+    lang: str,
+    engine_tag: str,
+    server: str,
+    out_dir: Path,
+    num_beams: int = 1,
+    sampling: dict | None = None,
+    store: Path | None = None,
+    slug: str = "",
+    discard_sec: float = 0.32,
+    tail_pad_sec: float = 0.18,
+    perform_punct: bool = False,
+) -> list[dict]:
+    """一个故事块 → N 句 mp3（块=缓存单位；切分失败逐句兜底，仍按块成员摘要落盘）。"""
+    vec, alpha, bad_id = resolve_block_vec(block_items, preset_vec, preset_alpha)
+    if bad_id is not None:
+        raise NonRetryableError(
+            f"{bad_id} 的台本情绪有效和 Σvec×alpha 超过 0.8 上限（见 {MANUAL} §4.2）"
+        )
+    member_texts = [synth_source_text(i) for i in block_items]
+    block_text = block_synth_text(block_items)
+    suffix = block_digest_suffix(member_texts, discard_sec, tail_pad_sec)
+    n = len(block_items)
+    digests = [
+        digest_indextts(
+            ref_sha1,
+            style,
+            vec,
+            alpha,
+            df,
+            lang,
+            engine_tag,
+            member_texts[k],
+            num_beams,
+            None,
+            None,
+            sampling,
+            suffix,
+            f"{k + 1}/{n}",
+        )
+        for k in range(n)
+    ]
+    weights = [sentence_weight(i["text"]) for i in block_items]
+
+    # 块=缓存单位：全部成员命中（集内或版本库回收）才跳过合成，否则整块重录
+    all_hit = True
+    if not force:
+        for k, item in enumerate(block_items):
+            mp3 = out_dir / f"{item['id']}.mp3"
+            meta = out_dir / f"{item['id']}.sha"
+            if not (
+                mp3.exists()
+                and mp3.stat().st_size > 0
+                and meta.exists()
+                and meta.read_text() == digests[k]
+            ):
+                if not store_restore(item["id"], digests[k], out_dir, store, slug):
+                    all_hit = False
+    else:
+        all_hit = False
+
+    async def request(text: str, w: list[float], label: str, pad: float) -> dict:
+        # 锁只罩单次请求（含重试）：兜底要再发请求，锁内递归会与 Semaphore(1) 自锁
+        last_err: Exception | None = None
+        async with sem:
+            for attempt in range(RETRIES):
+                try:
+                    return await asyncio.to_thread(
+                        http_synthesize_block,
+                        server,
+                        tts_text(text, lang, perform=perform_punct),
+                        ref,
+                        vec,
+                        alpha,
+                        df,
+                        lang,
+                        num_beams,
+                        w,
+                        discard_sec,
+                        pad,
+                        sampling,
+                    )
+                except NonRetryableError:
+                    raise
+                except Exception as e:  # noqa: BLE001 - 推理服务需要整体重试
+                    last_err = e
+                    await asyncio.sleep(1.5 * (attempt + 1))
+        raise RuntimeError(f"块合成失败（{label}）: {last_err}")
+
+    split_note: str | None = None
+    if not all_hit:
+        resp = await request(
+            block_text, weights, f"{block_items[0]['id']}…{n} 句", tail_pad_sec
+        )
+        clips = resp.get("clips") if resp.get("split") == "ok" else None
+        if clips:
+            if resp.get("seams"):
+                print(
+                    f"WARN 块内出现上游分段缝 {resp['seams']}（>118 token 被迫分段，段间为"
+                    f" 200ms 定长静音）——请缩短该块：{block_items[0]['id']}",
+                    file=sys.stderr,
+                )
+            if len(clips) != n:
+                raise NonRetryableError(
+                    f"块切分数 {len(clips)} != 句数 {n}（{block_items[0]['id']}）"
+                )
+        else:
+            # 切分失败：逐句兜底（单句块无句界，服务端必 split ok），同块情绪。产物仍按块
+            # 成员摘要落盘——同输入+定种子下切分失败可复现，复跑直接命中而非每次重试整块。
+            # 尾垫只给末句（同块合成口径）：服务端单句路径无条件补垫，非末句须传 0
+            print(
+                f"WARN 块切分失败（{resp.get('reason', '未知')}），退回逐句合成："
+                f"{block_items[0]['id']}…共 {n} 句",
+                file=sys.stderr,
+            )
+            split_note = "fallback"
+            clips = []
+            for k, item in enumerate(block_items):
+                one = await request(
+                    block_synth_text([item]),
+                    [weights[k]],
+                    item["id"],
+                    tail_pad_sec if k == n - 1 else 0.0,
+                )
+                got = one.get("clips") if one.get("split") == "ok" else None
+                if not got or len(got) != 1:
+                    raise NonRetryableError(
+                        f"逐句兜底仍切分失败（{item['id']}）: {one.get('reason', '未知')}"
+                    )
+                clips.append(got[0])
+        fmts = {c.get("format") for c in clips}
+        if fmts != {"mp3"}:  # 同逐句路径的编码器守卫：WAV 字节不得落成 .mp3
+            raise NonRetryableError(
+                f"服务端编码器不可用（format={','.join(sorted(map(str, fmts)))}）"
+                f"—— 按 {MANUAL} §七 检查 soundfile/lameenc，或用当前 tts_server.py 重启服务"
+            )
+        for k, clip in enumerate(clips):
+            item = block_items[k]
+            mp3 = out_dir / f"{item['id']}.mp3"
+            meta = out_dir / f"{item['id']}.sha"
+            audio = base64.b64decode(clip["audio"])
+            if not audio:
+                raise RuntimeError(f"空音频响应（{item['id']}）")
+            mp3.write_bytes(audio)
+            meta.write_text(digests[k])
+            store_deposit(mp3, item["id"], digests[k], store, slug)
+    else:
+        # 同逐句路径：整块命中但库中缺档（曾 --no-store 或入库失败）⇒ 回填
+        for k, item in enumerate(block_items):
+            if not store_has(store, slug, item["id"], digests[k]):
+                store_deposit(
+                    out_dir / f"{item['id']}.mp3", item["id"], digests[k], store, slug
+                )
+
+    results = []
+    for item in block_items:
+        # 合成与命中同口径实测 mp3 时长（同逐句路径）：否则复跑时 manifest 随缓存状态漂移
+        dur = mp3_duration(out_dir / f"{item['id']}.mp3")
+        r = {**item, "durationSec": round(dur, 3)}
+        if split_note:
+            r["blockSplit"] = split_note
+        results.append(r)
+    return results
+
+
+# ---------------- 段落演绎（story 档）：故事块划分 + 块音频切分 ----------------
+#
+# 机制：同幕连续句拼成一次 /synthesize（块文本 ≤118 token 时上游单段连续生成，
+# 句间是模型自带的自然停顿）；响应在服务端按句界切回 N 个 mp3。切分/划块的本体
+# 是下面的纯函数——numpy 惰性 import，唯一执行者是 tts_server.py（它本就从本模块
+# 导入常量，且持有 mp3 编码前的 float32 PCM）；客户端 tts.py 只有 mutagen、
+# 不 import 兄弟模块（test_tts_lang_mirror 钉死），永不触碰这些函数。
+#
+# 实测定档依据（2026-09-25，dream-rsi P0）：
+# - 句界自然停顿 0.31–0.55 s 与句内逗号停顿 0.14–0.42 s 区间重叠 ⇒ 不能「取最长
+#   N−1 个静音」，按字符占比期望位置就近选（DP），4/4 块选对且最近错误候选 ≥0.5 s；
+# - 停顿保留在音频内：句界静音正中丢弃恰好 sentenceGapSec，时间轴又加回同值
+#   ⇒ 听感＝自然停顿原值，frozen 模板与 14 集零波及。
+
+
+def sentence_weight(text: str) -> float:
+    """句「发音量」权重：期望切点按各句权重占比内插。
+
+    口径：CJK/数字=1、拉丁字母=0.35（约 1 个音节）、句中标点=1.5（拖停顿），
+    其余字符（空格/引号）不计。够粗——DP 容差 ±max(1.0, 0.15T) 秒吸收估计误差。
+    """
+    import unicodedata
+
+    w = 0.0
+    for ch in text:
+        if ch in "，、；：？！…—":
+            w += 1.5
+            continue
+        cat = unicodedata.category(ch)
+        if ch.isdigit() or cat.startswith("Lo"):  # 中日韩表意文字按 1
+            w += 1.0
+        elif ch.isalpha():  # 拉丁字母按 0.35
+            w += 0.35
+    return w
+
+
+def plan_blocks(items: list[dict], cfg: dict) -> list[list[dict]]:
+    """narration items → 故事块（同幕连续句的列表的列表）。
+
+    硬边界：幕界 + 台本 blockStart（item 里的 cue 台本由 build_narration 落成
+    blockStart:true）。无台本段自动划分：先按位置切成 2×max_sentences 句的定长窗
+    （1 句尾窗并入前窗），窗内块数取 ≥max(⌈n/3⌉,⌈ΣL/90⌉) 的首个可行值，DP 最小化
+    块长方差，块 ≤max_sentences 句、≤max_chars 字（合成文本口径，超限单句自成一块）。
+    台本段超限被拆开时，后续子块继承段首 cue（块首句浅拷贝注入，不改原件）。
+    """
+    ms, mc = cfg.get("max_sentences", 3), cfg.get("max_chars", 90)
+
+    def synth_len(i: dict) -> int:
+        return len(synth_source_text(i))
+
+    blocks: list[list[dict]] = []
+    run: list[dict] = []
+
+    def window_cuts(seg: list[dict]) -> list[int]:
+        n = len(seg)
+        total = sum(synth_len(i) for i in seg)
+        k_min = min(n, max(1, -(-n // ms), -(-total // mc)))
+        # DP：best[end][j]＝前 end 句切成 j 块（块句数 ≤ms、多句块长 ≤mc）的最小块长方差。
+        # k_min 只是下界：装箱约束下恰好 k_min 块常切不出，逐层放宽到首个可行块数
+        # （j=n 即逐句，必可行）——否则整窗会整体退化为逐句
+        INF = float("inf")
+        best: list[list[tuple[float, int]]] = [
+            [(INF, -1)] * (n + 1) for _ in range(n + 1)
+        ]
+        best[0][0] = (0.0, -1)
+        lens = [0]
+        for i in seg:
+            lens.append(lens[-1] + synth_len(i))
+        k = n
+        for j in range(1, n + 1):
+            for end in range(1, n + 1):
+                for start in range(max(0, end - ms), end):
+                    seglen = lens[end] - lens[start]
+                    if seglen > mc and start + 1 < end:
+                        continue  # 多句块不许超字数；单句超长只能自成一块放行
+                    prev = best[start][j - 1][0]
+                    if prev == INF:
+                        continue
+                    # 方差代理：Σlen²（固定块数与总量下最小化它＝最小化方差）
+                    cand = prev + seglen * seglen
+                    if cand < best[end][j][0]:
+                        best[end][j] = (cand, start)
+            if j >= k_min and best[n][j][0] < INF:
+                k = j
+                break
+        cuts, end = [], n
+        for j in range(k, 0, -1):
+            cuts.append(end)
+            end = best[end][j][1]
+        cuts.append(0)
+        cuts.reverse()
+        return cuts
+
+    def flush_auto(seg: list[dict]) -> None:
+        # 定长窗：块界只依赖窗内句长 ⇒ 改一句至多重排所在窗（≤2×ms+1 句）。整段全局 DP
+        # 下块界依赖段内全部句长，改一个字即可整段平移、整幕重录（14 集对拍：改字爆炸
+        # 半径 max 34→7 句，块数 +2.6%）。窗界按位置而非内容，插/删句仍重排同段其后各窗
+        starts = list(range(0, len(seg), 2 * ms))
+        if len(starts) > 1 and len(seg) - starts[-1] == 1:
+            starts.pop()  # 1 句尾窗并入前窗：幕末收束句不孤立成逐句合成
+        cuts = [0]
+        for a, b in zip(starts, [*starts[1:], len(seg)]):
+            cuts += [a + c for c in window_cuts(seg[a:b])[1:]]
+        cue = seg[0].get("cue")
+        for a, b in zip(cuts, cuts[1:]):
+            blk = seg[a:b]
+            if a and cue:  # 台本段被上限拆开：子块沿用段首情绪，不在段中途换档
+                blk = [{**blk[0], "cue": cue}, *blk[1:]]
+            blocks.append(blk)
+
+    for i in items:
+        hard = i.get("blockStart") or (run and run[-1]["scene"] != i["scene"])
+        if hard and run:
+            flush_auto(run)
+            run = []
+        run.append(i)
+    if run:
+        flush_auto(run)
+    return blocks
+
+
+def block_synth_text(items: list[dict]) -> str:
+    """块的合成文本＝成员句拼接；句末无停顿标点者补 `。`（上游按标点断句合并段）。
+
+    `，：、——` 结尾是原稿有意的续接（本身即停顿、可作切点候选），原样保留——追加 `。`
+    会拼出 `，。`（上游映射为 `,.` 双标点）并把续接改成句末降调。收引号/括号不算末字：
+    `不可能！”` 按 `！` 判定，否则会拼出 `！”。` 同类双标点。
+    """
+    PAUSE = "。！？…；，：、—"
+    CLOSERS = "”’」』）)》】\"'"
+    parts = []
+    for i in items:
+        t = synth_source_text(i).strip()
+        body = t.rstrip(CLOSERS)
+        if body and body[-1] not in PAUSE:
+            t += "。"
+        parts.append(t)
+    return "".join(parts)
+
+
+def block_digest_suffix(
+    member_texts: list[str], discard: float, tail_pad: float
+) -> str:
+    """块缓存后缀（仅块模式追加）：改任一句/切分参数 ⇒ 整块换 digest 重录。
+
+    `split=vN` 版本化块文本拼接与切分算法（v2：软停顿结尾不再补 `。`；v3：收引号前
+    的标点计入末字、逐句兜底仅末句补尾垫）——算法改变合成结果而成员文本不变时，靠它换键。
+    换键口径：改了送合成文本或切段时长（⇒ 时间轴）才递增；静音内的样本级淡变（如末段
+    补 5ms 淡入）时长不变、听感不可辨，不换键——否则存量音频会为不可听差异整块重录。
+    """
+    payload = "\x1f".join(member_texts) + f"\x1f{discard!r}\x1f{tail_pad!r}\x1fsplit=v3"
+    return hashlib.sha1(payload.encode()).hexdigest()[:12]
+
+
+def frame_db(pcm, sr: int, hop_sec: float = 0.01, win_sec: float = 0.025):
+    """帧 RMS → dB（10 ms hop / 25 ms win，与实测标定一致）。pcm: float32 1-D。"""
+    import numpy as np
+
+    hop, win = int(sr * hop_sec), int(sr * win_sec)
+    n = 1 + max(0, (len(pcm) - win) // hop)
+    idx = np.arange(win)[None, :] + hop * np.arange(n)[:, None]
+    frames = pcm[idx]
+    rms = np.sqrt(np.mean(frames * frames, axis=1))
+    return 20 * np.log10(np.maximum(rms, 1e-9))
+
+
+def silence_runs(
+    db, sr: int, hop_sec: float = 0.01, min_sec: float = 0.12, below_db: float = 35.0
+):
+    """低于 p95−below_db 的连续帧 → (内部静音段列表, 语音起, 语音止)。
+
+    只保留首尾语音之间的内部段（块首/块尾静音不是切点候选）；返回三元组，
+    语音起止供 plan_block_cuts 内插期望位置。
+    """
+    import numpy as np
+
+    thr = np.percentile(db, 95) - below_db
+    quiet = db < thr
+    idx = np.flatnonzero(np.diff(quiet.astype(int)) != 0) + 1
+    bounds = np.concatenate(([0], idx, [len(quiet)]))
+    runs = [
+        (bounds[k] * hop_sec, bounds[k + 1] * hop_sec)
+        for k in range(len(bounds) - 1)
+        if quiet[bounds[k]] and bounds[k + 1] - bounds[k] >= min_sec / hop_sec
+    ]
+    speech = np.flatnonzero(~quiet)
+    if not len(speech):
+        return [], 0.0, len(db) * hop_sec
+    on, off = speech[0] * hop_sec, (speech[-1] + 1) * hop_sec
+    return [(s, e) for s, e in runs if s > on and e < off], float(on), float(off)
+
+
+def plan_block_cuts(
+    runs, weights: list[float], total_sec: float, speech_on: float, speech_off: float
+):
+    """在候选静音里为 N−1 个句界各选一个切点。
+
+    期望位置 exp_k 按累计权重占比内插；DP 选严格递增候选最小化
+    Σ((mid−exp)/σ)² − 0.3·ln(段长/0.1)（长静音略优先）；门：|mid−exp| ≤ max(1.0, 0.15T)
+    且各句语音占比 ∈[0.5,1.8]×期望。返回 (mid_1..mid_{N-1}, cut_runs) 或 None。
+    """
+    import math
+
+    n = len(weights)
+    if n < 2:
+        return None
+    total_w = sum(weights)
+    cum = [sum(weights[:k]) / total_w for k in range(1, n)]
+    exp = [speech_on + (speech_off - speech_on) * c for c in cum]
+    sigma = max(0.35, 0.06 * total_sec)
+    tol = max(1.0, 0.15 * total_sec)
+
+    INF = float("inf")
+    m = len(runs)
+    # dp[j][k]：第 k 个界用候选 j 的最小代价
+    dp = [[INF] * (n - 1) for _ in range(m)]
+    par = [[-1] * (n - 1) for _ in range(m)]
+    for j, (s, e) in enumerate(runs):
+        mid = (s + e) / 2
+        cost = ((mid - exp[0]) / sigma) ** 2 - 0.3 * math.log((e - s) / 0.1)
+        if abs(mid - exp[0]) <= tol:
+            dp[j][0] = cost
+    for k in range(1, n - 1):
+        best = INF
+        best_j = -1
+        for j, (s, e) in enumerate(runs):
+            if best_j >= 0:
+                mid = (s + e) / 2
+                if abs(mid - exp[k]) <= tol:
+                    cost = (
+                        best
+                        + ((mid - exp[k]) / sigma) ** 2
+                        - 0.3 * math.log((e - s) / 0.1)
+                    )
+                    if cost < dp[j][k]:
+                        dp[j][k] = cost
+                        par[j][k] = best_j
+            if dp[j][k - 1] < best:
+                best, best_j = dp[j][k - 1], j
+    end_j = min(range(m), key=lambda j: dp[j][n - 2]) if m else -1
+    if m == 0 or dp[end_j][n - 2] == INF:
+        return None
+    chosen = [0] * (n - 1)
+    j = end_j
+    for k in range(n - 2, -1, -1):
+        chosen[k] = j
+        j = par[j][k]
+    picked = [runs[j] for j in chosen]
+    # 语音占比门：切后各段语音时长与期望占比偏离 ∈[0.5,1.8]
+    spans = []
+    prev = speech_on
+    for s, e in picked + [(speech_off, speech_off)]:
+        spans.append((prev, s))
+        prev = e
+    for k, (a, b) in enumerate(spans):
+        share = (b - a) / (speech_off - speech_on)
+        want = weights[k] / total_w
+        if not 0.5 <= share / want <= 1.8:
+            return None
+    return picked
+
+
+def split_block_pcm(pcm, sr: int, runs, discard_sec: float, tail_pad_sec: float = 0.0):
+    """按切点把块 PCM 切成 N 段：每界从静音正中丢弃 discard_sec，每段两端 5ms 淡入淡出。
+
+    discard 的语义：时间轴随后会加回 sentenceGapSec ⇒ 听感＝自然停顿原值；
+    静音不足 gap+2m 时退化为丢 S−2m（下限 0.06 s 余量）。末段统一补尾垫。
+    返回 [(clip_pcm, 自然停顿 S_k)]。
+    """
+    import numpy as np
+
+    margin = 0.03
+    fade = int(sr * 0.005)
+    out = []
+    cursor = 0
+    for s, e in runs:
+        nat = e - s
+        d = min(discard_sec, max(0.0, nat - 2 * margin))
+        cut_start = s + (nat - d) / 2
+        clip = pcm[int(cursor * sr) : int(cut_start * sr)].copy()
+        if len(clip) > 2 * fade:
+            clip[:fade] *= np.linspace(0, 1, fade)
+            clip[-fade:] *= np.linspace(1, 0, fade)
+        out.append((clip, nat))
+        cursor = cut_start + d
+    clip = pcm[int(cursor * sr) :].copy()
+    if len(clip) > 2 * fade:  # 末段起点即末个切点（静音≠零值）：与中间段同口径两端淡变
+        clip[:fade] *= np.linspace(0, 1, fade)
+        clip[-fade:] *= np.linspace(1, 0, fade)
+    if tail_pad_sec > 0:
+        clip = np.concatenate([clip, np.zeros(int(tail_pad_sec * sr), np.float32)])
+    out.append((clip, 0.0))
+    return out
 
 
 # ---------------- 主流程 ----------------
@@ -1320,6 +1910,46 @@ async def main() -> None:
         # 在 --plan 之前检查：排期正是发现「这次长跑将整集换音色」的最佳时机
         check_voice_marker(out_dir, signature, args.allow_voice_switch)
 
+        # ── 段落演绎（story 档）：块模式解析 ─────────────────────────────
+        # 块=同幕连续句一次合成（句间自然停顿），服务端切回逐句 mp3。仅预设声明 block
+        # 时启用；EN 未验证（07-tts-voice 跨语种须试听）回退逐句；--steady 的逐句升束
+        # 与「块=一个请求」冲突，硬拒。
+        block_cfg = (STYLE_PRESETS.get(style_name) or {}).get("block")
+        if block_cfg and tts_lang != "ZH":
+            print(
+                "提示：story 档块合成未在 EN 验证（跨语种须试听，见 references/07-tts-voice.md），"
+                "EN 本次回退逐句合成",
+                file=sys.stderr,
+            )
+            block_cfg = None
+        # 须排在 EN 回退之后：回退逐句的 EN 版与 --steady 并不冲突
+        if block_cfg and args.steady:
+            parser.error("--steady 的逐句升束与块合成（story 档）冲突：整块同一束宽")
+        perform_punct = bool(block_cfg and block_cfg.get("perform_punct"))
+        # 句界丢弃量＝时间轴句距（时间轴随后加回 ⇒ 听感＝自然停顿原值）。
+        # 直读 timing.json（不 import 兄弟模块），缺文件/缺键回退机制常数 0.32。
+        discard_sec = 0.32
+        if block_cfg:
+            timing_json = root / "video" / "src" / "timing.json"
+            if timing_json.is_file():
+                try:
+                    discard_sec = float(
+                        json.loads(timing_json.read_text(encoding="utf-8"))[
+                            "sentenceGapSec"
+                        ]
+                    )
+                except (ValueError, KeyError, TypeError):
+                    pass
+        blocks: list[list[dict]] = plan_blocks(items, block_cfg) if block_cfg else []
+        # 台本情绪护栏提前到 --plan：长跑前发现 Σvec×alpha 超界
+        if block_cfg:
+            for b in blocks:
+                _, _, bad_id = resolve_block_vec(b, vec, alpha)
+                if bad_id is not None:
+                    parser.error(
+                        f"{bad_id} 的台本情绪有效和超过 0.8 上限（见 {MANUAL} §4.2）"
+                    )
+
         if args.plan:  # 计划模式：纯本地计算，不连服务
             print(
                 f">> 计划：{root.name} · 风格 {style_name} · alpha {alpha:g} · 语速 {df:g}"
@@ -1333,6 +1963,90 @@ async def main() -> None:
             todo = {b: 0 for b in sorted(set(beams_of.values()))}
             cached = dict(todo)
             store_hits = dict(todo)
+            if block_cfg:
+                # 块=缓存单位：整块成员全部命中才算命中；改一句 ⇒ 整块重录
+                cached_blocks = recoverable_blocks = todo_blocks = todo_members = 0
+                recoverable_members = 0
+                for b in blocks:
+                    b_vec, b_alpha, _ = resolve_block_vec(b, vec, alpha)
+                    suffix = block_digest_suffix(
+                        [synth_source_text(i) for i in b],
+                        discard_sec,
+                        block_cfg.get("tail_pad_sec", 0.18),
+                    )
+                    n = len(b)
+                    all_local, all_recoverable = True, True
+                    for k, i in enumerate(b):
+                        d = digest_indextts(
+                            ref_sha1,
+                            style_name,
+                            b_vec,
+                            b_alpha,
+                            df,
+                            tts_lang,
+                            args.engine_tag,
+                            synth_source_text(i),
+                            beams,
+                            None,
+                            None,
+                            sampling,
+                            suffix,
+                            f"{k + 1}/{n}",
+                        )
+                        meta, mp3 = (
+                            out_dir / f"{i['id']}.sha",
+                            out_dir / f"{i['id']}.mp3",
+                        )
+                        local_ok = (
+                            not args.force
+                            and mp3.exists()
+                            and mp3.stat().st_size > 0
+                            and meta.exists()
+                            and meta.read_text() == d
+                        )
+                        if not local_ok:
+                            all_local = False
+                            if args.force or not store_has(store, slug, i["id"], d):
+                                all_recoverable = False
+                    if all_local:
+                        cached_blocks += 1
+                    elif all_recoverable:
+                        recoverable_blocks += 1
+                        recoverable_members += n
+                        todo_blocks += 1
+                        todo_members += n
+                    else:
+                        todo_blocks += 1
+                        todo_members += n
+                # 同逐句口径：版本库整块直收不占合成时间，不进估时
+                est = (
+                    (todo_members - recoverable_members)
+                    * AVG_SEC_PER_LINE
+                    * (RTF_1BEAM if beams == 1 else RTF_MULTIBEAM)
+                )
+                print(
+                    f"   块模式：{len(blocks)} 块 · 待合成 {todo_blocks} 块 / {todo_members} 句"
+                    f" · 已整块缓存 {cached_blocks} 块"
+                    + (
+                        f" · 版本库可整块回收 {recoverable_blocks} 块"
+                        if recoverable_blocks
+                        else ""
+                    )
+                    + "（块=缓存单位，改一句重录整块）"
+                )
+                print(
+                    f">> 待合成合计 {todo_members} 句（块口径）"
+                    + (
+                        f"（其中 {recoverable_blocks} 块 / {recoverable_members} 句由版本库整块直收，"
+                        "不占合成时间）"
+                        if recoverable_members
+                        else ""
+                    )
+                    + f"，估算墙钟约 {est / 3600:.1f} 小时"
+                    f"（长跑折算口径 RTF 1 束≈{RTF_1BEAM:g} / 高束宽≈{RTF_MULTIBEAM:g}，"
+                    f"机器负载会显著影响，仅作排期参考）"
+                )
+                return
             for i in items:
                 b = beams_of[i["id"]]
                 d = digest_indextts(
@@ -1433,36 +2147,72 @@ async def main() -> None:
                 "当前服务为 IndexTTS-2（infer() 无 text_normalization 形参）："
                 "去掉 --no-text-normalization，或改用 v2.5 服务"
             )
+        if block_cfg and not health.get("supports_blocks"):
+            parser.error(
+                "当前服务不支持块合成（story 档需要）：服务端代码过旧，请用本 skill"
+                f" 当前 tts_server.py 重启服务，见 {MANUAL} §二"
+            )
 
         sem = asyncio.Semaphore(CONCURRENCY_INDEXTTS)
-        results = await asyncio.gather(
-            *(
-                synth_indextts(
-                    sem,
-                    i,
-                    args.force,
-                    str(ref_path),
-                    ref_sha1,
-                    style_name,
-                    vec,
-                    alpha,
-                    df,
-                    tts_lang,
-                    args.engine_tag,
-                    args.server,
-                    out_dir,
-                    # 逐句束宽：基础值来自「命令行优先、否则取预设」，--steady 命中句再提高
-                    num_beams=beams_of[i["id"]],
-                    emo_ref=emo_ref_path,
-                    emo_ref_sha1=emo_ref_sha1,
-                    emo_text=args.emo_text,
-                    sampling=sampling,
-                    store=store,
-                    slug=slug,
+        if block_cfg:
+            # 段落演绎：块=合成与缓存单位；逐块并发=1（服务端串行锁），结果按原顺序展平
+            block_results = await asyncio.gather(
+                *(
+                    synth_block_indextts(
+                        sem,
+                        b,
+                        args.force,
+                        str(ref_path),
+                        ref_sha1,
+                        style_name,
+                        vec,
+                        alpha,
+                        df,
+                        tts_lang,
+                        args.engine_tag,
+                        args.server,
+                        out_dir,
+                        num_beams=beams,
+                        sampling=sampling,
+                        store=store,
+                        slug=slug,
+                        discard_sec=discard_sec,
+                        tail_pad_sec=block_cfg.get("tail_pad_sec", 0.18),
+                        perform_punct=perform_punct,
+                    )
+                    for b in blocks
                 )
-                for i in items
             )
-        )
+            results = [r for br in block_results for r in br]
+        else:
+            results = await asyncio.gather(
+                *(
+                    synth_indextts(
+                        sem,
+                        i,
+                        args.force,
+                        str(ref_path),
+                        ref_sha1,
+                        style_name,
+                        vec,
+                        alpha,
+                        df,
+                        tts_lang,
+                        args.engine_tag,
+                        args.server,
+                        out_dir,
+                        # 逐句束宽：基础值来自「命令行优先、否则取预设」，--steady 命中句再提高
+                        num_beams=beams_of[i["id"]],
+                        emo_ref=emo_ref_path,
+                        emo_ref_sha1=emo_ref_sha1,
+                        emo_text=args.emo_text,
+                        sampling=sampling,
+                        store=store,
+                        slug=slug,
+                    )
+                    for i in items
+                )
+            )
 
     manifest_path = out_dir / "manifest.json"
     manifest_path.write_text(

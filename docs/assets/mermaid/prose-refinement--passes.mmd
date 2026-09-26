@@ -1,9 +1,9 @@
 %% source: references/05-prose-refinement.md — 三、四层 pass · 九、改动审计与复核
 %% slug: prose-refinement--passes
 %% type: workflow
-%% derived: authored for RSI-011（archify JSON 源不入库，本文件是可 diff 的拓扑事实）
-%% fix: RSI-011 评审回归——补「成文评审」节点；门改为评审 REWRITE=0 且复核 RISKY=0、REWRITE=0；回退并入复核节点
-%% fix: RSI-011 三次评审——输入改为三稿（分镜在 ⑥ 才产出，定稿前回调第七节）；复核覆盖 ④A 四级 + ④B 前三条
+%% derived: authored for RSI-013（archify JSON 源不入库，本文件是可 diff 的拓扑事实）
+%% fix: RSI-013 评审回归——补「成文评审」节点；门改为评审 REWRITE=0 且复核 RISKY=0、REWRITE=0；回退并入复核节点
+%% fix: RSI-013 三次评审——输入改为三稿（分镜在 ⑥ 才产出，定稿前回调第七节）；复核覆盖 ④A 四级 + ④B 前三条
 flowchart LR
     subgraph CB["⑥ 分镜回调"]
         SB[(⑥ 分镜<br/>定稿前回调第七节)]

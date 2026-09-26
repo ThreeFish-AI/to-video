@@ -49,7 +49,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
 import langs  # noqa: E402
-from pron_marks import has_marks, load_vocab, strip_marks, validate  # noqa: E402
+from pron_marks import (  # noqa: E402
+    PRON_MARK_RE,
+    has_marks,
+    load_vocab,
+    strip_marks,
+    validate,
+)
 
 LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$")
 #: 幕标题文字此前被丢弃；现为顶部分段进度条（ChapterProgress）的数据面，
@@ -123,7 +129,7 @@ def parse_md(
             errs, warns = validate(text, vocab)
             mark_errors += [f"{src}:{lineno} 句 {sid} {e}" for e in errs]
             mark_warnings += [f"{src}:{lineno} 句 {sid} {w}" for w in warns]
-            item: dict[str, str] = {
+            item: dict = {
                 "id": sid,
                 "scene": scene,
                 "text": strip_marks(text),
@@ -133,6 +139,121 @@ def parse_md(
                 marked += 1
             items.append(item)
     return items, scene_titles, struct_errors, mark_errors, mark_warnings, marked
+
+
+# ---------------- 配音台本（story 档）：script/narration.cues.toml ----------------
+#
+# 可选 sidecar，写稿阶段与 narration.md 一同产出（references/03 规约）：
+#   [block.<句id>] emo = "afraid:0.18,surprised:0.12"（可选 alpha=0.35）
+#       —— 该 id 是一个故事块的起点；块内情绪由 tts.py 归一后使用（§4.5）。
+#   [say] <句id> = "…表演标点版…" —— 仅合成文本（ttsText），字幕取 text 不变；
+#       校验「去标点后与 text 全等、发音标注逐个原样」，改字必须回 narration.md 改。
+# 无该文件 ⇒ narration.json 与今日逐字节一致（存量集零波及）；en 构建不消费台本
+# （story 档 EN 回退逐句）。
+#: 「只许改标点」的比较口径，按标点**串**整体判定（逐字符判定会被 `3……5` 绕过）：
+#: 不夹在两数字之间 ⇒ 剥掉；夹在两数字之间且恰为单个半角 `.,:` ⇒ 数值/时刻的一部分
+#: （3.5%、1,200、10:30），原样保留；夹在两数字之间的其余标点 ⇒ 归一为分隔符（「2020，2026」
+#: 改「2020…2026」仍放行）。后两条保证 say 删小数点、往数字串里插 `，` 或删掉两数之间的
+#: 标点都比对不上——否则合成念成另一个数
+CUES_PUNCT_RE = re.compile(r"[，。！？…、；：;!?.,:]+")
+
+
+def _strip_punct(s: str) -> str:
+    def repl(m: re.Match[str]) -> str:
+        a, b = m.start(), m.end()
+        if not (a and s[a - 1].isdecimal() and b < len(s) and s[b].isdecimal()):
+            return ""
+        return m.group() if m.group() in (".", ",", ":") else "\x1f"
+
+    return CUES_PUNCT_RE.sub(repl, s)
+
+
+def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
+    """读 cues.toml 并落进 items → (块数, say 句数, 错误列表)。无文件 → (0,0,[])。"""
+    cues_path = root / "script" / "narration.cues.toml"
+    if not cues_path.is_file():
+        return 0, 0, []
+    import tomllib
+
+    from tts import parse_emo_vector  # noqa: E402 - 兄弟模块 SSOT 复用（语法校验单一口径）
+
+    try:
+        cues = tomllib.loads(cues_path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeError) as e:
+        return 0, 0, [f"{cues_path.name} 解析失败: {e}"]
+    errors: list[str] = []
+    # 形态写错（值不是表）一律汇入错误清单，由 build 统一 FAIL 退出，不抛 traceback
+    tables: dict[str, dict] = {}
+    for name in ("block", "say"):
+        tbl = cues.get(name, {})
+        if not isinstance(tbl, dict):
+            errors.append(f"{cues_path.name}: [{name}] 须为表")
+            tbl = {}
+        tables[name] = tbl
+    by_id = {i["id"]: i for i in items}
+    n_block = n_say = 0
+    for sid, spec in tables["block"].items():
+        if sid not in by_id:
+            errors.append(f"{cues_path.name}: block.{sid} 不是本稿句 id")
+            continue
+        if not isinstance(spec, dict):
+            errors.append(
+                f'{cues_path.name}: block.{sid} 须为表（[block.{sid}] emo = "…"）'
+            )
+            continue
+        emo = spec.get("emo")
+        if not isinstance(emo, str) or not emo.strip():
+            errors.append(f"{cues_path.name}: block.{sid} 缺 emo（须为非空字符串）")
+            continue
+        try:
+            vec = parse_emo_vector(emo)
+            if sum(vec) <= 0:
+                raise ValueError("方向全零")
+        except ValueError as e:
+            errors.append(f"{cues_path.name}: block.{sid} emo 无效（{e}）")
+            continue
+        cue: dict = {"emo": emo}
+        a = spec.get("alpha")
+        if a is not None:
+            # 方向由 tts.py 归一到 Σ=1 ⇒ 有效和 Σ×α 即 α；bool 是 int 子类，须单独排除
+            if (
+                isinstance(a, bool)
+                or not isinstance(a, int | float)
+                or not 0 < a <= 0.8
+            ):
+                errors.append(
+                    f"{cues_path.name}: block.{sid} alpha 须为 (0, 0.8] 内的数值（Σ×α ≤ 0.8）"
+                )
+                continue
+            cue["alpha"] = float(a)
+        by_id[sid]["blockStart"] = True
+        by_id[sid]["cue"] = cue
+        n_block += 1
+    for sid, say in tables["say"].items():
+        if sid not in by_id:
+            errors.append(f"{cues_path.name}: say.{sid} 不是本稿句 id")
+            continue
+        if not isinstance(say, str) or not say.strip():
+            errors.append(f"{cues_path.name}: say.{sid} 必须是非空字符串")
+            continue
+        base = by_id[sid]
+        src = base.get("ttsText", base["text"])
+        if _strip_punct(strip_marks(say)) != _strip_punct(strip_marks(src)):
+            errors.append(
+                f"{cues_path.name}: say.{sid} 与正文不一致（只许改标点，改字请回 narration.md）"
+            )
+            continue
+        # 保留标注再比：标注的集合/位置/读音须与正文逐个一致（只查「有无」会放过删改）；
+        # 去标点会连标注内部一起剥（`<行|HANG，2>` ≡ `<行|HANG2>`），故标注本体另行逐字全等
+        same_marks = PRON_MARK_RE.findall(say) == PRON_MARK_RE.findall(src)
+        if not same_marks or _strip_punct(say) != _strip_punct(src):
+            errors.append(
+                f"{cues_path.name}: say.{sid} 发音标注与正文不一致（须原样携带 <字|读音>）"
+            )
+            continue
+        base["ttsText"] = say
+        n_say += 1
+    return n_block, n_say, errors
 
 
 def sentence_digest(text: str) -> str:
@@ -335,6 +456,17 @@ def main() -> None:
             f"发音标注校验失败（{len(mark_errors)} 处）—— 语法见 $T/scripts/pron_marks.py"
         )
 
+    # 配音台本（story 档，主稿专属）：块起点/块情绪/表演标点落进 items；无文件零波及
+    n_block = n_say = 0
+    if lang == langs.PRIMARY:
+        n_block, n_say, cue_errors = apply_cues(root, items)
+        for e in cue_errors:
+            print(f"FAIL  {e}", file=sys.stderr)
+        if cue_errors:
+            sys.exit(
+                f"配音台本校验失败（{len(cue_errors)} 处）—— 语法见 $T/references/VOICE-CLONING.md §4.5"
+            )
+
     # 译稿构建以主稿为基准：对齐门 + 基线锁 + chapters 的 zh 标题底稿
     zh_titles = scene_titles
     if lang != langs.PRIMARY:
@@ -383,6 +515,10 @@ def main() -> None:
         print(
             f"发音标注: {marked} 句带 ttsText（字数与字幕仍取剥离后的 text）"
             + ("" if vocab else "；未找到 pinyin.vocab，已跳过「音节是否在表内」告警")
+        )
+    if n_block or n_say:
+        print(
+            f"配音台本: {n_block} 个块起点/情绪 · {n_say} 句表演标点（story 档消费，见 VOICE-CLONING §4.5）"
         )
     if lang != langs.PRIMARY:
         # 基线锁：记录「翻译时主稿长什么样」——主稿事后改稿 ⇒ 译稿失鲜可测

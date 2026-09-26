@@ -7,16 +7,25 @@
 
 1. **样本就位？** `uv run --no-project $T/scripts/refs.py list` → 缺失则 `refs.py rebuild --name <样本>`（源录音是本人私有文件，路径记录在 `voices/refs.toml`）。
 2. **指纹一致？** `refs.py verify --name <样本>` 必须全绿——sha1 与清单不符说明源文件/裁剪参数变了，**勿在未核验音色上烧 10 小时**；新样本须先过第 4 步试听再回填清单。
-3. **风格定档？** 首次/换风格必过小样 A/B：`tts_sample.py --ref <样本> --all-styles --play`；再用**领航片段**（本集最难的 6–8 句：长分句/枚举清单/带小数点数字/含英文专名/含多音字）在该风格下整句合成试听。**边听边记读错字**到 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)，用 `<字|读音>` 标注修（写稿规约见 [references/03](./03-narration.md)）。**句尾英文词不赌采样、直接 CMU 标注**（采样层缺陷率约 50%；配方见 [VOICE-CLONING §5.4](VOICE-CLONING.md) take 验收节）。听完 `--cleanup` 或 `pipeline.py clean-samples`（生物特征）。
-4. **排期对账？** `pipeline.py tts --plan`（纯本地）：待合成句数 × 束宽档 + 墙钟估算。ETA 与预期差 >15% 先查机器负载。
+3. **风格定档？** 新集默认 **`story`（段落演绎，[VOICE-CLONING §4.5](VOICE-CLONING.md)）**；写稿阶段应已同产 `script/narration.cues.toml`（[references/03](./03-narration.md) 台本规约；无台本也能跑——自动分块 + 预设情绪，但块间情绪对比会打折）。换风格才需小样 A/B：`tts_sample.py --ref <样本> --style story --play`。**边听边记读错字**到 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)，用 `<字|读音>` 标注修（写稿规约见 [references/03](./03-narration.md)）。**句尾英文词不赌采样、直接 CMU 标注**（采样层缺陷率约 50%；配方见 [VOICE-CLONING §5.4](VOICE-CLONING.md) take 验收节）。听完 `--cleanup` 或 `pipeline.py clean-samples`（生物特征）。
+4. **排期对账？** `pipeline.py tts --plan`（纯本地）：story 档按**块**统计（块=缓存单位，改一句重录整块）+ 墙钟估算。ETA 与预期差 >15% 先查机器负载。
    束宽代价**不是无条件线性**：MPS 上近乎免费（整集 1→3 束实测 +4%），CUDA 上近线性——
    `--plan` 的 3 束常量刻意保守，见 [ADVANCED §6.2](INDEXTTS-2.5-ADVANCED.md)。
 5. **做任何参数 A/B 前先固定 `--seed`**：上游 `do_sample` 恒 True 且全链路无种子，同句每次
    合成都是不同的 take，不固定种子听到的差异可能只是采样噪声（实测：带种子字节一致、
-   不带则不同）。但 **单句补配勿显式传 `--seed`**——seed 进缓存摘要，想重配一句会变成
+   不带则不同）。story 档预设自带 seed 4242（定档 take 可复现），换 take 用 `--seed-offset`；
+   但 **单句补配勿显式传 `--seed`**——seed 进缓存摘要，想重配一句会变成
    整集签名漂移、旧缓存被新签名覆盖（ISSUE-174）；实验性参数一律先 `--plan` 看失配面。
    重掷循环例外：只在带 seed 的隔离 digest 上掷、定稿回存 canonical digest（§5.4 协议）。
 6. **音色签名护栏**：与上次合成不一致会被 `.engine` 标记硬拦（显式 `--allow-voice-switch` 才放行）——这正是防「README 旧命令静默重录整集」的机制。
+
+## 重制存量集（sunny-steady → story）
+
+14 个存量集的 pipeline.toml 锁旧档；**手工触发某集重制时按新标准**：
+1. 该集 pipeline.toml `[tts] style = "story"`；
+2. 补写该集 `script/narration.cues.toml`（按 [references/03](./03-narration.md) 台本规约通读全稿定块与情绪）；
+3. `pipeline.py tts` 需显式 `--allow-voice-switch`（换档＝整集重录 + 重渲）；
+4. 完成后按 [VOICE-CLONING §5.4](VOICE-CLONING.md) 跑句尾英文词 take 验收。
 
 ## 双语配音（en 版，双语集）
 
@@ -26,9 +35,9 @@
 - **命令**：`uv run --no-project $T/scripts/pipeline.py --project $P tts --lang en`（缺省只跑 zh，显式 `--lang` 才跑英文——昂贵命令显式化）；产物落 `video/public/audio/en/`（独立 `.engine` 护栏与 manifest）；tts-store 按 digest 中英并存，互不覆盖。
 - **ETA 口径**：`--plan` 的 4.2 s/句与 tts_progress 的秒/字基线均为 zh 标定——en 侧只作量级参考，热节流判定对 en 跳过（首集英文实测后校准）。
 
-## 两遍法（长片的既定工作法）
+## 迭代与定稿
 
-草稿遍 `--style sunny`（快 ≈3.4×）拿真 manifest 校时间轴与分镜 → 定稿遍回到成片档（`sunny-steady`，beams=3）。**改稿只废改动句；换档全量重合成**（摘要含 style/ref/束宽，见 VOICE-CLONING §六）。B 遍必须在文稿字节冻结后启动。
+story 档（默认）**不需要两遍法**——1 束本来就是定稿口径。改稿频繁期若想省机器：临时把 pipeline.toml 换 `sunny`（逐句缓存，改一句只重录一句）拿真 manifest 校时间轴与分镜，文稿字节冻结后换回 `story` 重跑（换档全量重合成 + `--allow-voice-switch`；story 块缓存改一句重录整块，见 VOICE-CLONING §六）。
 
 ## 调用形态
 

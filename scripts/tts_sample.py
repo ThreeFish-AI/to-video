@@ -439,16 +439,32 @@ def main() -> None:
         sampling = resolve_sampling(args)
     except ValueError as e:
         parser.error(str(e))
-    # --all-styles 下 resolve_sampling 只取命令行值（args.style 仍是默认 neutral，其预设无
-    # sampling）。将来若给某个预设加了 sampling，A/B 就会静默丢掉那一档的采样口径 —— 提前拦住。
-    if args.all_styles and any(p.get("sampling") for p in STYLE_PRESETS.values()):
-        parser.error(
-            "有预设自带 sampling，--all-styles 无法逐档正确应用：请改用单档 --style 逐个 A/B"
+    block_style = (
+        (STYLE_PRESETS.get(args.style) or {}).get("block") if args.style else None
+    )
+    if block_style:
+        print(
+            "提示：story 档的正体是「故事块」合成（块内句间自然停顿，见 VOICE-CLONING §4.5）；"
+            "tts_sample 只合成单句，听感（跨句弧线/停顿对比）不外推，以成片段落试听为准。",
+            file=sys.stderr,
         )
     try:
         jobs = build_jobs(args)
     except ValueError as e:  # parse_emo_vector 的键名/权重错误
         parser.error(str(e))
+    # 逐档采样口径：--all-styles 下全局 sampling 只含命令行值（args.style 是默认 neutral），
+    # 各档须按自身预设解析（story 的 seed 等），否则 A/B 静默丢掉那一档的口径。
+    # 全局 sampling 仍用于「下一步」命令回显——预设口径由 tts.py --style 自行解析，无需回显。
+    sampling_of: dict[str, dict] = {}
+    for name, *_ in jobs:
+        try:
+            sampling_of[name] = (
+                resolve_sampling(argparse.Namespace(**{**vars(args), "style": name}))
+                if args.all_styles
+                else sampling
+            )
+        except ValueError as e:
+            parser.error(f"[{name}] {e}")
     for name, vec, alpha, _df, _beams in jobs:
         if (
             vec is not None and sum(vec) * alpha > 0.8
@@ -480,8 +496,10 @@ def main() -> None:
     for name, vec, alpha, df, beams in jobs:
         vec_str = ",".join(f"{x:g}" for x in vec) if vec else "—（不注入情感）"
         slow = "（束宽 3，约慢 3 倍）" if beams >= 3 else ""
+        seed = sampling_of[name].get("seed")
         print(
             f"   {name:<14} vec=[{vec_str}] alpha={alpha:g} df={df:g} beams={beams}{slow}"
+            + (f" seed={seed}（预设）" if seed != sampling.get("seed") else "")
         )
     if args.dry_run:
         print(">> --dry-run：仅解析参数，未连接服务")
@@ -498,7 +516,7 @@ def main() -> None:
         args.server,
         need_duration_factor=any(df != 1.0 for _n, _v, _a, df, _b in jobs),
         need_emo_text=bool(args.emo_text),
-        sampling=sampling,
+        sampling={k: v for s in sampling_of.values() for k, v in s.items()},
     )
 
     out_dir = (
@@ -520,7 +538,7 @@ def main() -> None:
             stem=None
             if not args.label
             else (args.label if len(jobs) == 1 else f"{args.label}-{name}"),
-            sampling=sampling,
+            sampling=sampling_of[name],
         )
         for name, vec, alpha, df, beams in jobs
     ]
