@@ -17,7 +17,8 @@ IndexTTS 整集合成是 2 小时量级的无人值守长跑，而本机（M4 ba
 ## 口径
 
 - 每句墙钟 = 相邻 mp3 的 mtime 差（首句 = 最早 mtime − 跑前最后一个 mtime 不可
-  得，故首句墙钟缺失，不进均值/中位）；
+  得，故首句墙钟缺失，不进均值/中位）；块模式（story 档）一次请求落 N 个 mp3，
+  按 <1s 聚簇为一次合成，簇墙钟 ÷ 簇内句数折回每句，滚动窗口按句数取尾部簇；
 - 秒/字 = 墙钟 ÷ 该句字数（narration.json 的 `text`，即人读面）；
 - 基线 1.868 s/字：EP1 v3 B 遍（sunny-steady）187 句实测墙钟折算——同机同档
   的历史口径，非上游论文数字。
@@ -128,21 +129,28 @@ def main() -> None:
     # 每句墙钟 = 相邻 mtime 差；首句差值不可得（跑前时刻未知），不进统计。
     # 块模式（story 档）一次请求落 N 个 mp3（mtime 差 <1s）——先按 <1s 聚簇成
     # 「一次合成」单位再算墙钟，否则块内近零差会拉爆秒/字中位。
-    clusters: list[tuple[str, float, float]] = []  # (簇首句 id, 簇首 mtime, 簇内字数)
+    # (簇首句 id, 簇首 mtime, 簇内字数, 簇内句数)
+    clusters: list[tuple[str, float, float, int]] = []
     cur_ids: list[str] = [done[0][1]]
     cur_t0 = done[0][0]
     prev_t = done[0][0]
+
+    def flush() -> None:
+        clusters.append(
+            (cur_ids[0], cur_t0, sum(chars[i] for i in cur_ids), len(cur_ids))
+        )
+
     for t, sid in done[1:]:
         if t - prev_t >= 1.0:
-            clusters.append((cur_ids[0], cur_t0, sum(chars[i] for i in cur_ids)))
+            flush()
             cur_ids, cur_t0 = [], t
         cur_ids.append(sid)
         prev_t = t
-    clusters.append((cur_ids[0], cur_t0, sum(chars[i] for i in cur_ids)))  # 末簇入列
-    # 簇墙钟 = 下一簇首 mtime − 本簇首 mtime ＝ 下一簇的合成耗时 ⇒ 代表句与字数都取下一簇；
-    # 首簇差值不可得
+    flush()  # 末簇入列
+    # 簇墙钟 = 下一簇首 mtime − 本簇首 mtime ＝ 下一簇的合成耗时 ⇒ 代表句、字数、句数都取
+    # 下一簇；首簇差值不可得
     walls = [
-        (clusters[k + 1][0], clusters[k + 1][1] - clusters[k][1], clusters[k + 1][2])
+        (clusters[k + 1][0], clusters[k + 1][1] - clusters[k][1], *clusters[k + 1][2:])
         for k in range(len(clusters) - 1)
     ]
     if not walls:
@@ -152,20 +160,31 @@ def main() -> None:
             "下一次合成落盘后复跑本命令"
         )
         return
-    per_s = [w for _, w, _ in walls]
-    spc = [w / max(1, c) for _, w, c in walls]
-    win = spc[-args.window :] if args.window > 0 else spc
-    roll = st.median(win)
+    # 每句口径：簇墙钟 ÷ 簇内句数；滚动窗口按句数取尾部簇（块模式一簇 ≈3 句，按簇数取
+    # 会让「滚动 30 句」实为 ~90 句）。逐句档每簇 1 句，与聚簇前逐位同口径
+    k0 = len(walls)
+    if args.window > 0:
+        acc = 0
+        while k0 > 0 and acc < args.window:
+            k0 -= 1
+            acc += walls[k0][3]
+    else:
+        k0 = 0
+    tail = walls[k0:]
+    n_win = sum(n for *_, n in tail)
+    roll = st.median([w / max(1, c) for _, w, c, _ in tail])
+    blocky = any(n > 1 for *_, n in walls)
 
     print(
         f">> 进度 {len(done)}/{len(items)} 句 · 已跑 {elapsed / 60:.0f} 分钟"
         f"（自首句产出起）"
     )
     print(
-        f"   每句墙钟（mtime 差口径）：均值 {st.mean(per_s):.1f}s · "
-        f"滚动{len(win)}句中位 {st.median([w for _, w, _ in walls[-args.window :]]):.1f}s"
+        f"   每句墙钟（mtime 差口径{'，块合成按簇内句数折算' if blocky else ''}）："
+        f"均值 {sum(w for _, w, _, _ in walls) / sum(n for *_, n in walls):.1f}s · "
+        f"滚动{n_win}句中位 {st.median([w / n for _, w, _, n in tail]):.1f}s"
     )
-    print(f"   秒/{unit}：滚动{len(win)}句中位 {roll:.3f}")
+    print(f"   秒/{unit}：滚动{n_win}句中位 {roll:.3f}")
     if lang != "zh":
         # 基线是 zh（字符）口径的实测：en 用词口径对不上分母，任何「比值」都是
         # 假判——点名跳过，首集英文长跑实测后再立基线（issue.md RSI-004）。

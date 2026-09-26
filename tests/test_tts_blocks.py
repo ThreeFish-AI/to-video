@@ -676,6 +676,38 @@ def test_apply_cues_dash_is_punctuation(tmp_path):
             assert any("只许改标点" in e for e in errs), say
 
 
+def test_reading_traps_scan_say_synth_text(tmp_path):
+    """say 只换标点也能踩读法陷阱（两数之间 `、`→`—` 读成「减」）：陷阱门须扫合成面，
+    同一陷阱两面都中只报一次；无 say 的句子（含发音标注句）报文逐字不变。"""
+    import build_narration as bn
+    import check_script as cs
+
+    _write_md(tmp_path)
+    items = [
+        {"id": "p0-01", "scene": "P0", "text": "从2020、2026年，模型变大了。"},
+        {"id": "p0-02", "scene": "P0", "text": "从2020—2026年，模型变大了。"},
+        {
+            "id": "p0-03",
+            "scene": "P0",
+            "text": "银行很重要。",
+            "ttsText": "银<行|HANG2>很重要。",
+        },
+    ]
+    (tmp_path / "script" / "narration.cues.toml").write_text(
+        '[say]\np0-01 = "从2020—2026年，模型变大了！"\n'
+        'p0-02 = "从2020—2026年，模型变大了！"\n',
+        encoding="utf-8",
+    )
+    _, n_say, errs = bn.apply_cues(tmp_path, items)
+    assert errs == [] and n_say == 2  # 去标点比对放行（两数之间标点归一为分隔符）
+    msgs: list[str] = []
+    cs.check_reading_traps(items, msgs)
+    assert [m.split("：")[0] for m in msgs] == [
+        "FAIL 句 p0-01的合成文本（台本 [say]） 命中读法陷阱 '0—2'",
+        "FAIL 句 p0-02 命中读法陷阱 '0—2'",
+    ]
+
+
 def test_status_tracks_cues_sidecar(tmp_path, capsys):
     """只改台本不改正文：status 须报 narration.json 失鲜（否则 tts 拿旧 cue 合成）。"""
     import os
@@ -1209,10 +1241,41 @@ def test_sample_all_styles_applies_preset_seed(tmp_path):
     assert "seed=" not in lines["sunny"]
 
 
+def test_sample_story_sends_perform_punct_text(monkeypatch, tmp_path):
+    """story 小样与管线块合成同一合成文本口径（`……`→`…`）；其余档仍按默认映射 `。`。"""
+    import importlib
+
+    (tmp_path / ".to-video-root").write_text("", encoding="utf-8")
+    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    ts = importlib.import_module("tts_sample")
+    sent: list[str] = []
+
+    def fake_synth(server, text, *a, **k):
+        sent.append(text)
+        return b"fake", "mp3"
+
+    monkeypatch.setattr(ts, "http_synthesize", fake_synth)
+    monkeypatch.setattr(ts, "check_server", lambda *a, **k: None)
+    monkeypatch.setattr(ts, "mp3_duration", lambda p: 1.0)
+    ref = tmp_path / "ref.wav"
+    ref.write_bytes(b"x" * 16)
+    argv = ["tts_sample.py", "--ref", str(ref), "--text", "他停了一下……然后笑了。"]
+    monkeypatch.setattr(
+        sys, "argv", [*argv, "--all-styles", "--out-dir", str(tmp_path)]
+    )
+    ts.main()
+    by_style = dict(zip(tts.STYLE_PRESETS, sent))
+    assert by_style["story"] == "他停了一下…然后笑了。"
+    assert by_style["sunny"] == "他停了一下。然后笑了。"
+
+
 # ---------------- 进度监视：mtime 聚簇 ----------------
 
 
-def _progress(tmp_path, texts: list[str], mtimes: list[float]) -> str:
+def _progress(
+    tmp_path, texts: list[str], mtimes: list[float], extra: tuple[str, ...] = ()
+) -> str:
     """造工程：前 len(mtimes) 句已产出（mp3 mtime 按给定序列），跑 tts_progress 取 stdout。"""
     import json
     import os
@@ -1234,7 +1297,7 @@ def _progress(tmp_path, texts: list[str], mtimes: list[float]) -> str:
         os.utime(p, (base + t, base + t))
     script = Path(__file__).resolve().parents[1] / "scripts" / "tts_progress.py"
     r = subprocess.run(
-        [sys.executable, str(script), "--project", str(tmp_path)],
+        [sys.executable, str(script), "--project", str(tmp_path), *extra],
         capture_output=True,
         text=True,
         check=True,
@@ -1264,3 +1327,17 @@ def test_progress_single_cluster_reports_insufficient_samples(tmp_path):
     """单簇但跨度 ≥1s（连续 <1s 间隔串起）：无墙钟样本，报不足而非 StatisticsError。"""
     out = _progress(tmp_path, ["甲" * 5] * 4, [0, 0.6, 1.2])
     assert "样本不足" in out
+
+
+def test_progress_block_walls_are_per_sentence(tmp_path):
+    """块口径：簇墙钟 ÷ 簇内句数折回每句，滚动窗口按句数取尾部簇（不是按簇数）。"""
+    # 簇 A 2 句 @0 → 簇 B 3 句 @30（每句 10s）→ 簇 C 3 句 @90（每句 20s）
+    mt = [0, 0.2, 30, 30.2, 30.4, 90, 90.2, 90.4]
+    texts = ["甲" * 10] * 10
+    out = _progress(tmp_path, texts, mt)
+    assert "块合成按簇内句数折算" in out
+    assert "均值 15.0s · 滚动6句中位 15.0s" in out
+    # --window 3：尾部 3 句＝只取末簇 C，而不是末 3 簇
+    (tmp_path / "w").mkdir()
+    out = _progress(tmp_path / "w", texts, mt, ("--window", "3"))
+    assert "滚动3句中位 20.0s" in out and "秒/字：滚动3句中位 2.000" in out

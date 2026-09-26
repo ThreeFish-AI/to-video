@@ -62,7 +62,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
 import langs  # noqa: E402
 from build_narration import read_lock, stale_ids  # noqa: E402
-from pron_marks import scan_candidates, validate  # noqa: E402
+from pron_marks import scan_candidates, strip_marks, validate  # noqa: E402
 from timeline import load_constants, total_duration_in_frames  # noqa: E402
 
 #: 分镜表行：| 镜号 | 句区间 | 画面 | 动效 |。镜号形如 `0-A`/`2-B2`。
@@ -307,15 +307,28 @@ HAN_RE = re.compile(r"[一-鿿]")
 
 
 def check_reading_traps(items: list[dict], msgs: list[str]) -> None:
-    """逐句扫描已知会被读错的写法（上游归一化的实测行为）。"""
+    """逐句扫描已知会被读错的写法（上游归一化的实测行为）。
+
+    扫两个面：字幕面 `text` 与合成面（去标注后的 `ttsText`）。二者只在台本 `[say]` 改了
+    标点时不同——换标点本身就能踩陷阱（`2020、2026` → `2020—2026` 读成「减」），只扫
+    `text` 会漏；同一条陷阱两面都中时只报字幕面一次。
+    """
     hits = 0
     for it in items:
         text = it["text"]
-        for pattern, level, why in READING_TRAPS_COMPILED:
-            if m := pattern.search(text):
+        synth = strip_marks(it.get("ttsText") or text)
+        faces = [(text, "")] + (
+            [(synth, "的合成文本（台本 [say]）")] if synth != text else []
+        )
+        seen: set[int] = set()
+        for face, where in faces:
+            for k, (pattern, level, why) in enumerate(READING_TRAPS_COMPILED):
+                if k in seen or not (m := pattern.search(face)):
+                    continue
+                seen.add(k)
                 hits += 1
                 (fail if level == "FAIL" else warn)(
-                    msgs, f"句 {it['id']} 命中读法陷阱 {m.group(0)!r}：{why}"
+                    msgs, f"句 {it['id']}{where} 命中读法陷阱 {m.group(0)!r}：{why}"
                 )
         if not HAN_RE.search(text):
             hits += 1
