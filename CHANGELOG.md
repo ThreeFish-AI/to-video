@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Breaking（阶段重编号，RSI-013；建议发版 3.0.0）
 
 - 新增正式阶段 **⑤ 成文优化**（④ 双重校验之后、分镜之前），原 ⑤–⑨ 顺移为 ⑥–⑩，规格文件同步改名：`05-storyboard.md → 06-storyboard.md`、`06-tts-voice.md → 07-tts-voice.md`、`07-remotion-implementation.md → 08-remotion-implementation.md`、`08-render-qa.md → 09-render-qa.md`、`09-final-render.md → 10-final-render.md`（`git mv` 保留历史）。外部指向旧文件名的链接会 404；负责方的已发布集只有 1 处外链，且原本就是 404。
-- frozen 骨架有 5 个文件的**纯注释**指针随改名更新（`NarrationAudio.tsx`、`Subtitle.tsx`、`ChapterProgress.tsx`、`SceneFade.tsx`、`motion/window.ts`），md5 随之变化；另有 seeded 档的 `theme.ts`（.tmpl）、`motifs.tsx`、`README.md`（.tmpl）同步更新。**自适配**：当代集整组拷齐模板后跑 `tsc --noEmit`（仅注释变化，行为零改动）；未拷齐的集 `verify_skeleton --strict` 会报 STALE，且 `render --lang en` 预检直比 NarrationAudio / Subtitle / ChapterProgress 字节、会拦下英文渲染——需要出英文版前先拷齐。停在旧代的集按工作区 `[[skeleton.drift]]` 登记。
+- frozen 骨架有 5 个文件的**纯注释**指针随改名更新（`NarrationAudio.tsx`、`Subtitle.tsx`、`ChapterProgress.tsx`、`SceneFade.tsx`、`motion/window.ts`），md5 随之变化；另有 seeded 档的 `theme.ts`（.tmpl）、`motifs.tsx`、`README.md`（.tmpl）同步更新。**自适配**：当代集整组拷齐模板后跑 `tsc --noEmit`（仅注释变化，行为零改动）；未拷齐的集 `verify_skeleton --strict` 会报 STALE，且 `render --lang en` 预检直比 NarrationAudio / Subtitle / ChapterProgress 字节、会拦下英文渲染——需要出英文版前先拷齐。停在旧代的集登记为工作区一组 `[[skeleton.generation]]`（`episodes` 列花名册，`legacy` 钉这 5 个文件的旧指纹，取自 `verify_skeleton` 报告；只拷了一半的集报 GENERATION-MIXED），不逐集逐文件登记 `[[skeleton.drift]]`。
 - `pipeline.py` 的 `status` 行与各子命令 help 里的阶段序号随之顺移（⑥→⑦ 配音、⑧→⑨ 草渲、⑨→⑩ 终渲；`check` 标为 ④⑥ 内容门）；`stages` 子命令打印 10 行。
 
 ### Added
