@@ -48,8 +48,8 @@ STAGES_TOML = SKILL_ROOT / "references" / "stages.toml"
 #: 机制契约文档（路径变量 SSOT + 子命令穷举抄件）
 PIPELINE_MD = SKILL_ROOT / "references" / "PIPELINE.md"
 
-#: 全量圈号超集（20 以内进制即够用；阶段数从 stages() 推导，不写死——RSI-013）
-ORDINALS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫"
+#: 全量圈号超集（Unicode ①–⑳ 连续码位；阶段数从 stages() 推导，不写死——RSI-013）
+ORDINALS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 
 
 def stages() -> list[dict]:
