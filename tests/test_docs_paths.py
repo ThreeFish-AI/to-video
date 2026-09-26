@@ -362,7 +362,7 @@ def current_docs_and_code() -> list[Path]:
 
 
 def test_no_npx_for_remotion_tools():
-    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 07 命令闭环矛盾。"""
+    """RSI-008：SKILL.md 快速通道曾教 `npx tsc --noEmit`，与 08 命令闭环矛盾。"""
     offenders = [
         f"{_rel(f)}:{no}"
         for f in current_docs_and_code()
@@ -421,8 +421,8 @@ _PIPELINE_SECTION_REF_RE = re.compile(
 
 
 def test_pipeline_section_refs_resolve():
-    """具名章节指针须落到 PIPELINE.md 真实标题（RSI-009 评审：09 规格曾指向不存在的
-    「字体可复现性」节——该事实条在 07；链接可达门只验文件，不验节名）。"""
+    """具名章节指针须落到 PIPELINE.md 真实标题（RSI-009 评审：10 规格曾指向不存在的
+    「字体可复现性」节——该事实条在 08；链接可达门只验文件，不验节名）。"""
     headings = [
         ln
         for ln in README.read_text(encoding="utf-8").splitlines()

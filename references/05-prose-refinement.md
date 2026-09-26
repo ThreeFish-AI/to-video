@@ -152,7 +152,7 @@
 - [ ] 逐字稿每幕都已用空行分 beat；没有逗号、顿号收尾的半句；冒号、破折号悬置只剩真悬念；
 - [ ] 逐句朗读通过，没有念不顺的句子；
 - [ ] 改动表每行都有规则编号；成文评审 REWRITE=0；改动句复核 RISKY=0、REWRITE=0；
-- [ ] `build` + 机器门零 FAIL（分镜已存在跑 `check`，新集跑 `--pre-tts`，见第九节第 5 步）；句 id 集合与顺序与优化前完全一致（回过 ③ 的，以重新留底时为准）；
+- [ ] `build` + 机器门零 FAIL（分镜已存在跑 `check`，新集跑 `check_script.py --pre-tts`，见第九节第 5 步）；句 id 集合与顺序与优化前完全一致（回过 ③ 的，以重新留底时为准）；
 - [ ] 已有分镜的集：跨 id 搬运涉及的 id 已回查分镜与场景锚点，画面与改后文字对得上（第四节第 9 条）；
 - [ ] **通过门：成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0**。
 
@@ -204,7 +204,7 @@
 
 [23] SlideSpeak, "How to make a McKinsey-style presentation." [Online]. Available: https://slidespeak.co/blog/mckinsey-style-presentation
 
-[24] LibreTexts Humanities, "Screenplay formatting essentials," 2026. [Online]. Available: https://human.libretexts.org
+[24] N. Zeigler, "Screenplay formatting essentials," in *Scriptwriting for Video, Broadcast, and Digital Media*, §9.1. Laney College, Humanities LibreTexts, 2026. [Online]. Available: https://human.libretexts.org/Courses/Laney_College/Scriptwriting_for_Video_Broadcast_and_Digital_Media_(Zeigler)/09%3A_Formatting/9.01%3A_Screenplay_Formatting_Essentials
 
 [25] R. E. Mayer, *Multimedia Learning*, 3rd ed. Cambridge, U.K.: Cambridge Univ. Press, 2020.
 
