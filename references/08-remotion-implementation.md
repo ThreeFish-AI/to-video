@@ -165,7 +165,7 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
 文档/代码/课程站）与制造级建模交集极小，示意级建模即是正确高度。
 
 - **装法**：`npx skills add earthtojake/text-to-cad --skill cad` **只装 cad 单 skill**——
-  整库含 13 个制造域 skill（污染本 skill 窄域触发），且 step-parts 有 `api.step.parts`
+  整库含 13–14 个制造域 skill（污染本 skill 窄域触发），且 step-parts 有 `api.step.parts`
   云端外联。内核为本地 build123d + OCP（OpenCascade），MIT、零 key 零云；依赖按集临时装、
   用完可卸，**不入模板**（RSI 不变量 14）。
 - **产物路线**：建模侧直接写 **GLB-only 模型**（单 `@glb` 装饰器，无需 STEP 中转），
