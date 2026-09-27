@@ -14,7 +14,7 @@
 |---|---|---|
 | A. 维持混排现状 | `^4.0.0` + 精确 4.0.512 | **否决**：`pnpm update` 后分叉（1.1），且版本态度不可读 |
 | B. 全 caret（`^4.0.529`） | 跟随语义化版本自动升 | **否决**：`pnpm update` 静默漂移，击穿 structured 门「版本漂移会让 frozen TS 行为不同」的立论；全家桶四包仍可能被分批更新 |
-| **C. 全精确钉版 + 追新协议（采纳）** | 四包统一精确钉撰写时最新稳定版（本次 4.0.529 [2]）；建集/装依赖前 `npm view remotion version` 对照；同 major 整组追新（工作区 `[[skeleton.drift]]` 登记或 RSI 升模板）；跨 major = 重启触发器走 RSI | **采纳**：确定性（同输入同渲染）与「最新版优先」由**协议**而非**说明符语法**承担；追新动作可见（diff + 登记），与 `go mod vendor` 式「物理副本 + 校验门」的既有治理同构 [3] |
+| **C. 全精确钉版 + 追新协议（采纳）** | 四包统一精确钉撰写时最新稳定版（本次 4.0.529 [2]）；建集/装依赖前 `npm view remotion version` 对照；同 major 整组追新（工作区 `[[skeleton.drift]]` 登记或 RSI 升模板）；跨 major = 重启触发器走 RSI | **采纳**：确定性（同输入同渲染）与「最新版优先」由**协议**而非**说明符语法**承担；追新动作可见（diff + 登记），与 `go mod vendor` 式「物理副本 + 校验门」的既有治理同构（依据见 [skeleton.toml](../../assets/video-skeleton/skeleton.toml) 文件头） |
 
 ### 1.3 提醒面与口径
 
@@ -38,7 +38,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 - **静默失败模式**：官方 rules-and-anti-patterns 自证——动画「look right in the live preview and still render wrong on a cold, non-linear render worker」（cold seek 隐藏态、GSAP `immediateRender`、SVG draw-on 失效），且两类坑官方明言 "carry no rule code"，须 prompt 层规避 [5]。对照 Remotion 的帧号纯函数模型「更简单、没有需要注册的时间线契约」（HyperFrames 官方对比页自认 [6]）。
 - **负向知识清零成本**：本技能在 Remotion 上沉淀的 Sequence 局部时长陷阱、regioned Main 指纹、真实分集回归语料、抽帧 QA 门，构成「设计-实现-验证」闭环；换引擎 = 清零重积累。官方 `/remotion-to-hyperframes` 迁移 skill 自称约 80% 机械翻译、20%（useState/useEffect 状态机等）显式拒绝误译并双版本逐帧比对 [6]——侧面印证不完全兼容。
 - **不共用双引擎**：时序 SSOT（timing.json 双语共读）、frozen 骨架 + verify_skeleton 字节门、manifest 驱动时间轴、QA 抽帧门整套体系均以「唯一渲染引擎」为前提；引入第二引擎制造的不是冗余备份而是双份事实源。
-- **许可对照**（事实登记，非决策依据）：Remotion 为 source-available 自有许可，>3 人公司须 Company License（[PIPELINE.md §八](../../references/PIPELINE.md) 已登记）；HyperFrames Apache-2.0。官方预告 **Remotion 5.0 将微调 license 条款**（升级窗口须复读 LICENSE）——若收紧，Apache-2.0 的合规吸引力上升，此为再评估触发器之一。
+- **许可对照**（事实登记，非决策依据）：Remotion 为 source-available 自有许可，>3 人公司须 Company License [3]（[PIPELINE.md §八](../../references/PIPELINE.md) 已登记）；HyperFrames Apache-2.0。官方预告 **Remotion 5.0 将微调 license 条款**（升级窗口须复读 LICENSE）——若收紧，Apache-2.0 的合规吸引力上升，此为再评估触发器之一。
 
 ### 2.3 复核修正（对抗性审查产物）
 
