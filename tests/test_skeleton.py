@@ -309,8 +309,10 @@ def test_template_pins_remotion_family_exact_and_identical():
         "@remotion/media",
     )
     pins = {name: pkg["dependencies"][name] for name in family}
-    exact = {v for v in pins.values() if re.fullmatch(r"\d+\.\d+\.\d+", v)}
-    assert len(exact) == 1, f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
+    all_exact = all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in pins.values())
+    assert all_exact and len(set(pins.values())) == 1, (
+        f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
+    )
 
 
 def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
