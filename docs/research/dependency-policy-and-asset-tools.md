@@ -64,7 +64,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 |---|---|
 | 常驻依赖（进模板/pyproject） | **否决**：信源画像（论文/文档/代码/课程站）与制造级 CAD 交集极小；OCP+build123d+cadgen 约 70–80 MB 边际体积（playwright+chromium 已因 QA 预装）+ `build123d<0.12` 钉版 churn；着色与动画主战场仍在 three.js 层——CAD 只贡献几何（RSI 不变量 14） |
 | 固化为 Stage ⑧ 子步骤 | **否决**：给低频需求设常驻流程面，制造噪声触发 |
-| **按集 opt-in 独立工具（采纳）** | `npx skills add earthtojake/text-to-cad --skill cad` 只装单 skill（skills CLI `-s/--skill` 通道 [10]；整库会污染窄域触发且 step-parts 有云端外联）；须过 08 既有 3D 三条宪法（几何进 CAD、颜色仍归 theme 层覆写材质、零光源）与「同帧 PNG 逐字节相同」验收；依赖按集临时装用完可卸，风险面为零（MIT、本地、无 key）→ 随时可补装，不需预摊 |
+| **按集 opt-in 独立工具（采纳）** | `npx skills add earthtojake/text-to-cad --skill cad` 只装单 skill（skills CLI `-s/--skill` 通道 [10]；整库会污染窄域触发且 step-parts 有云端外联）；须过 08 既有 3D 三条宪法（宪法 1 放宽为「曲面只许来自 CAD、手搭仍守直角体词表」；颜色仍归 theme 层覆写材质、零光源；相机零动画）与「同帧 PNG 逐字节相同」验收；依赖按集临时装用完可卸，风险面为零（MIT、本地、无 key）→ 随时可补装，不需预摊 |
 
 边界：DXF / 工程图 PDF 不进流水线（工程图风格直接 SVG 重绘，与「资产可代码复现」哲学同向——01 规格图片纪律本就禁外采素材，本地生成不在此列）。
 

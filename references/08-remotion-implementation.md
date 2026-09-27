@@ -172,10 +172,14 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
   `cadgen glb build` 产 glTF 2.0 → three/examples 的 `GLTFLoader` 原生直载，**零转换链**
   （社区惯用的 drei `useGLTF` 属被禁依赖，不引）。`cadgen … snapshot` 的 PNG 可作
   staticFile 静帧素材。STL（无颜色）、DXF/工程图 PDF 不进流水线——工程图风格直接 SVG 重绘。
-- **宪法适配**（三条宪法与读色契约对外部资产同样生效）：几何来自 CAD，**颜色仍归
-  theme 层**——GLB 自带材质（build123d 零件/面着色可带入）进场景前覆写为面色常量或
-  token 派生（面色常量放模块内，同「读色契约」）；零光源 unlit 不变；相机纪律照旧
-  （转物体不动相机，深度靠静置俯角/偏航）；动画默认 Remotion
+- **宪法适配**（读色契约与宪法 2/3 对外部资产原样生效；宪法 1 按下述边界放宽）：
+  **曲面只许来自 CAD 模型，手搭几何仍守「只做直角体」**——元素词表（box/edges/
+  lineLoop/basic 材质）不因引入 GLB 扩面；宪法 1 背后的母题独占约束照旧：画面里的
+  「圆」已被不变量母题（如 EP1 的 LoopRing）独占时，该画面不出现曲面体（换镜头或
+  改棱线示意）。**颜色仍归 theme 层**——GLB 自带材质（build123d 零件/面着色可带入）
+  进场景前覆写为面色常量或 token 派生（面色常量放模块内，同「读色契约」；GLTFLoader
+  默认的 MeshStandardMaterial 在零光源下渲染为黑，覆写是启用前提而非可选项）；零光源
+  unlit 不变；相机纪律照旧（转物体不动相机，深度靠静置俯角/偏航）；动画默认 Remotion
   代码驱动（`cadgen glb build --animation` 虽可烘焙 glTF 动画，但逐帧确定性与 beat
   对齐以代码驱动为正路）；「同帧 PNG 逐字节相同」验收照旧。
 - 评估依据与安装审计见 [研究文档](../docs/research/dependency-policy-and-asset-tools.md) §三。
