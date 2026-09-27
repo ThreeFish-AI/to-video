@@ -32,6 +32,7 @@
 | [evals/README.md](../../evals/README.md) | 输出质量评测与触发评测的用法（`evals.json` / `trigger-evals.json`） |
 | [modeling-experience-distillation.md](../research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
 | [prose-refinement.md](../research/prose-refinement.md) | ⑤ 成文优化的语料取证、理论依据（IEEE 引用）与方案比选（落位 / 插入位置 / 执法力度） |
+| [dependency-policy-and-asset-tools.md](../research/dependency-policy-and-asset-tools.md) | 依赖版本策略比选、HyperFrames 复核（vs Remotion）与 text-to-cad 评估（RSI-016 循证） |
 
 ## 资产
 

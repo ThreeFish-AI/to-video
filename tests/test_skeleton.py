@@ -60,6 +60,35 @@ SCAFFOLD = SCRIPTS / "scaffold.py"
 
 GATED_CLASSES = ("frozen", "overridable", "regioned", "structured")
 
+
+def remotion_family(pkg: dict) -> dict[str, str]:
+    """package.json（dependencies 与 devDependencies 一并）里属于 Remotion 全家桶的
+    子集（PIPELINE §九 追新协议的整组单位）。
+
+    按**实际依赖集合**取、不写死包名与依赖节：模板或单集日后新增 `@remotion/*`
+    （如 three 点缀路径的 `@remotion/three`、规范位置在 devDependencies 的
+    `@remotion/testing`）自动入组——写死四包或漏扫一节都会让钉版门对新成员失明。
+    同名家族包两节并存且取值不同时直接报错：merge 只能保留一节，另一节的
+    说明符被静默遮蔽会让钉版门对跨节混排失明（六次评审①）。"""
+    dev = pkg.get("devDependencies", {})
+    deps = pkg.get("dependencies", {})
+
+    def is_family(name: str) -> bool:
+        return name == "remotion" or name.startswith("@remotion/")
+
+    clash = {
+        k: (dev[k], deps[k])
+        for k in dev.keys() & deps.keys()
+        if is_family(k) and dev[k] != deps[k]
+    }
+    if clash:
+        raise ValueError(
+            f"Remotion 家族同名包两节取值不同（merge 会遮蔽一节）：{clash}"
+        )
+    merged = {**dev, **deps}
+    return {k: v for k, v in merged.items() if is_family(k)}
+
+
 #: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）；离线为 None。
 #: 真树判据只在集成模式下运行——本仓（skill 仓）没有 episodes/，离线无从对账。
 INTEGRATION_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
@@ -293,6 +322,44 @@ def test_gate_catches_structured_drift_via_tmpl_fallback(tmp_path):
     assert "package.json" in r.stdout, r.stdout
 
 
+def test_template_pins_remotion_family_exact_and_identical():
+    """**模板内侧写（RSI-016）**：Remotion 官方硬约束全部 `@remotion/*` 与 `remotion`
+    版本严格一致——`^` 与精确混排会在 `pnpm update` 后分叉、触发版本不一致错误
+    （本仓模板曾踩此病灶）。structured 门只执法「集 vs 模板」结构一致，不管模板
+    自身的说明符形态，此缺口由本测试钉死：全家桶全精确（无 `^`/`~`）且版本全等；
+    家族成员按模板实际依赖集合取（dependencies 与 devDependencies 一并，含日后
+    新增的 `@remotion/*`）。
+    """
+    pkg = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )
+    pins = remotion_family(pkg)
+    assert pins, "模板未见 remotion / @remotion/*——家族为空即门失效"
+    all_exact = all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in pins.values())
+    assert all_exact and len(set(pins.values())) == 1, (
+        f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
+    )
+
+
+def test_remotion_family_rejects_cross_section_duplicate():
+    """**反控（六次评审①）**：同名家族包两节并存且取值不同时，两节 merge 只能保留
+    dependencies 一节——devDependencies 里的 `^`/异版说明符被静默遮蔽，钉版门对
+    跨节混排失明（npm/pnpm 均接受跨节同名 manifest，搬节忘删残留即触发）。helper
+    须当场报错而非遮蔽放行；同值重复条目无害，照常收编。"""
+    pkg = {
+        "dependencies": {"remotion": "4.0.529", "@remotion/cli": "4.0.529"},
+        "devDependencies": {"remotion": "^4.0.0"},
+    }
+    with pytest.raises(ValueError, match="两节取值不同"):
+        remotion_family(pkg)
+    assert remotion_family(
+        {
+            "dependencies": {"remotion": "4.0.529"},
+            "devDependencies": {"remotion": "4.0.529"},
+        }
+    ) == {"remotion": "4.0.529"}
+
+
 def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
     """**正控（豁免失效）**：登记表以 (episode, path) 为键，若不钉指纹，该文件此后
     对任何改动都永久免检——而 Main.tsx 恰是每集都要动的文件。指纹相符才放行，
@@ -347,6 +414,48 @@ def test_i2_honours_the_drift_registry(tmp_path):
     register_drift(ws, PROBE_A, rel, vs.fingerprint(victim, rel, "frozen"))
     r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 0, f"已登记的偏离仍被 STALE 判红：\n{r.stdout}"
+
+
+def test_family_bump_needs_drift_per_episode(tmp_path):
+    """**正控（PIPELINE §九 追新协议，RSI-016 评审回归）**：drift 按「集 × 文件」
+    登记，首集的条目不覆盖续集——续集跟随系列追新却不另登记，I2 报 STALE；逐集
+    登记后放行。反面（续集停在模板版）门不报：系列里仍有一集等于模板指纹时 I1
+    参照系取模板，此时系列内一致靠人工核对，§九 已如实写明。
+    """
+    import verify_skeleton as vs
+
+    rel = "video/package.json"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    # 探针 = 模板钉版 patch+1（与钉版永不相撞）：写死字面量会在模板追平该值时
+    # update 变 no-op、断言以一份全绿 stdout 假红且无线索指向版本碰撞
+    pin = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )["dependencies"]["remotion"]
+    probe = f"{pin.rsplit('.', 1)[0]}.{int(pin.rsplit('.', 1)[1]) + 1}"
+    fps = {}
+    for slug in (PROBE_A, PROBE_B):
+        assert scaffold_into(skill, ws, slug).returncode == 0
+        pkg = ws / "episodes" / slug / rel
+        d = json.loads(pkg.read_text(encoding="utf-8"))
+        family = remotion_family(d)
+        for section in ("dependencies", "devDependencies"):
+            d.setdefault(section, {}).update(
+                {k: probe for k in d[section] if k in family}
+            )
+        pkg.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+        fps[slug] = vs.fingerprint(pkg, rel, "structured")
+    write_series(ws, [("pair", [PROBE_A, PROBE_B])])
+    verify = skill / "scripts" / "verify_skeleton.py"
+
+    register_drift(ws, PROBE_A, rel, fps[PROBE_A])
+    r = run(verify, "--strict", cwd=ws)
+    stale = [ln for ln in r.stdout.splitlines() if "STALE" in ln and rel in ln]
+    assert r.returncode == 1 and stale and PROBE_B in stale[0], r.stdout
+
+    register_drift(ws, PROBE_B, rel, fps[PROBE_B])
+    r = run(verify, "--strict", cwd=ws)
+    assert r.returncode == 0, f"逐集登记后仍未放行：\n{r.stdout}"
 
 
 def test_i2_honours_the_overridable_class(tmp_path):
@@ -583,6 +692,20 @@ def test_scaffold_rejects_bad_slug_and_existing_dir(tmp_path):
     (ws / "episodes" / "claude-code-explained-video").mkdir()
     r = run(SCAFFOLD, "claude-code-explained-video", "--title", "x", cwd=ws)
     assert r.returncode != 0 and "已存在" in (r.stdout + r.stderr)
+
+
+def test_scaffold_pin_hint_reads_template_not_rendered_output(tmp_path):
+    """建集结尾的钉版提示读**渲染前**的模板（RSI-016 评审回归）：`--title` 原样
+    插进 package.json 的 description，标题含 ASCII 双引号时渲染产物不是合法 JSON，
+    读产物即在全部文件落盘后 traceback 退出、其后的提示一并被吞。"""
+    ws = flat_ws(tmp_path)
+    r = run(SCAFFOLD, "pytest-probe-video", "--title", '什么是 "Attention"', cwd=ws)
+    assert r.returncode == 0, r.stdout + r.stderr
+    pin = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )["dependencies"]["remotion"]
+    assert f"模板钉 remotion {pin}" in r.stdout, r.stdout
+    assert "冻结档位与漂移判据" in r.stdout, r.stdout
 
 
 def test_init_workspace_is_idempotent(tmp_path):
