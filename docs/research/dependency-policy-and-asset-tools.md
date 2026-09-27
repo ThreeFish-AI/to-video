@@ -62,7 +62,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 
 | 方案 | 判定 |
 |---|---|
-| 常驻依赖（进模板/pyproject） | **否决**：信源画像（论文/文档/代码/课程站）与制造级 CAD 交集极小；OCP+build123d+cadgen 约 70–80 MB 边际体积（playwright+chromium 已因 QA 预装）+ `build123d<0.12` 钉版 churn；着色与动画主战场仍在 three.js 层——CAD 只贡献几何（RSI 不变量 14） |
+| 常驻依赖（进模板/pyproject） | **否决**：信源画像（论文/文档/代码/课程站）与制造级 CAD 交集极小；OCP+build123d+cadgen 约 70–80 MB 边际体积（playwright 非预装：archify 图解录制同经 `uv run --with playwright` 按需解析，浏览器启动系统 Chrome）+ `build123d<0.12` 钉版 churn；着色与动画主战场仍在 three.js 层——CAD 只贡献几何（RSI 不变量 14） |
 | 固化为 Stage ⑧ 子步骤 | **否决**：给低频需求设常驻流程面，制造噪声触发 |
 | **按集 opt-in 独立工具（采纳）** | `npx skills add earthtojake/text-to-cad --skill cad` 只装单 skill（skills CLI `-s/--skill` 通道 [10]；整库会污染窄域触发且 step-parts 有云端外联）；须过 08 既有 3D 三条宪法（宪法 1 放宽为「曲面只许来自 CAD、手搭仍守直角体词表」；颜色仍归 theme 层覆写材质、零光源；相机零动画）与「同帧 PNG 逐字节相同」验收；依赖按集临时装用完可卸，风险面为零（MIT、本地、无 key）→ 随时可补装，不需预摊 |
 
@@ -90,7 +90,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 
 [7] J. Fitzgerald (earthtojake), "text-to-cad," GitHub repository（实测 2026-09-27：16,401 stars、MIT、2026-04-22 建仓；skills 清单与安装通道）. [Online]. Available: https://github.com/earthtojake/text-to-cad
 
-[8] J. Fitzgerald, "cadgen," PyPI（requires_dist：build123d<0.12,>=0.11.1、cadquery-ocp-novtk<8,>=7.9 等；requires_python ≥3.11；37 releases / 首发至 0.6.6 实测；PyPI license 元数据缺失，MIT 经仓库 API 确认）. [Online]. Available: https://pypi.org/project/cadgen/
+[8] J. Fitzgerald, "cadgen," PyPI（requires_dist：build123d<0.12,>=0.11.1、cadquery-ocp-novtk<8,>=7.9 等；requires_python ≥3.11；37 releases / 首发至 0.6.6 实测；license_expression: MIT——PEP 639 元数据，项目页据此显示）. [Online]. Available: https://pypi.org/project/cadgen/
 
 [9] J. Fitzgerald, "Supported exports," text-to-cad skills/cad/references（"STEP is one output kind, not the primary"；glTF 2.0 Y-up、"one material per distinct part/face color"；`--animation` 通道）. [Online]. Available: https://github.com/earthtojake/text-to-cad/blob/main/skills/cad/references/supported-exports.md
 
