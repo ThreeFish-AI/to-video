@@ -19,6 +19,7 @@ from pron_marks import (  # noqa: E402
     POLYPHONE_CANDIDATES,
     has_marks,
     scan_candidates,
+    semantic_missing,
     strip_marks,
     validate,
 )
@@ -164,7 +165,7 @@ def _marked_forms(advice: str) -> list[str]:
 
 def test_every_candidate_advice_passes_validation():
     assert POLYPHONE_CANDIDATES, "候选表为空——检测器失效或表被误删"
-    for char, risk, advice in POLYPHONE_CANDIDATES:
+    for char, risk, advice, _rules in POLYPHONE_CANDIDATES:
         forms = _marked_forms(advice)
         assert forms, f"候选 {char!r} 的建议列没有任何标注形态：{advice!r}"
         for form in forms:
@@ -215,5 +216,134 @@ def test_glossary_points_to_scanner_not_a_second_table():
     assert "--pron-candidates" in glossary, (
         "须给出精确命令（check_script.py --pron-candidates）"
     )
-    # 纪律句必须保留：候选 ≠ 台账，确认读错才标注
-    assert "不要预防性标注" in glossary
+    # 纪律句必须保留（RSI-014 后两段式）：规则命中写稿即标、无规则依据不预防性标注
+    assert "写稿即标注" in glossary and "无规则依据的预防性标注" in glossary
+
+
+# ---------------- 语义规则表（RSI-014）：结构合法性与文档同源 ----------------
+#
+# 规则是「命中即建议标注」的高危面——错规则会把可能读对强推成必然读错（上游
+# 丢弃原字无兜底），故表本身先过三道结构门：正则锚本字、读音是合法拼音、
+# 文档速查表与代码同源。
+
+
+def test_rules_must_anchor_their_char():
+    """覆盖判定按「匹配区间盖住本字 occurrence」——正则不含本字则永远盖不住，
+    规则静默失效。"""
+    for char, _risk, _advice, rules in POLYPHONE_CANDIDATES:
+        for pattern, _reading in rules:
+            assert char in pattern.pattern, (
+                f"{char!r} 的规则 {pattern.pattern!r} 不含本字——覆盖判定失效"
+            )
+
+
+def test_rule_readings_are_legal_pinyin():
+    """推荐读音必须能直接写成合法标注（全大写 + 声调；j/q/x+ü 写 V 的约束同校验器）。"""
+    n = 0
+    for char, _risk, _advice, rules in POLYPHONE_CANDIDATES:
+        for _pattern, reading in rules:
+            errs, _ = validate(f"测试句<{char}|{reading}>测试。")
+            assert errs == [], f"{char!r} 规则推荐读音 {reading} 非法：{errs}"
+            n += 1
+    assert n > 0, "语义规则表为空——行→HANG2 的实证规则被误删（jev 集全片 ~30 处）"
+
+
+def test_glossary_quickref_in_sync_with_rules():
+    """PRON-GLOSSARY「语义规则速查」节由本测试从 POLYPHONE_CANDIDATES 渲染并
+    钉住——文档里的表手动维护必然与代码漂移（候选清单的先例）。表格单元内的
+    `|` 按 Markdown 转义为 `\\|`，与文档写法一致。
+    """
+    glossary = (
+        Path(__file__).resolve().parents[1] / "references" / "PRON-GLOSSARY.md"
+    ).read_text(encoding="utf-8")
+    assert "语义规则速查" in glossary
+    rows = 0
+    for char, _risk, _advice, rules in POLYPHONE_CANDIDATES:
+        for pattern, reading in rules:
+            esc = "\\"  # Markdown 表格单元内的 | 须转义
+            row = (
+                f"| {char} | `{pattern.pattern.replace('|', esc + '|')}` "
+                f"| {reading} | `<{char}{esc}|{reading}>` |"
+            )
+            assert row in glossary, (
+                f"速查表与 pron_marks 漂移（缺 {char} → {reading} 行）：{row!r}"
+            )
+            rows += 1
+    assert rows > 0
+
+
+# ---------------- 语义消歧（semantic_missing，RSI-014 核心）----------------
+
+
+def test_semantic_missing_recommends_hang_for_table_contexts():
+    """jev 病理的正控：表格/量词语境的 行 未标注 → 推荐 HANG2（TTS 默认倾向 xíng，
+    全片 ~30 处系统性读错直到终渲才被发现）。"""
+    for text in (
+        "每一行都要重新算。",
+        "单选行记一分。",
+        "行尾有个数字。",
+        "另起一行。",
+    ):
+        hits = semantic_missing([{"id": "p0-01", "scene": "P0", "text": text}])
+        assert [(h[1], h[2]) for h in hits] == [("行", "HANG2")], (text, hits)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "系统运行得很稳定。",  # xíng 向 = TTS 默认倾向，不设规则
+        "把任务执行完。",
+        "这是他的行为。",
+        "分类行动开始。",  # 类行 后跟 动 → 预查排除
+        "来了一行人。",  # 一行人 yìxíng → 预查排除
+        "另一段行程。",  # 的行 后跟 程 → 预查排除
+        "普通的句子没有候选字。",
+    ],
+)
+def test_semantic_missing_no_false_hit_on_xing_direction(text):
+    """规则只挂已证实会错的方向（HANG2 面）——xíng 向语境与干净句零误报。
+    误报会逼人绕门：把默认读对的词标成「必须标注」即噪声。"""
+    assert semantic_missing([{"id": "p0-01", "scene": "P0", "text": text}]) == []
+
+
+def test_semantic_missing_per_occurrence_precision():
+    """occurrence 粒度：同一句里 银行 已标注而 每行 未标注 → 只报后者。
+    句级判定（句中有任一标注即过）会放过同句第二个未标注 occurrence。"""
+    items = [
+        {
+            "id": "p0-01",
+            "scene": "P0",
+            "text": "银行里每一行都要盖章。",
+            "ttsText": "银<行|HANG2>里每一行都要盖章。",
+        }
+    ]
+    hits = semantic_missing(items)
+    assert len(hits) == 1 and hits[0][2] == "HANG2" and hits[0][4] == "一行"
+
+
+def test_semantic_missing_respects_author_override():
+    """已标注的 occurrence 视为作者显式接管——即便读音与推荐不同也不报
+    （语义规则是建议不是权威，规则表本身可能错）。"""
+    items = [
+        {
+            "id": "p0-01",
+            "scene": "P0",
+            "text": "每一行都要重新算。",
+            "ttsText": "每一<行|XING2>都要重新算。",  # 作者异议：标了别的读音
+        }
+    ]
+    assert semantic_missing(items) == []
+
+
+def test_semantic_missing_multi_char_mark_covers_occurrence():
+    """多字词标注 `<银行|YIN2 HANG2>` 内的 行 同样算已标注。"""
+    items = [
+        {
+            "id": "p0-01",
+            "scene": "P0",
+            "text": "银行是机构，每一行都要对账。",
+            "ttsText": "<银行|YIN2 HANG2>是机构，每一行都要对账。",
+        }
+    ]
+    hits = semantic_missing(items)
+    assert len(hits) == 1 and hits[0][4] == "一行"

@@ -172,28 +172,62 @@ def load_vocab(path) -> frozenset[str] | None:
         return None
 
 
-#: 多音字候选表：(字, 易错点, 若读错则标注)。**候选 ≠ 台账**——未经实测确认模型
-#: 真的读错，只作复听时的注意力清单（PRON-GLOSSARY.md）；确认读错才回填台账并
-#: 在稿中标注，预防性标注反而引入风险（标注错 = 必然读错，上游丢弃原字无兜底）。
-#: 候选表本体收敛在此而非 PRON-GLOSSARY.md：文档里的表没有消费者，只会与扫描器漂移。
+#: 多音字候选表：(字, 易错点, 若读错则标注, 语义规则)。**候选 ≠ 台账**——未经语义
+#: 规则消歧的字只作复听时的注意力清单（PRON-GLOSSARY.md）；确认读错才回填台账并
+#: 在稿中标注。候选表本体收敛在此而非 PRON-GLOSSARY.md：文档里的表没有消费者，
+#: 只会与扫描器漂移。
 #:
-#: 前半 = PRON-GLOSSARY.md 原观察清单（科普题材高频多音字）；「一行代码 / 运行 /
-#: 重试 / 差异 CHA4 / 更加 / 变更」等语境为 claude-code 系列（拆解 Claude Code）
-#: 追加的词表——该系列口播高频命中这批字，复听时按系列词表加权关注。
-POLYPHONE_CANDIDATES: tuple[tuple[str, str, str], ...] = (
+#: **语义规则（RSI-014）**：`(正则, 推荐读音)` 列表，正则**必须包含本字**（覆盖
+#: 判定按「匹配区间盖住 occurrence」）。命中即给出字典级确定的读音，命中的
+#: occurrence 应在写稿阶段就标注（RSI-014 起 03 规格纪律）；未命中的 occurrence
+#: 仍列双候选、等复听确认（歧义语境下预防性标注反而引入风险——标注错 = 必然
+#: 读错，上游丢弃原字无兜底）。规则顺序即消歧优先级：同一 occurrence 被多条
+#: 规则覆盖时先命中者胜。
+#:
+#: **入表纪律 = 先探针后成门**（同 READING_TRAPS：加规则前先拿证据，不凭直觉
+#: 列清单）。规则面瞄准的是「**偏离 TTS 默认倾向**的高危读音」，不是多音字的
+#: 全部读法：jev 集实证 TTS 对 行 的默认倾向是 xíng——表格语境（每行/单选行/
+#: 行尾）全片 ~30 处系统性读错（终渲后人耳发现，negentropy#1173 修复标了 27 处
+#: HANG2），而 运行/执行 等 xíng 向语境 8 处仅 1 处（放行）需要标注——默认读
+#: 对的方向不设规则，规则只挂**已证实会错**的方向。其余 8 个候选字目前没有
+#: 系统性读错证据，规则留空（`()`）；某字经试听证实系统性读错后，其高危方向
+#: 的规则再入表（台账 PRON-GLOSSARY.md 是证据入口）。错规则会把可能读对强推
+#: 成必然读错，宁缺勿错。
+POLYPHONE_CANDIDATES: tuple[
+    tuple[str, str, str, tuple[tuple[re.Pattern[str], str], ...]], ...
+] = (
     (
         "行",
         "银行/一行代码 háng · 行走/运行 xíng",
         "`<行|HANG2>` / `<行|XING2>`",
+        (
+            # HANG2（高危向）：表格/量词语境。负面预查排除 xíng 向复合词被量词
+            # `一?行` 误收（的一行人/类行为/类行动——`的行` 与 `类行` 各自预查）
+            (
+                re.compile(
+                    r"(?:银行|行列|内行|外行|行业|行话|行尾|行首|行间|行内|行里|行号|行上|行样张?|整行|类行(?![为动]))"
+                ),
+                "HANG2",
+            ),
+            (
+                re.compile(
+                    r"(?:单选|多选|等级|是否|别的|另一?|同一?|下一?|上一?|前一?|后一?|某|这|那|每|各|同|几|两|二|三|四|五|六|七|八|九|十|百|一|\d+) ?行(?![人])"
+                ),
+                "HANG2",
+            ),
+            (re.compile(r"的行(?![为程动业政走人])"), "HANG2"),
+            # XING2 不设规则：xíng 是 TTS 默认倾向（jev 集运行/执行/放行 8+ 处仅
+            # 1 处防御性标注、其余实测读对）——默认读对的方向不产生门需求
+        ),
     ),
-    ("模", "模型 mó · 模具 mú", "`<模|MO2>`"),
-    ("率", "效率 lǜ · 率领 shuài（ü 一律写 V）", "`<率|LV4>`"),
-    ("差", "误差/差异 chā · 差不多 chà", "`<差|CHA1>` / `<差|CHA4>`"),
-    ("重", "重复/重试 chóng · 重要 zhòng", "`<重|CHONG2>` / `<重|ZHONG4>`"),
-    ("量", "数量/量化 liàng · 测量 liáng", "`<量|LIANG4>`"),
-    ("卷", "卷积/卷起 juǎn · 试卷/问卷 juàn（j+ü→JV）", "`<卷|JVAN3>`"),
-    ("系", "系统/关系 xì（口语易读 jì）", "`<系|XI4>`"),
-    ("更", "更新/变更 gēng · 更加 gèng", "`<更|GENG1>` / `<更|GENG4>`"),
+    ("模", "模型 mó · 模具 mú", "`<模|MO2>`", ()),
+    ("率", "效率 lǜ · 率领 shuài（ü 一律写 V）", "`<率|LV4>`", ()),
+    ("差", "误差/差异 chā · 差不多 chà", "`<差|CHA1>` / `<差|CHA4>`", ()),
+    ("重", "重复/重试 chóng · 重要 zhòng", "`<重|CHONG2>` / `<重|ZHONG4>`", ()),
+    ("量", "数量/量化 liàng · 测量 liáng", "`<量|LIANG4>`", ()),
+    ("卷", "卷积/卷起 juǎn · 试卷/问卷 juàn（j+ü→JV）", "`<卷|JVAN3>`", ()),
+    ("系", "系统/关系 xì（口语易读 jì）", "`<系|XI4>`", ()),
+    ("更", "更新/变更 gēng · 更加 gèng", "`<更|GENG1>` / `<更|GENG4>`", ()),
 )
 
 
@@ -202,11 +236,75 @@ def scan_candidates(items: list[dict]) -> list[tuple[str, str, str, str]]:
 
     消费者：`check_script.py --pron-candidates`（复听注意力报告，非门）。扫描
     `text`（人读面）即可——标注自带原字，`ttsText` 里的候选字在 `text` 中必然
-    同样出现，不存在只落在 ttsText 的多音字。
+    同样出现，不存在只落在 ttsText 的多音字。语义消歧（命中规则给推荐读音）
+    见 `semantic_missing`——本函数保持「字符在场即列双候选」的粗粒度口径，
+    与语义命中面互补不替代。
     """
     out: list[tuple[str, str, str, str]] = []
     for it in items:
-        for char, risk, advice in POLYPHONE_CANDIDATES:
+        for char, risk, advice, _rules in POLYPHONE_CANDIDATES:
             if char in it["text"]:
                 out.append((it["id"], char, risk, advice))
+    return out
+
+
+def _char_occurrences(tts: str, char: str) -> list[tuple[int, str | None]]:
+    """→ [(stripped 坐标, 该 occurrence 的标注读音或 None)]。
+
+    按 `strip_marks` 的剥离几何逐字符推算：标记本体携带原字（group(1)），标记内
+    的字记为「已标注（读音=group(2)）」，标记外的字记为「未标注」。stripped
+    坐标即该字在 `strip_marks(tts)` 里的下标——语义规则的上下文匹配在 stripped
+    面上做，坐标因此可直接对齐。
+    """
+    out: list[tuple[int, str | None]] = []
+    stripped_pos = 0
+    pos = 0
+    for m in PRON_MARK_RE.finditer(tts):
+        for ch in tts[pos : m.start()]:
+            if ch == char:
+                out.append((stripped_pos, None))
+            stripped_pos += 1
+        for ch in m.group(1):
+            if ch == char:
+                out.append((stripped_pos, m.group(2)))
+            stripped_pos += 1
+        pos = m.end()
+    for ch in tts[pos:]:
+        if ch == char:
+            out.append((stripped_pos, None))
+        stripped_pos += 1
+    return out
+
+
+def semantic_missing(items: list[dict]) -> list[tuple[str, str, str, str, str]]:
+    """语义规则命中而该 occurrence 无任何标注 → [(句id, 字, 推荐读音, 建议标注, 命中上下文)]。
+
+    RSI-014 的核心判定：jev 集全片 30 处「行(háng)」被读成 xíng 直到终渲才靠人耳
+    发现——字典级确定的语境（每行/单选行/银行）不该等复听。判定按 occurrence
+    粒度：规则匹配区间盖住该字且该字**不在任何标注内**才报；已标注（无论读音
+    是否同推荐）视为作者已显式接管，不报——语义规则是建议不是权威，规则表
+    本身可能错，作者的不同标注是合法异议。
+
+    消费者：`check_script.py --pron-candidates`（建议清单）与 `--pron-gate`
+    （升为门）。纯函数、不判错。
+    """
+    out: list[tuple[str, str, str, str, str]] = []
+    for it in items:
+        tts = it.get("ttsText") or it["text"]
+        stripped = strip_marks(tts)
+        for char, _risk, _advice, rules in POLYPHONE_CANDIDATES:
+            if not rules or char not in stripped:
+                continue
+            occ = _char_occurrences(tts, char)
+            occ_pos = {p for p, _reading in occ}
+            covered: dict[int, tuple[str, str]] = {}
+            for pattern, reading in rules:
+                for m in pattern.finditer(stripped):
+                    for p in range(m.start(), m.end()):
+                        if p in occ_pos and p not in covered:
+                            covered[p] = (reading, m.group(0))
+            for p, marked in occ:
+                if p in covered and marked is None:
+                    reading, ctx = covered[p]
+                    out.append((it["id"], char, reading, f"<{char}|{reading}>", ctx))
     return out

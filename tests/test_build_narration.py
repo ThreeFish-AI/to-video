@@ -38,10 +38,40 @@ def test_happy_path_and_golden_json(tmp_path):
     assert r.returncode == 0, r.stderr
     data = json.loads((root / "script" / "narration.json").read_text(encoding="utf-8"))
     assert data == [
-        {"id": "p0-01", "scene": "P0", "text": "甲句。"},
-        {"id": "p0-02", "scene": "P0", "text": "乙句。"},
+        {"id": "p0-01", "scene": "P0", "text": "甲句。", "beatStart": True},
+        {"id": "p0-02", "scene": "P0", "text": "乙句。"},  # 备注→句子不断 beat
     ]
     assert "不相关标题" not in json.dumps(data, ensure_ascii=False)
+
+
+def test_beat_start_marks_blank_line_beats(tmp_path):
+    """beatStart（RSI-015）：幕首句与幕内空行后的首句落 True、`>` 备注行不断 beat、
+    幕切换天然开 beat——beat 边界是 --term-density 逐 beat 统计的输入。"""
+    root = make_project(
+        tmp_path,
+        "## P0\n"
+        "- [p0-01] 首句开 beat。\n"
+        "- [p0-02] 同 beat 第二句。\n"
+        "\n"
+        "> 角标：Foo\n"
+        "- [p0-03] 空行后的首句开新 beat。\n"
+        "\n"
+        "\n"
+        "- [p0-04] 连续空行仍是一个 beat 边界。\n"
+        "## P1\n"
+        "- [p1-01] 换幕开新 beat。\n",
+    )
+    r = run_build(root)
+    assert r.returncode == 0, r.stderr
+    data = json.loads((root / "script" / "narration.json").read_text(encoding="utf-8"))
+    flags = {i["id"]: i.get("beatStart", False) for i in data}
+    assert flags == {
+        "p0-01": True,
+        "p0-02": False,
+        "p0-03": True,  # 空行断 beat（备注行插在中间不断）
+        "p0-04": True,
+        "p1-01": True,
+    }
 
 
 def test_missing_file_actionable_exit(tmp_path):
@@ -189,7 +219,7 @@ def test_en_build_happy_path_json_and_lock(tmp_path):
         (root / "script" / "narration.en.json").read_text(encoding="utf-8")
     )
     assert data == [
-        {"id": "p0-01", "scene": "P0", "text": "First sentence."},
+        {"id": "p0-01", "scene": "P0", "text": "First sentence.", "beatStart": True},
         {"id": "p0-02", "scene": "P0", "text": "Second sentence."},
     ]
     # 各语言各槽位：en build 不改写主稿产物

@@ -310,6 +310,155 @@ def test_pron_candidates_silent_on_clean_text(project):
     assert "候选命中 0 处" in out
 
 
+# ---------------- --term-density：④B 密度预算的机器面（RSI-015，WARN 级）----------------
+#
+# 病理（jev 集）：三个名词系统（集中度/门槛/计费单位）全部先用后讲，④B 五条
+# 全检通过而普通观众一脸懵。中文术语机器分不出来——由评审员经 --terms 声明
+# （声明优于猜测），拉丁字母词自动计入；beat 边界读 beatStart。WARN 级不改退出码。
+
+
+def write_items(root: Path, items: list[dict]) -> None:
+    (root / "script" / "narration.json").write_text(
+        json.dumps(items, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _item(sid: str, text: str, *, beat: bool = False) -> dict:
+    it = {"id": sid, "scene": f"P{sid[1]}", "text": text}
+    if beat:
+        it["beatStart"] = True
+    return it
+
+
+def test_term_density_beat_budget_warns(project):
+    """jev 病理正控：一个 beat 里 3 个首现中文术语（预算 ≤2）→ WARN，退出码不变。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "集中度、门槛、计费单位一起讲。", beat=True),
+            _item("p0-02", "普通句。"),
+            _item("p1-01", "新幕开讲。", beat=True),
+            _item("p1-02", "普通收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", "集中度,门槛,计费单位")
+    assert rc == 0, out  # WARN 级
+    warned = [ln for ln in out.splitlines() if "术语密度" in ln]
+    assert any("p0-01" in ln and "3 个" in ln for ln in warned), out
+    assert any("集中度" in ln and "门槛" in ln for ln in warned), out
+
+
+def test_term_density_scene_budget_warns(project):
+    """幕级预算 ≤8：五个 beat 各 2 个首现术语（beat 全过）而幕合计 9 → 幕级 WARN。
+    幕级与 beat 级是两条独立判据——beat 合规不豁免幕超载。"""
+    board = """# 分镜
+## P0
+| 镜 | 句区间 | 画面 | 动效 |
+|---|---|---|---|
+| 0-A | p0-01 | x | y |
+| 0-B | p0-02 | x | y |
+| 0-C | p0-03 | x | y |
+| 0-D | p0-04 | x | y |
+| 0-E | p0-05 | x | y |
+## P1
+| 镜 | 句区间 | 画面 | 动效 |
+|---|---|---|---|
+| 1-A | p1-01 | x | y |
+"""
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    # 夹具 manifest 是 4 句旧集，与 6 句新稿 id 集不一致会另报 FAIL——删掉走
+    # 「manifest 未生成」路径，本用例只看密度门
+    (project / "video" / "public" / "audio" / "manifest.json").unlink()
+    terms = "甲,乙,丙,丁,戊,己,庚,辛,壬"
+    write_items(
+        project,
+        [
+            _item("p0-01", "甲乙讲解。", beat=True),
+            _item("p0-02", "丙丁讲解。", beat=True),
+            _item("p0-03", "戊己讲解。", beat=True),
+            _item("p0-04", "庚辛讲解。", beat=True),
+            _item("p0-05", "壬讲解。", beat=True),
+            _item("p1-01", "普通收尾。", beat=True),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", terms)
+    assert rc == 0, out
+    warned = [ln for ln in out.splitlines() if "术语密度" in ln and "WARN" in ln]
+    assert len(warned) == 1 and "幕 P0" in warned[0] and "9 个" in warned[0], out
+
+
+def test_term_density_within_budget_silent(project):
+    """预算内零 WARN（静默即合规）；拉丁字母词自动计入首现（无需声明）。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "Jev 提出了 workflow 的新方法。", beat=True),
+            _item("p0-02", "Hume 是另一个门派。", beat=True),
+            _item("p1-01", "Jev 又出现了不算首现。", beat=True),
+            _item("p1-02", "普通收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--term-density")
+    assert rc == 0, out
+    assert not [ln for ln in out.splitlines() if "术语密度" in ln and "WARN" in ln], out
+    assert "首现 3 个术语" in out  # jev / workflow / hume（去大小写合并）
+
+
+def test_term_density_without_beatstart_degrades_to_scene_level(project):
+    """旧版 build 产物（无 beatStart）：beat 级点名跳过（静默跳过的门比没有门
+    更糟），幕级照跑——两个 beat 各 2 个首现术语若无 beatStart 视为一个 beat，
+    点名跳过后不得误报 beat 超载。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "甲乙讲解。"),
+            _item("p0-02", "丙丁讲解。"),
+            _item("p1-01", "普通。"),
+            _item("p1-02", "收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", "甲,乙,丙,丁")
+    assert rc == 0, out
+    assert "beat 级术语密度跳过" in out and "重跑 build" in out
+    assert not [ln for ln in out.splitlines() if "幕 " in ln and "WARN" in ln], out
+
+
+def test_terms_flag_requires_term_density(project):
+    """--terms 只与 --term-density 同用：单独出现即大声退出（拼错 flag 不静默）。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(project, [BENIGN, BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project, "--terms", "集中度")
+    assert rc != 0
+    assert "--term-density" in out
+
+
+def test_term_density_pre_tts_mode_also_runs(project):
+    """--pre-tts（分镜未写）也要能跑密度门——④B 评审时 storyboard 尚不存在。"""
+    (project / "script" / "storyboard.md").unlink()
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "甲乙丙一起讲。", beat=True),
+            _item("p0-02", "普通句。"),
+            _item("p1-01", "新幕。", beat=True),
+            _item("p1-02", "收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--pre-tts", "--term-density", "--terms", "甲,乙,丙")
+    assert rc == 0, out
+    assert "术语密度" in out
+    assert any("p0-01" in ln and "3 个" in ln for ln in out.splitlines()), out
+
+
 # ---------------- --check-motion：动效列 @动词 ↔ 场景代码互比 ----------------
 
 
