@@ -60,13 +60,16 @@ SCAFFOLD = SCRIPTS / "scaffold.py"
 
 GATED_CLASSES = ("frozen", "overridable", "regioned", "structured")
 
-#: 模板钉版的 Remotion 家族（PIPELINE §九 追新协议的整组单位）。
-REMOTION_FAMILY = (
-    "remotion",
-    "@remotion/cli",
-    "@remotion/layout-utils",
-    "@remotion/media",
-)
+
+def remotion_family(deps: dict[str, str]) -> dict[str, str]:
+    """dependencies 里属于 Remotion 全家桶的子集（PIPELINE §九 追新协议的整组单位）。
+
+    按**实际依赖集合**取、不写死包名：模板或单集日后新增 `@remotion/*`（如 three
+    点缀路径的 `@remotion/three`）自动入组——写死四包会让钉版门对新成员失明。"""
+    return {
+        k: v for k, v in deps.items() if k == "remotion" or k.startswith("@remotion/")
+    }
+
 
 #: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）；离线为 None。
 #: 真树判据只在集成模式下运行——本仓（skill 仓）没有 episodes/，离线无从对账。
@@ -305,12 +308,14 @@ def test_template_pins_remotion_family_exact_and_identical():
     """**模板内侧写（RSI-016）**：Remotion 官方硬约束全部 `@remotion/*` 与 `remotion`
     版本严格一致——`^` 与精确混排会在 `pnpm update` 后分叉、触发版本不一致错误
     （本仓模板曾踩此病灶）。structured 门只执法「集 vs 模板」结构一致，不管模板
-    自身的说明符形态，此缺口由本测试钉死：四包全精确（无 `^`/`~`）且版本全等。
+    自身的说明符形态，此缺口由本测试钉死：全家桶全精确（无 `^`/`~`）且版本全等；
+    家族成员按模板 dependencies 实际集合取（含日后新增的 `@remotion/*`）。
     """
     pkg = json.loads(
         (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
     )
-    pins = {name: pkg["dependencies"][name] for name in REMOTION_FAMILY}
+    pins = remotion_family(pkg["dependencies"])
+    assert pins, "模板 dependencies 未见 remotion / @remotion/*——家族为空即门失效"
     all_exact = all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in pins.values())
     assert all_exact and len(set(pins.values())) == 1, (
         f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
@@ -389,7 +394,9 @@ def test_family_bump_needs_drift_per_episode(tmp_path):
         assert scaffold_into(skill, ws, slug).returncode == 0
         pkg = ws / "episodes" / slug / rel
         d = json.loads(pkg.read_text(encoding="utf-8"))
-        d["dependencies"].update(dict.fromkeys(REMOTION_FAMILY, "4.0.999"))
+        d["dependencies"].update(
+            dict.fromkeys(remotion_family(d["dependencies"]), "4.0.999")
+        )
         pkg.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
         fps[slug] = vs.fingerprint(pkg, rel, "structured")
     write_series(ws, [("pair", [PROBE_A, PROBE_B])])
