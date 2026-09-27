@@ -607,6 +607,20 @@ def test_scaffold_rejects_bad_slug_and_existing_dir(tmp_path):
     assert r.returncode != 0 and "已存在" in (r.stdout + r.stderr)
 
 
+def test_scaffold_pin_hint_reads_template_not_rendered_output(tmp_path):
+    """建集结尾的钉版提示读**渲染前**的模板（RSI-016 评审回归）：`--title` 原样
+    插进 package.json 的 description，标题含 ASCII 双引号时渲染产物不是合法 JSON，
+    读产物即在全部文件落盘后 traceback 退出、其后的提示一并被吞。"""
+    ws = flat_ws(tmp_path)
+    r = run(SCAFFOLD, "pytest-probe-video", "--title", '什么是 "Attention"', cwd=ws)
+    assert r.returncode == 0, r.stdout + r.stderr
+    pin = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )["dependencies"]["remotion"]
+    assert f"模板钉 remotion {pin}" in r.stdout, r.stdout
+    assert "冻结档位与漂移判据" in r.stdout, r.stdout
+
+
 def test_init_workspace_is_idempotent(tmp_path):
     """`--init-workspace` 落盘全部工作区工件，且幂等：既有文件 skip-if-exists
     （--force 才覆盖）——用户已写的 series.json 不会被二跑抹回模板。
