@@ -61,13 +61,16 @@ SCAFFOLD = SCRIPTS / "scaffold.py"
 GATED_CLASSES = ("frozen", "overridable", "regioned", "structured")
 
 
-def remotion_family(deps: dict[str, str]) -> dict[str, str]:
-    """dependencies 里属于 Remotion 全家桶的子集（PIPELINE §九 追新协议的整组单位）。
+def remotion_family(pkg: dict) -> dict[str, str]:
+    """package.json（dependencies 与 devDependencies 一并）里属于 Remotion 全家桶的
+    子集（PIPELINE §九 追新协议的整组单位）。
 
-    按**实际依赖集合**取、不写死包名：模板或单集日后新增 `@remotion/*`（如 three
-    点缀路径的 `@remotion/three`）自动入组——写死四包会让钉版门对新成员失明。"""
+    按**实际依赖集合**取、不写死包名与依赖节：模板或单集日后新增 `@remotion/*`
+    （如 three 点缀路径的 `@remotion/three`、规范位置在 devDependencies 的
+    `@remotion/testing`）自动入组——写死四包或漏扫一节都会让钉版门对新成员失明。"""
+    merged = {**pkg.get("devDependencies", {}), **pkg.get("dependencies", {})}
     return {
-        k: v for k, v in deps.items() if k == "remotion" or k.startswith("@remotion/")
+        k: v for k, v in merged.items() if k == "remotion" or k.startswith("@remotion/")
     }
 
 
@@ -309,13 +312,14 @@ def test_template_pins_remotion_family_exact_and_identical():
     版本严格一致——`^` 与精确混排会在 `pnpm update` 后分叉、触发版本不一致错误
     （本仓模板曾踩此病灶）。structured 门只执法「集 vs 模板」结构一致，不管模板
     自身的说明符形态，此缺口由本测试钉死：全家桶全精确（无 `^`/`~`）且版本全等；
-    家族成员按模板 dependencies 实际集合取（含日后新增的 `@remotion/*`）。
+    家族成员按模板实际依赖集合取（dependencies 与 devDependencies 一并，含日后
+    新增的 `@remotion/*`）。
     """
     pkg = json.loads(
         (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
     )
-    pins = remotion_family(pkg["dependencies"])
-    assert pins, "模板 dependencies 未见 remotion / @remotion/*——家族为空即门失效"
+    pins = remotion_family(pkg)
+    assert pins, "模板未见 remotion / @remotion/*——家族为空即门失效"
     all_exact = all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in pins.values())
     assert all_exact and len(set(pins.values())) == 1, (
         f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
@@ -389,14 +393,22 @@ def test_family_bump_needs_drift_per_episode(tmp_path):
     rel = "video/package.json"
     skill = mirror_skill(tmp_path)
     ws = flat_ws(tmp_path)
+    # 探针 = 模板钉版 patch+1（与钉版永不相撞）：写死字面量会在模板追平该值时
+    # update 变 no-op、断言以一份全绿 stdout 假红且无线索指向版本碰撞
+    pin = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )["dependencies"]["remotion"]
+    probe = f"{pin.rsplit('.', 1)[0]}.{int(pin.rsplit('.', 1)[1]) + 1}"
     fps = {}
     for slug in (PROBE_A, PROBE_B):
         assert scaffold_into(skill, ws, slug).returncode == 0
         pkg = ws / "episodes" / slug / rel
         d = json.loads(pkg.read_text(encoding="utf-8"))
-        d["dependencies"].update(
-            dict.fromkeys(remotion_family(d["dependencies"]), "4.0.999")
-        )
+        family = remotion_family(d)
+        for section in ("dependencies", "devDependencies"):
+            d.setdefault(section, {}).update(
+                {k: probe for k in d[section] if k in family}
+            )
         pkg.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
         fps[slug] = vs.fingerprint(pkg, rel, "structured")
     write_series(ws, [("pair", [PROBE_A, PROBE_B])])
