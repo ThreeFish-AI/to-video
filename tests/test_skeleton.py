@@ -293,6 +293,26 @@ def test_gate_catches_structured_drift_via_tmpl_fallback(tmp_path):
     assert "package.json" in r.stdout, r.stdout
 
 
+def test_template_pins_remotion_family_exact_and_identical():
+    """**模板内侧写（RSI-016）**：Remotion 官方硬约束全部 `@remotion/*` 与 `remotion`
+    版本严格一致——`^` 与精确混排会在 `pnpm update` 后分叉、触发版本不一致错误
+    （本仓模板曾踩此病灶）。structured 门只执法「集 vs 模板」结构一致，不管模板
+    自身的说明符形态，此缺口由本测试钉死：四包全精确（无 `^`/`~`）且版本全等。
+    """
+    pkg = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )
+    family = (
+        "remotion",
+        "@remotion/cli",
+        "@remotion/layout-utils",
+        "@remotion/media",
+    )
+    pins = {name: pkg["dependencies"][name] for name in family}
+    exact = {v for v in pins.values() if re.fullmatch(r"\d+\.\d+\.\d+", v)}
+    assert len(exact) == 1, f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
+
+
 def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
     """**正控（豁免失效）**：登记表以 (episode, path) 为键，若不钉指纹，该文件此后
     对任何改动都永久免检——而 Main.tsx 恰是每集都要动的文件。指纹相符才放行，
