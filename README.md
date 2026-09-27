@@ -58,6 +58,8 @@ Skill 本体是纯指令，零依赖即装即用；下表工具链仅运行流�
 | Node ≥ 23.6 | 运动层单测用 `node --test` 原生跑 TS |
 | （可选）IndexTTS-2.5 本地服务 | 声音克隆后端（默认 `127.0.0.1:8766`），部署见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md) §二 |
 
+表中版本为**最低地板**：所有依赖（含分集工程内的 Remotion 家族）一律优先最新稳定版——建集装依赖前先 `npm view remotion version` 对照，追新与跨 major 升级规则见 [references/PIPELINE.md](references/PIPELINE.md) §九。
+
 ### Claude Code（推荐）
 
 ```bash

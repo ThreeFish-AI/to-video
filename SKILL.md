@@ -50,6 +50,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P tts --plan
 uv run --no-project $T/scripts/pipeline.py --project $P tts    # 长跑，幂等续跑
 
 # 5) ⑧ 场景：$P/video/src/scenes/ 与 Main.tsx 注册表全新撰写；循环至类型零错误
+#    装依赖前先 npm view remotion version 对照最新（追新规则见 PIPELINE.md §九）
 cd $P/video && pnpm install && ./node_modules/.bin/tsc --noEmit
 
 # 6) ⑨ 循环「修场景 → render → qa」至零 FAIL，才放行终渲
@@ -89,6 +90,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 - 时序常数只在 `video/src/timing.json`（`timing.ts` 与 Python 双语共读同一 JSON）；运动语汇只在 `video/src/motion/`（frozen，改 = 模板 + 全集同步）。
 - 声音样本是生物特征：不入库（`voices/refs.toml` 只存指纹），试听后即删。
 - **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头是 `assets/video-skeleton/`，由 `scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
+- **依赖版本策略**：一律优先最新稳定版——模板钉版与 README 地板只是撰写时快照/下限；建集装依赖前先 `npm view remotion version` 对照，Remotion 全家桶同 major 整组追新（drift 登记）、跨 major 走 RSI；细则见 [PIPELINE.md §九](references/PIPELINE.md)。
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，各居任意目录互不牵连。
 - **RSI 纪律**：本 Skill 自身的缺陷与改进一律走 [RSI.md](RSI.md) 回路（登记台账 → 另起子代理 → 四道门 → PR 回流）；制作过程中 `$T` 机制文件只读（例外仅两处仅追加的登记面：台账、建模手册候选区），禁止顺手改。
 - **双语对齐**（双语集）：`narration.en.md` 与主稿句 id 1:1（build/check 执法）+ 基线锁防译稿静默失鲜；语言常数只在 `scripts/langs.py`（tts.py 内联镜像由测试钉住）；tts/render/deliver 缺省只跑主语言、显式 `--lang` 才多版本（机制见 [references/PIPELINE.md §五「双语渲染」](references/PIPELINE.md)）。
@@ -117,6 +119,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 
 - **Stage ① 深读信源**：建议先调 `/guided-learn`——其「全貌解剖（先梳理后总结）+ 底层规律与争议提炼」方法论可直接复用为分章子代理的输出结构约束。
 - **Stage ⑥/⑧ 图示资产**：需要架构/流程类图解时调 `/archify` 出图，HTML 落 `$W` 下，再由 `record_archify_all.py` 逐章录制为动效素材；句级锚定覆盖门（`check_archify_coverage.py`）已自动串联进 `check`。
+- **Stage ⑧ 精确 3D 资产（可选）**：信源真涉机械结构/硬件且示意级几何不够用时，装 text-to-cad 的 **cad 单 skill**（`npx skills add earthtojake/text-to-cad --skill cad`，本地 build123d、零 key）出 GLB 供场景加载；加载链路与 3D 宪法约束见 [08「外部 CAD 资产」](references/08-remotion-implementation.md)。
 
 ## 自改进回路（RSI）
 

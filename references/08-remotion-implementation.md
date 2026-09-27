@@ -31,7 +31,7 @@ uv run --no-project $T/scripts/verify_skeleton.py --strict  # 有未登记漂移
 
 - `premountFor` 在**渲染期自动关闭**（active 含 `!env.isRendering`）——只优化 Studio 拖拽与 Player 预览；渲染侧收益是 Mediabunny 抽轨与时间轴同步，不是渲染速度。
 - 幕间转场**不用** `@remotion/transitions` 的 TransitionSeries：其总时长 = Σ序列 − Σ转场，会把视觉层整体左移而旁白（manifest 帧号绝对定位的独立层）不动 → 逐幕递增失同步。用 `SceneFade`（只花幕间既有静默，from/总时长零改动；不变式 `2×sceneCrossFadeSec ≤ sentenceGap+sceneGap` 由 check_script.py 强制）。
-- 字体可复现性：三集用 macOS 系统字体栈（PingFang SC/Songti SC/SF Mono），未内嵌 CJK 字体——**渲染仅限 macOS 主机**。两个重启触发器：渲染迁 Linux/CI；Remotion 5.0 把 fitText 的 validateFontIsLoaded 默认翻 true（届时须内嵌子集字体，注意 pre-commit --maxkb=1024）。
+- 字体可复现性：三集用 macOS 系统字体栈（PingFang SC/Songti SC/SF Mono），未内嵌 CJK 字体——**渲染仅限 macOS 主机**。重启触发器：渲染迁 Linux/CI；**Remotion 5.0（跨 major，走 RSI，见 [PIPELINE.md §九](./PIPELINE.md)）**——fitText 的 validateFontIsLoaded 默认翻 true（届时须内嵌子集字体，注意 pre-commit --maxkb=1024）、numberOfSharedAudioTags 默认将改 0（涉 NarrationAudio，4.0.527 changelog 预告）、license 条款微调（升级窗口复读 LICENSE）。
 - 路径描画优先 `@remotion/paths`（evolvePath/getPointAtLength）——它是「pathLength 与 px 版 strokeDasharray 互斥」红线的官方正解；线型样式（虚线/点线）另置静态叠加路径，勿与描画动画挤在同一元素。
 
 复用边界的原则（见 [PIPELINE.md](./PIPELINE.md) 第四节）：Python 脚本集中 SSOT；**Remotion 原语复制适配不共享**——共享 TS 包会把一集的视觉改动泄漏进其他集。
@@ -158,6 +158,28 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
 `Slab3D` 收敛即以 md5 相等验收）。3D 是 `--check` 判据的盲区（它只看黑帧/冻帧/字幕带/对比度），
 **必须逐帧目视**，且抽帧要覆盖弹簧过冲峰值那几帧。
 
+### 外部 CAD 资产（可选 opt-in，2026-09 评估）
+
+**适用条件**：信源真涉机械结构/硬件/机器人学、且示意级 three.js 几何（上节「只做直角体」
+词表）表达不出精确形状或装配关系时，才启用外部 CAD 建模；默认不装——信源画像（论文/
+文档/代码/课程站）与制造级建模交集极小，示意级建模即是正确高度。
+
+- **装法**：`npx skills add earthtojake/text-to-cad --skill cad` **只装 cad 单 skill**——
+  整库含 13 个制造域 skill（污染本 skill 窄域触发），且 step-parts 有 `api.step.parts`
+  云端外联。内核为本地 build123d + OCP（OpenCascade），MIT、零 key 零云；依赖按集临时装、
+  用完可卸，**不入模板**（RSI 不变量 14）。
+- **产物路线**：建模侧直接写 **GLB-only 模型**（单 `@glb` 装饰器，无需 STEP 中转），
+  `cadgen glb build` 产 glTF 2.0 → three/examples 的 `GLTFLoader` 原生直载，**零转换链**
+  （社区惯用的 drei `useGLTF` 属被禁依赖，不引）。`cadgen … snapshot` 的 PNG 可作
+  staticFile 静帧素材。STL（无颜色）、DXF/工程图 PDF 不进流水线——工程图风格直接 SVG 重绘。
+- **宪法适配**（三条宪法与读色契约对外部资产同样生效）：几何来自 CAD，**颜色仍归
+  theme 层**——GLB 自带材质（build123d 零件/面着色可带入）进场景前覆写为面色常量或
+  token 派生（面色常量放模块内，同「读色契约」）；零光源 unlit 不变；相机纪律照旧
+  （转物体不动相机，深度靠静置俯角/偏航）；动画默认 Remotion
+  代码驱动（`cadgen glb build --animation` 虽可烘焙 glTF 动画，但逐帧确定性与 beat
+  对齐以代码驱动为正路）；「同帧 PNG 逐字节相同」验收照旧。
+- 评估依据与安装审计见 [研究文档](../docs/research/dependency-policy-and-asset-tools.md) §三。
+
 ## 场景组件模式
 
 ```tsx
@@ -243,7 +265,8 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 
 ```bash
 cd video
-pnpm install                              # 首次（裸 install；根 lockfile 必须零变更）
+pnpm install                              # 首次（裸 install；根 lockfile 必须零变更；
+                                          #  装前先 npm view remotion version 对照，PIPELINE.md §九）
 ./node_modules/.bin/tsc --noEmit         # 类型零错误
 ./node_modules/.bin/remotion render Main ../out/draft.mp4 --scale=0.5 --jpeg-quality=60  # 草渲
 cd .. && uv run --no-project scripts/qa_frames.py out/draft.mp4 --scene P2   # 抽帧 QA（--scene 或句 id）
