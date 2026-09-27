@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import tomllib
@@ -201,6 +202,17 @@ def main() -> int:
     )
     print(
         "  7. cd video && pnpm install（裸 install——分集 pnpm-workspace.yaml 已自锚；勿加 --ignore-workspace，会连本工程 workspace 一并忽略致 ERR_PNPM_IGNORED_BUILDS。装完核对根 lockfile 零变更）"
+    )
+    # 读渲染前的模板：--title 原样插进 description，含 ASCII 双引号时产物非法 JSON
+    pkg = json.loads(
+        (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
+    )
+    pinned = pkg.get("dependencies", {}).get("remotion", "?")
+    print(
+        f"  ⚠ 依赖版本优先最新：模板钉 remotion {pinned}（撰写时快照）。装前先"
+        " npm view remotion version 对照——同 major 全家桶整组追新（每集各自登记"
+        " [[skeleton.drift]]，续集跟随系列版本），跨 major 走 RSI；规则见"
+        " references/PIPELINE.md §九"
     )
     print(
         f"\n  冻结档位与漂移判据见 {TEMPLATE / 'skeleton.toml'}"

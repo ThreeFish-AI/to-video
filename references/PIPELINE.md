@@ -3,7 +3,7 @@
 > 从「论文精读 → 逐字稿 → 配音 → 代码动画 → 终渲」全链路中沉淀的**可复用流水线机制**：抽取自 negentropy 仓，以 to-video 技能仓为家，安装在任意内容工作区上使用。
 > 首个建成的完整范例：《AI 如何自己变强？》（`$W/episodes/self-improving-agents-video/`；建成时间上的第一个，非系列首集，发布顺序见 `$W/series.json`）。
 
-**目录**：一、Pipeline 总览 · 路径变量约定（含环境变量） · 二、工程目录约定 · 三、公共脚本与编排入口（含 pipeline.toml 字段表、交付归档） · 四、复用边界 · 五、音画同步机制（含双语渲染） · 六、新集脚手架清单 · 七、工程模式 · 八、许可注意
+**目录**：一、Pipeline 总览 · 路径变量约定（含环境变量） · 二、工程目录约定 · 三、公共脚本与编排入口（含 pipeline.toml 字段表、交付归档） · 四、复用边界 · 五、音画同步机制（含双语渲染） · 六、新集脚手架清单 · 七、工程模式 · 八、许可注意 · 九、依赖与版本策略
 
 ## 一、Pipeline 总览（10 Stages）
 
@@ -252,8 +252,17 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 
 ## 七、工程模式
 
-分集工程统一采用 **Remotion 工程模式**（全代码动画 + manifest 自动对轨、可编程复渲）。早期的单文件 Canvas 轻量制作包模式已于 2026-08 废弃移除（negentropy 仓 commit `f7d72814`）。渲染与动效工具的横向选型证据（Remotion 增强簇 / HyperFrames / Motion Canvas·Revideo / Lottie 设计师资产管线三轨推荐与击穿门评估）见 [动效建模与 Web 可视化搭建工具调研](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/research/video-production/160-video-motion-modeling-web-visual-tooling.md)（永久链）。
+分集工程统一采用 **Remotion 工程模式**（全代码动画 + manifest 自动对轨、可编程复渲）。早期的单文件 Canvas 轻量制作包模式已于 2026-08 废弃移除（negentropy 仓 commit `f7d72814`）。渲染与动效工具的横向选型证据（Remotion 增强簇 / HyperFrames / Motion Canvas·Revideo / Lottie 设计师资产管线三轨推荐与击穿门评估）见 [动效建模与 Web 可视化搭建工具调研](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/research/video-production/160-video-motion-modeling-web-visual-tooling.md)（永久链）。2026-09-27 复核（[研究文档](../docs/research/dependency-policy-and-asset-tools.md) §二）：结论维持——Remotion 唯一引擎、不与 HyperFrames 共用双引擎，B 轨单集试点仍属内容侧可选动作；再评估触发器增补为「HyperFrames 发 1.0 并承诺 API 稳定」与「Remotion 5.0 license 条款收紧」。
 
 ## 八、许可注意
 
 Remotion 对超过 3 人的公司需商业授权（个人/小团队免费）；edge-tts 为微软在线语音，发布前确认平台对合成语音的标注要求；**IndexTTS-2.5 按 bilibili 模型使用许可发布，个人/研究可用，商用需联系 indexspeech@bilibili.com**（详见 [VOICE-CLONING.md §八](./VOICE-CLONING.md)）；不使用任何未经授权的第三方图片/音频素材。
+
+## 九、依赖与版本策略（最新稳定版优先）
+
+总则：**所有依赖一律优先使用最新稳定版**。仓内出现的一切版本号只有两种身份——「撰写时快照」（模板 `package.json.tmpl` 的钉版）或「最低地板」（README 前置依赖的 pnpm / Node / uv），都不是停留在旧版的理由。例外两个：① **执法工具硬钉自身**——pre-commit 的 ruff rev，最新版对既有 noqa 误报 RUF100，钉版原因见 `.pre-commit-config.yaml` 头注释；升版须先以 `ruff==<new>` 全量 lint 验证零误报再动 rev。② **传递依赖的安全封顶**——模板 `video/pnpm-workspace.yaml` 的 `overrides` `js-yaml '>=4.3.2 <5.0.0'`：下界是 GHSA-2883-xcg3-v3hh 补丁地板，上界防未审计的 major 跳跃（父包 cosmiconfig 声明 `^4.1.0`，npm 最新已 5.x），原因见该文件头注释；解除上界须先确认传递链兼容并过渲染回归。**每次建集、每次装依赖前，先查一手最新版**：Node 侧 `npm view remotion version`（查其它包同理），工具链看官方发布页。
+
+- **Remotion 家族（模板钉版，全家桶整组行动）**：Remotion 官方硬约束全部 `@remotion/*` 与 `remotion` 版本严格一致，故模板对四包统一**精确钉版**（混排 `^` 与精确会在 `pnpm update` 后分叉、触发版本不一致错误，2026-09 已修）。追新协议：模板落后于最新稳定版且**同一 major（4.x）**时——新系列首集可就地把该集 `package.json` 里**全部** `remotion` / `@remotion/*`（模板四包 + 该集自加的 `@remotion/three` 等）整组改为最新并裸 `pnpm install` 刷新 lockfile，同时在工作区 `[[skeleton.drift]]` 登记（path = `video/package.json`，fingerprint 取 `verify_skeleton` 报告，reason 注明目标版本与撤销条件「模板追平后同步删除」），或走 RSI 快速通道升模板（本仓发版节奏即追新节奏）；**同系列续集跟随该系列版本，且每集各自登记一条 drift**（drift 按「集 × 文件」登记，首集的条目不覆盖续集，漏登即 I2 STALE）。此时系列内版本一致**靠人工核对**（对照各集 `video/package.json` 的 `remotion` 版本），门不兜底：系列里仍有一集等于模板指纹时 I1 参照系取模板，续集停在模板版不会被报——而版本漂移会让 frozen TS 行为不同；**跨 major（4.x → 5.x）是重启触发器**（已知破坏点清单见 [08 事实条](./08-remotion-implementation.md)），必须走 RSI 升模板 + 全量回归，绝不单集私升。
+- **工具链（uv / pnpm / Node）**：README 前置依赖表是**下限**，始终直接用最新稳定版；模板对 pnpm 行为的耦合点（workspace 自锚、`allowBuilds`）见 [骨架冻结清单](../assets/video-skeleton/skeleton.toml)。
+- **Python 脚本依赖**：刻意不钉版（RSI 不变量 14 的另一面）——`uv run --with <pkg>` 解析时取当时最新；uv 缓存命中会沿用上次解析，需强制刷新时 `uv cache clean <pkg>` 后重跑。
+- 选型与追新的循证依据（Remotion vs HyperFrames 复核、text-to-cad 评估、钉版形式比选）见 [研究文档](../docs/research/dependency-policy-and-asset-tools.md)。
