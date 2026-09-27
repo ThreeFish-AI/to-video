@@ -28,7 +28,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 
 | 指标 | 2026-09-04（negentropy 调研 [1]） | 2026-09-27（本次复核） |
 |---|---|---|
-| 版本 | 0.8.27 | **0.8.79**（2026-09-26；近 4 天 7 个 patch） |
+| 版本 | 0.8.27 | **0.8.79**（2026-09-26；09-24–09-26 三个日历日连发 11 个 patch，0.8.69–0.8.79） |
 | GitHub stars | 43.9k | **53.4k**（+21%） |
 | 周下载 | — | 47.9 万（remotion 为 183 万） |
 | 定性 | B 轨单集 PoC 候选（四门全过、字形验收留 POC） | **维持**：仍 pre-1.0、API 漂移风险真实 |
@@ -82,11 +82,11 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 
 [3] Remotion, "Remotion License." [Online]. Available: https://www.remotion.dev/docs/license ；FAQ：https://www.remotion.dev/docs/license/faq ；定价：https://www.remotion.dev/docs/license/pricing
 
-[4] HeyGen, "HyperFrames," GitHub repository（README：Apache-2.0、"Built for agents"、生态与部署路径；实测 2026-09-27：0.8.79、53,356 stars、2026-03-10 建仓）. [Online]. Available: https://github.com/heygen-com/hyperframes
+[4] HeyGen, "HyperFrames," GitHub repository（README：Apache-2.0、"Built for agents"、生态与部署路径、"HyperFrames vs Remotion" 节 "Remotion's bet is React components; HyperFrames' bet is plain HTML"；实测 2026-09-27：0.8.79、53,356 stars、2026-03-10 建仓）. [Online]. Available: https://github.com/heygen-com/hyperframes
 
 [5] HeyGen, "Rules and anti-patterns," HyperFrames Docs（静默失败机制与 lint 边界的官方自述）. [Online]. Available: https://hyperframes.heygen.com/（rules-and-anti-patterns 与 rendering 页）
 
-[6] HeyGen, "HyperFrames vs Remotion," HyperFrames Docs（官方对比页："Remotion's bet is React components; HyperFrames' bet is plain HTML"；迁移 skill 的 80/20 边界）. [Online]. Available: https://hyperframes.heygen.com/guides/hyperframes-vs-remotion
+[6] HeyGen, "HyperFrames vs Remotion," HyperFrames Docs（官方对比页：Remotion 帧号模型 "One pure function of the frame number, no timeline to register, no contract to get subtly wrong"；迁移 skill 的 80/20 边界 "Roughly 80% of a typical composition translates mechanically"）. [Online]. Available: https://hyperframes.heygen.com/guides/hyperframes-vs-remotion
 
 [7] J. Fitzgerald (earthtojake), "text-to-cad," GitHub repository（实测 2026-09-27：16,401 stars、MIT、2026-04-22 建仓；skills 清单与安装通道）. [Online]. Available: https://github.com/earthtojake/text-to-cad
 
