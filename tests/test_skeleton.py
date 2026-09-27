@@ -67,11 +67,26 @@ def remotion_family(pkg: dict) -> dict[str, str]:
 
     按**实际依赖集合**取、不写死包名与依赖节：模板或单集日后新增 `@remotion/*`
     （如 three 点缀路径的 `@remotion/three`、规范位置在 devDependencies 的
-    `@remotion/testing`）自动入组——写死四包或漏扫一节都会让钉版门对新成员失明。"""
-    merged = {**pkg.get("devDependencies", {}), **pkg.get("dependencies", {})}
-    return {
-        k: v for k, v in merged.items() if k == "remotion" or k.startswith("@remotion/")
+    `@remotion/testing`）自动入组——写死四包或漏扫一节都会让钉版门对新成员失明。
+    同名家族包两节并存且取值不同时直接报错：merge 只能保留一节，另一节的
+    说明符被静默遮蔽会让钉版门对跨节混排失明（六次评审①）。"""
+    dev = pkg.get("devDependencies", {})
+    deps = pkg.get("dependencies", {})
+
+    def is_family(name: str) -> bool:
+        return name == "remotion" or name.startswith("@remotion/")
+
+    clash = {
+        k: (dev[k], deps[k])
+        for k in dev.keys() & deps.keys()
+        if is_family(k) and dev[k] != deps[k]
     }
+    if clash:
+        raise ValueError(
+            f"Remotion 家族同名包两节取值不同（merge 会遮蔽一节）：{clash}"
+        )
+    merged = {**dev, **deps}
+    return {k: v for k, v in merged.items() if is_family(k)}
 
 
 #: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）；离线为 None。
@@ -324,6 +339,25 @@ def test_template_pins_remotion_family_exact_and_identical():
     assert all_exact and len(set(pins.values())) == 1, (
         f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
     )
+
+
+def test_remotion_family_rejects_cross_section_duplicate():
+    """**反控（六次评审①）**：同名家族包两节并存且取值不同时，两节 merge 只能保留
+    dependencies 一节——devDependencies 里的 `^`/异版说明符被静默遮蔽，钉版门对
+    跨节混排失明（npm/pnpm 均接受跨节同名 manifest，搬节忘删残留即触发）。helper
+    须当场报错而非遮蔽放行；同值重复条目无害，照常收编。"""
+    pkg = {
+        "dependencies": {"remotion": "4.0.529", "@remotion/cli": "4.0.529"},
+        "devDependencies": {"remotion": "^4.0.0"},
+    }
+    with pytest.raises(ValueError, match="两节取值不同"):
+        remotion_family(pkg)
+    assert remotion_family(
+        {
+            "dependencies": {"remotion": "4.0.529"},
+            "devDependencies": {"remotion": "4.0.529"},
+        }
+    ) == {"remotion": "4.0.529"}
 
 
 def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
