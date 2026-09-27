@@ -60,6 +60,14 @@ SCAFFOLD = SCRIPTS / "scaffold.py"
 
 GATED_CLASSES = ("frozen", "overridable", "regioned", "structured")
 
+#: 模板钉版的 Remotion 家族（PIPELINE §九 追新协议的整组单位）。
+REMOTION_FAMILY = (
+    "remotion",
+    "@remotion/cli",
+    "@remotion/layout-utils",
+    "@remotion/media",
+)
+
 #: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）；离线为 None。
 #: 真树判据只在集成模式下运行——本仓（skill 仓）没有 episodes/，离线无从对账。
 INTEGRATION_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
@@ -302,13 +310,7 @@ def test_template_pins_remotion_family_exact_and_identical():
     pkg = json.loads(
         (TEMPLATE / "video" / "package.json.tmpl").read_text(encoding="utf-8")
     )
-    family = (
-        "remotion",
-        "@remotion/cli",
-        "@remotion/layout-utils",
-        "@remotion/media",
-    )
-    pins = {name: pkg["dependencies"][name] for name in family}
+    pins = {name: pkg["dependencies"][name] for name in REMOTION_FAMILY}
     all_exact = all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in pins.values())
     assert all_exact and len(set(pins.values())) == 1, (
         f"Remotion 家族须全部精确钉同一版本（勿 ^/~ 前缀）：{pins}"
@@ -369,6 +371,38 @@ def test_i2_honours_the_drift_registry(tmp_path):
     register_drift(ws, PROBE_A, rel, vs.fingerprint(victim, rel, "frozen"))
     r = run(verify, "--strict", cwd=ws)
     assert r.returncode == 0, f"已登记的偏离仍被 STALE 判红：\n{r.stdout}"
+
+
+def test_family_bump_needs_drift_per_episode(tmp_path):
+    """**正控（PIPELINE §九 追新协议，RSI-016 评审回归）**：drift 按「集 × 文件」
+    登记，首集的条目不覆盖续集——续集跟随系列追新却不另登记，I2 报 STALE；逐集
+    登记后放行。反面（续集停在模板版）门不报：系列里仍有一集等于模板指纹时 I1
+    参照系取模板，此时系列内一致靠人工核对，§九 已如实写明。
+    """
+    import verify_skeleton as vs
+
+    rel = "video/package.json"
+    skill = mirror_skill(tmp_path)
+    ws = flat_ws(tmp_path)
+    fps = {}
+    for slug in (PROBE_A, PROBE_B):
+        assert scaffold_into(skill, ws, slug).returncode == 0
+        pkg = ws / "episodes" / slug / rel
+        d = json.loads(pkg.read_text(encoding="utf-8"))
+        d["dependencies"].update(dict.fromkeys(REMOTION_FAMILY, "4.0.999"))
+        pkg.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+        fps[slug] = vs.fingerprint(pkg, rel, "structured")
+    write_series(ws, [("pair", [PROBE_A, PROBE_B])])
+    verify = skill / "scripts" / "verify_skeleton.py"
+
+    register_drift(ws, PROBE_A, rel, fps[PROBE_A])
+    r = run(verify, "--strict", cwd=ws)
+    stale = [ln for ln in r.stdout.splitlines() if "STALE" in ln and rel in ln]
+    assert r.returncode == 1 and stale and PROBE_B in stale[0], r.stdout
+
+    register_drift(ws, PROBE_B, rel, fps[PROBE_B])
+    r = run(verify, "--strict", cwd=ws)
+    assert r.returncode == 0, f"逐集登记后仍未放行：\n{r.stdout}"
 
 
 def test_i2_honours_the_overridable_class(tmp_path):
