@@ -52,7 +52,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 
 ### 3.1 事实快照
 
-[earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)（2026-04-22 建仓，16.4k★ / 1,380 commits / 2026-09-27 仍在推送，**MIT**）是 13–14 个制造域 agent skills 库（cad / cad-viewer / DXF / 工程图 / URDF / G-code 等，文档站 texttocad.dev）[7][8]。核心 `cad` skill 走**纯本地 Python 内核**：build123d（参数化 CAD 脚本）跑在 OCP（OpenCascade 绑定）之上，自研 CLI `cadgen`（PyPI，0.6.6，2026-09-21；**7 周 37 版**，churn 快）。`requirements.txt` 全文一行 `cadgen[snapshot]==0.6.6`；**零云 API、零 key**（唯一外联在 step-parts 的 `api.step.parts` 目录检索与制造类 skill——只装 cad 单 skill 即避开）。Windows 的 OCP DLL 拦截问题不影响 macOS。
+[earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad)（2026-04-22 建仓，16.4k★ / 1,380 commits / 2026-09-27 仍在推送，**MIT**）是 13–14 个制造域 agent skills 库（cad / cad-viewer / DXF / 工程图 / URDF / G-code 等，文档站 texttocad.dev）[7][8]。核心 `cad` skill 走**纯本地 Python 内核**：build123d（参数化 CAD 脚本）跑在 OCP（OpenCascade 绑定）之上，自研 CLI `cadgen`（PyPI，0.6.6，2026-09-21；**08-11–09-21 共 41 天 37 版**，churn 快）。`requirements.txt` 全文一行 `cadgen[snapshot]==0.6.6`；**零云 API、零 key**（唯一外联在 step-parts 的 `api.step.parts` 目录检索与制造类 skill——只装 cad 单 skill 即避开）。Windows 的 OCP DLL 拦截问题不影响 macOS。
 
 ### 3.2 与 Remotion 的落地面（复核确认可行）
 
@@ -84,7 +84,7 @@ HyperFrames（HeyGen，2026-03-10 建仓）："Write HTML. Render video. Built f
 
 [4] HeyGen, "HyperFrames," GitHub repository（README：Apache-2.0、"Built for agents"、生态与部署路径、"HyperFrames vs Remotion" 节 "Remotion's bet is React components; HyperFrames' bet is plain HTML"；实测 2026-09-27：0.8.79、53,356 stars、2026-03-10 建仓）. [Online]. Available: https://github.com/heygen-com/hyperframes
 
-[5] HeyGen, "Rules and anti-patterns," HyperFrames Docs（静默失败机制与 lint 边界的官方自述）. [Online]. Available: https://hyperframes.heygen.com/（rules-and-anti-patterns 与 rendering 页）
+[5] HeyGen, "Rules and anti-patterns," HyperFrames Docs（静默失败机制与 lint 边界的官方自述）. [Online]. Available: https://hyperframes.heygen.com/prompting/rules-and-anti-patterns ；rendering：https://hyperframes.heygen.com/guides/rendering
 
 [6] HeyGen, "HyperFrames vs Remotion," HyperFrames Docs（官方对比页：Remotion 帧号模型 "One pure function of the frame number, no timeline to register, no contract to get subtly wrong"；迁移 skill 的 80/20 边界 "Roughly 80% of a typical composition translates mechanically"）. [Online]. Available: https://hyperframes.heygen.com/guides/hyperframes-vs-remotion
 

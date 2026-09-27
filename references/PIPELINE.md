@@ -260,7 +260,7 @@ Remotion 对超过 3 人的公司需商业授权（个人/小团队免费）；e
 
 ## 九、依赖与版本策略（最新稳定版优先）
 
-总则：**所有依赖一律优先使用最新稳定版**。仓内出现的一切版本号只有两种身份——「撰写时快照」（模板 `package.json.tmpl` 的钉版）或「最低地板」（README 前置依赖的 pnpm / Node / uv），都不是停留在旧版的理由。**每次建集、每次装依赖前，先查一手最新版**：Node 侧 `npm view remotion version`（查其它包同理），工具链看官方发布页。
+总则：**所有依赖一律优先使用最新稳定版**。仓内出现的一切版本号只有两种身份——「撰写时快照」（模板 `package.json.tmpl` 的钉版）或「最低地板」（README 前置依赖的 pnpm / Node / uv），都不是停留在旧版的理由（唯一例外：**执法工具硬钉自身**——pre-commit 的 ruff rev，最新版对既有 noqa 误报 RUF100，钉版原因见 `.pre-commit-config.yaml` 头注释；升版须先以 `ruff==<new>` 全量 lint 验证零误报再动 rev）。**每次建集、每次装依赖前，先查一手最新版**：Node 侧 `npm view remotion version`（查其它包同理），工具链看官方发布页。
 
 - **Remotion 家族（模板钉版，全家桶整组行动）**：Remotion 官方硬约束全部 `@remotion/*` 与 `remotion` 版本严格一致，故模板对四包统一**精确钉版**（混排 `^` 与精确会在 `pnpm update` 后分叉、触发版本不一致错误，2026-09 已修）。追新协议：模板落后于最新稳定版且**同一 major（4.x）**时——新系列首集可就地把该集 `package.json` 里**全部** `remotion` / `@remotion/*`（模板四包 + 该集自加的 `@remotion/three` 等）整组改为最新并裸 `pnpm install` 刷新 lockfile，同时在工作区 `[[skeleton.drift]]` 登记（path = `video/package.json`，fingerprint 取 `verify_skeleton` 报告，reason 注明目标版本与撤销条件「模板追平后同步删除」），或走 RSI 快速通道升模板（本仓发版节奏即追新节奏）；**同系列续集跟随该系列版本，且每集各自登记一条 drift**（drift 按「集 × 文件」登记，首集的条目不覆盖续集，漏登即 I2 STALE）。此时系列内版本一致**靠人工核对**（对照各集 `video/package.json` 的 `remotion` 版本），门不兜底：系列里仍有一集等于模板指纹时 I1 参照系取模板，续集停在模板版不会被报——而版本漂移会让 frozen TS 行为不同；**跨 major（4.x → 5.x）是重启触发器**（已知破坏点清单见 [08 事实条](./08-remotion-implementation.md)），必须走 RSI 升模板 + 全量回归，绝不单集私升。
 - **工具链（uv / pnpm / Node）**：README 前置依赖表是**下限**，始终直接用最新稳定版；模板对 pnpm 行为的耦合点（workspace 自锚、`allowBuilds`）见 [骨架冻结清单](../assets/video-skeleton/skeleton.toml)。
