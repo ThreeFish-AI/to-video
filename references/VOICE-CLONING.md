@@ -70,7 +70,7 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 
 - 启动即加载模型（约 30–60 秒），出现 `>> 就绪：IndexTTS-2.5 device=mps ... emo_text=on|off` 后可服务请求；
 - **MPS 显存上限**（`--mps-mem-limit-gib`，缺省即生效，无需显式传参）：服务内置进程级水位线，缺省 `min(0.90×recommended, 16) GiB`（24GB 机型 ≈16 GiB）。torch MPS 分配器默认水位 1.7×recommended ≈ **30 GiB，超物理内存**——长跑累积与单次峰值会把系统内存拉爆成换页卡顿（机制循证见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md) §6.8）。上限过低时长块会得到点名显存的 500（三出路见 §七）；`0`=不限（回退旧行为）。开 `--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB，长块多时可上调；
-- 健康检查：`curl http://127.0.0.1:8766/health` → `{"ok": true, "version": "2.5", "device": "mps", "mps_mem_limit_gib": 16.0, "synthesizing": false, "dtype": "fp32", "encoder": "soundfile", "supports_duration_factor": true, "supports_emo_text": false}`（MPS 上 dtype 恒为 fp32，属预期；`supports_emo_text` 随 `--use-qwen-emo` 变化；`mps_mem_limit_gib` 为生效上限，null=未设）；
+- 健康检查：`curl http://127.0.0.1:8766/health` → `{"ok": true, "version": "2.5", "device": "mps", "mps_mem_limit_gib": 15.98, "synthesizing": false, "dtype": "fp32", "encoder": "soundfile", "supports_duration_factor": true, "supports_emo_text": false}`（MPS 上 dtype 恒为 fp32，属预期；`supports_emo_text` 随 `--use-qwen-emo` 变化；`mps_mem_limit_gib` 为生效上限，null=未设；24GB 机型缺省 `round(0.90×17.76, 2)`=15.98）；
 - **仅监听 127.0.0.1、无鉴权，勿暴露公网**；`ref_path` 为服务端本地绝对路径。
 
 
@@ -103,7 +103,7 @@ lsof -ti tcp:8766 -sTCP:LISTEN | xargs kill
 
 | 层 | 手段 | 作用面 |
 |---|---|---|
-| 进程硬上限 | `--mps-mem-limit-gib`（§2.3，缺省即生效） | 分配器水位线：逼近上限先自动归还缓存，仍不足抛可重试 OOM——结构性兜住长跑累积与单次峰值 |
+| 进程硬上限 | `--mps-mem-limit-gib`（§2.3，缺省即生效） | 分配器水位线：逼近上限先自动归还缓存，仍不足抛可操作 OOM（冒出的≈确定性超限，重试救不回）——结构性兜住长跑累积与单次峰值 |
 | 句间缓存归还 | 服务端每句 `finally` 里的 `torch.mps.empty_cache` | 治累积**速率**（此前 40 分钟击穿 30 GiB 的对冲），不设天花板 |
 | 系统级应急 | `sudo sysctl iogpu.wired_limit_mb=<N>`（如 16384；恢复置 0，重启失效） | **全局** GPU wired 硬顶，影响所有 Metal 应用（含 Chrome/WindowServer），仅多进程失控时短期使用 |
 

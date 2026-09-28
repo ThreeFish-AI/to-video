@@ -273,11 +273,11 @@
 
 **表因**：用户提出（2026-09-28）IndexTTS 合成会把 M4/24GB 统一内存吃满导致整机卡顿，问能否限制显存预防。既有同族症状：长跑数十分钟后合成全 500 而 `/health` 假绿（`tts_server.py` 「MPS 长跑泄漏对冲」注释实测 ~40 分钟击穿 30 GiB、VOICE-CLONING §七既有记录；RSI-002 曾把 empty_cache 移入 finally 对冲）。
 
-**根因**：torch MPS 分配器默认高水位 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=1.7` × recommendedMaxWorkingSetSize 17.76 GiB ≈ **30.2 GiB > 24 GB 物理统一内存**——分配器放行一切直到系统级换页/压缩才表现为整机卡顿，torch 全程不提前 OOM（libtorch 二进制内置警告字符串自证机制存在）。上游 indextts 全仓无任何 MPS 内存限制（`set_per_process_memory_fraction` 0 命中；仅有的两处 `torch.cuda.empty_cache()` 在 MPS 上 no-op），low_vram 自动降载只查 `torch.cuda`（`infer_v2_5.py:125-129`，MPS 恒 False）。每句 empty_cache 只治累积**速率**不设天花板，且不防单次峰值（CFM 25 步 `sol.append(x)` 死存储 `flow_matching.py:110` + BigVGAN 整段上采样 `:849` + beam3 fp32 KV ~1.2 GB）。
+**根因**：torch MPS 分配器默认高水位 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=1.7` × recommendedMaxWorkingSetSize 17.76 GiB ≈ **30.2 GiB > 24 GB 物理统一内存**——分配器放行一切直到系统级换页/压缩才表现为整机卡顿，torch 全程不提前 OOM（libtorch 二进制内置警告字符串自证机制存在）。上游 indextts 全仓无任何 MPS 内存限制（`set_per_process_memory_fraction` 0 命中；`torch.cuda.empty_cache()` 全仓 16 处——indextts/ 包 12 + backends/trt/export 4，`infer_v2_5.py` 占 2——在 MPS 上全是 no-op），low_vram 自动降载只查 `torch.cuda`（`infer_v2_5.py:125-129`，MPS 恒 False）。每句 empty_cache 只治累积**速率**不设天花板，且不防单次峰值（CFM 25 步 `sol.append(x)` 死存储 `flow_matching.py:110` + BigVGAN 整段上采样 `:849` + beam3 fp32 KV ~1.2 GB）。
 
 **定性**：部署形态机制缺口（缺资源护栏，长跑阻断级），非上游 bug。
 
-**处理方式**：`tts_server.py` 服务端 `--mps-mem-limit-gib`（缺省策略 `min(0.90×recommended, 16)` GiB，0=不限且完全不调 setter——torch 语义 fraction=0 是 unlimited 而非恢复默认）在 lifespan 模型加载**之前**经 `torch.mps.set_per_process_memory_fraction` 设置进程水位线（模型加载本身即最大分配波）；`/health` 回显 `mps_mem_limit_gib`；水位线 OOM 捕获签名（`"Failed to allocate memory on MPS device"`）转可操作 500 detail（三出路）；手册 VOICE-CLONING §2.3/§2.5（内存治理三层分工表）/§七（症状行）与 ADVANCED §6.8（机制循证）。选型：flag+setter 优于纯 env——同一底层旋钮，但 /health 可见 + 启动命令三副本零漂移。
+**处理方式**：`tts_server.py` 服务端 `--mps-mem-limit-gib`（缺省策略 `min(0.90×recommended, 16)` GiB，0=不限且完全不调 setter——torch 语义 fraction=0 是 unlimited 而非恢复默认）在 lifespan 模型加载**之前**经 `torch.mps.set_per_process_memory_fraction` 设置进程水位线（模型加载本身即最大分配波）；`/health` 回显 `mps_mem_limit_gib`；水位线 OOM 捕获签名（`"MPS backend out of memory"`，torch 2.8.0 实测的 RuntimeError 文本）转可操作 500 detail（三出路；未设上限时改述实际状态，不劝「关闭已关」）；手册 VOICE-CLONING §2.3/§2.5（内存治理三层分工表）/§七（症状行）与 ADVANCED §6.8（机制循证）。选型：flag+setter 优于纯 env——同一底层旋钮，但 /health 可见 + 启动命令三副本零漂移。
 
 **后续防范**：平台分配器默认值不可默认信任为安全值（CUDA 默认也允许接近全部显存）——新增长跑型 GPU 服务（渲染、whisper、whisperX 等）上线前先查其内存上限语义并设进程级水位线；MPS 侧优先进程级 setter 而非全局 `iogpu.wired_limit_mb`（后者全局影响所有 Metal 应用，仅应急）。同 venv 无 flag 的 ad-hoc 脚本用 `PYTORCH_MPS_HIGH_WATERMARK_RATIO` env 兜底。
 

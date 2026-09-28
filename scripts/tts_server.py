@@ -520,7 +520,8 @@ def _apply_mps_limit(limit_gib: float | None) -> float | None:
     ≈30.2 GiB，超 24 GB 物理统一内存）：长跑累积与单次峰值都能把系统内存拉爆成换页卡顿，
     且 torch 在系统级内存压力前不报 OOM（RSI-017，机制循证见 INDEXTTS-2.5-ADVANCED §6.8）。
     上限经 set_per_process_memory_fraction（fraction = limit / recommended）设置；超限路径：
-    分配器先自动归还缓存，仍不足抛 "Failed to allocate memory on MPS device"。
+    分配器先自动归还缓存，仍不足抛 RuntimeError "MPS backend out of memory (...)"
+    （torch 2.8.0 实测签名，消息含 max allowed 与 PYTORCH_MPS_HIGH_WATERMARK_RATIO 提示）。
     torch 语义 fraction=0 是 unlimited 而非恢复默认，故 limit<=0 一律不调 setter。
     """
     try:
@@ -715,20 +716,29 @@ async def synthesize(req: SynthesizeRequest):
                     audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
         except Exception as exc:
             # 水位线 OOM 转可操作 500：未捕获异常只会得到无信息的 "Internal Server Error"，而
-            # 确定性 OOM（该句/块内在需求超上限）客户端重试 4 次也救不回——带上限值与三出路，
-            # detail 会经客户端 _http_error_detail 透传到最终报错。签名匹配为主判据（MPS OOM
-            # 是 RuntimeError 文本）；类型名兜底 torch.OutOfMemoryError 子类（不 import torch）。
+            # 确定性 OOM（该句/块内在需求超上限）客户端重试 4 次也救不回——带上限值与三出路
+            # （未设上限时改述实际状态，不劝「关闭已关」），detail 会经客户端 _http_error_detail
+            # 透传到最终报错。签名匹配为主判据（MPS OOM 是 RuntimeError 文本，torch 2.8.0 实测
+            # "MPS backend out of memory"）；类型名兜底 torch.OutOfMemoryError 子类（不 import torch）。
             # 其余异常原样放行（NaN 已在 _read_audio 单独 500）。
             if (
-                "Failed to allocate memory on MPS device" in str(exc)
+                "MPS backend out of memory" in str(exc)
                 or type(exc).__name__ == "OutOfMemoryError"
             ):
-                raise HTTPException(
-                    500,
-                    f"MPS 显存上限不足（当前上限 {STATE.get('mps_mem_limit_gib')} GiB）："
-                    f"上调 --mps-mem-limit-gib 重启、拆短该句/块，"
-                    f"或 --mps-mem-limit-gib 0 关闭（回退旧行为）。原始错误: {exc}",
-                ) from exc
+                limit = STATE.get("mps_mem_limit_gib")
+                if limit is not None:
+                    remedy = (
+                        f"MPS 显存上限不足（当前上限 {limit} GiB）："
+                        f"上调 --mps-mem-limit-gib 重启、拆短该句/块，"
+                        f"或 --mps-mem-limit-gib 0 关闭（回退旧行为）。"
+                    )
+                else:  # 0=不限 / setter 失败：劝「关闭」或「上调」都不攻自破
+                    remedy = (
+                        "MPS 显存耗尽（未设上限，torch 默认水位 ≈1.7×recommended）："
+                        "拆短该句/块、释放其它 GPU 进程，"
+                        "或显式设 --mps-mem-limit-gib 上限。"
+                    )
+                raise HTTPException(500, f"{remedy} 原始错误: {exc}") from exc
             raise
         finally:
             # MPS 长跑泄漏对冲：每次合成后归还分配器缓存。实测（2026-09-23 本机）连续
