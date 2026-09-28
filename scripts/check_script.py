@@ -42,8 +42,27 @@ manifest 若在则含实测口径）+ 读法陷阱 + 发音标注合法性（bui
 以 0 退出；storyboard 相关的覆盖性/淡入/场景互比在此模式下一律跳过。
 
 可选 --pron-candidates（报告，非门）：逐句列出命中多音字候选表的句子
-（候选表见 pron_marks.POLYPHONE_CANDIDATES；与 --pre-tts 互斥——一个是门、
-一个是注意力清单，混跑会让退出码语义含混）。退出码恒 0。
+（候选表见 pron_marks.POLYPHONE_CANDIDATES；与 --pre-tts / --lang en 互斥——
+与门混跑会让退出码语义含混，多音字表只针对中文）。退出码恒 0；句中带非法
+标注时点名但不判死（标注合法性的执法在 --pre-tts 面）。
+
+可选 --pron-gate（RSI-014，门）：在候选报告之上，把「语义规则命中而句中该
+occurrence **无任何标注**」升为 FAIL。字典级确定的语境（每行/单选行/银行）
+不该等复听——jev 集全片 26 处「行(háng)」被读成 xíng（v1＝negentropy 37692b45d；
+修复 8974c2f3f 标 27 处），候选报告全程零拦截、
+终渲后才靠人耳发现。已标注的 occurrence（无论读音是否同推荐）视为作者显式
+接管，不拦——语义规则是建议不是权威；「接管」的前提是标注本身合法：非法
+标注（必然读错，比漏标更严重）在本面直接 FAIL（评审回归 D2-1）。缺省（不带
+本 flag）仍为报告。与 --pre-tts / --term-density / --lang en 互斥（规则表
+只针对中文）；--json/--check-scenes/--check-motion 属内容门面，同样互斥。
+
+可选 --term-density（RSI-015，WARN 级）：④B 密度预算的机器面——逐 beat 统计
+**首现术语**个数（>2 报 WARN）、逐幕汇总（>8 报 WARN），超出须拆 beat 或用
+白话替代消术语。术语两面：`--terms 逗号清单` 显式声明（中文术语系统由 ④B
+评审员圈定后喂入——机器分不出「集中度」是不是术语，声明优于猜测）＋拉丁
+字母词自动面（Jev、top-p 这类英文专名）。beat 边界读 narration.json 的
+beatStart（build 派生，幕内空行 = 一个 beat）；旧版产物缺失该键时 beat 级
+点名跳过、幕级照跑。与 --lang en 互斥（英文稿整句拉丁字母，密度口径无意义）。
 
 用法：uv run --no-project $T/scripts/check_script.py --project $P [--lang zh|en]
 退出码：0 = 通过；1 = 有 FAIL。WARN 不影响退出码但会列明。
@@ -62,7 +81,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 import config  # noqa: E402 - 同目录模块，须在 sys.path 注入之后
 import langs  # noqa: E402
 from build_narration import read_lock, stale_ids  # noqa: E402
-from pron_marks import scan_candidates, strip_marks, validate  # noqa: E402
+from pron_marks import scan_candidates, semantic_missing, strip_marks, validate  # noqa: E402
 from timeline import load_constants, total_duration_in_frames  # noqa: E402
 
 #: 分镜表行：| 镜号 | 句区间 | 画面 | 动效 |。镜号形如 `0-A`/`2-B2`。
@@ -502,6 +521,126 @@ def check_pron_marks(items: list[dict], msgs: list[str]) -> None:
             fail(msgs, f"句 {it['id']} 发音标注非法：{errs[0]}")
 
 
+#: 术语密度预算（RSI-015 ④B「密度预算」的机器面，WARN 级）：jev 集三个名词系统
+#: （集中度/门槛/计费单位）全部「先用后讲」，④B 五条全检通过而普通观众仍一脸懵
+#: ——每 beat 首现术语 ≤2、每幕 ≤8 是 04 规格 B 节的判据，此处做可机判的那半。
+TERM_BUDGET_BEAT = 2
+TERM_BUDGET_SCENE = 8
+#: 拉丁字母术语 token（自动面）：英文专名/方法名（Jev、top-p、IndexTTS）。
+#: 单字母（变量名 a、倍数 x）不构成术语，长度门 ≥2。近似边界（评审回归 D3-3，
+#: 接受为已知近似）：数字开头的词（3D、802.11）与斜杠对（A/B）漏计；「e.g.」
+#: 这类缩写按术语计入——自动面只做注意力预算，不追求词法完备。
+TERM_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]*[A-Za-z0-9+#]|[A-Za-z]")
+
+
+def check_term_density(items: list[dict], declared: list[str], msgs: list[str]) -> None:
+    """首现术语密度（WARN 级）：逐 beat ≤TERM_BUDGET_BEAT、逐幕 ≤TERM_BUDGET_SCENE。
+
+    术语 = `--terms` 显式清单（中文术语系统由 ④B 评审员圈定后声明——机器分不出
+    「集中度」是不是术语，声明优于猜测）∪ 拉丁字母词自动面。声明面语义（评审
+    回归 D3-1）：拉丁声明词只按**整 token** 命中（声明 AI 不得命中 OpenAI 的
+    内嵌子串）；中文声明词按子串命中、与其它声明词重叠时最长优先（门槛/高门槛
+    同处只计 1）——同一处文本只贡献一个首现术语。声明词全片零命中时点名 WARN
+    （评审回归 D3-2）：圈词与稿子措辞失配会让该术语系统的密度门静默失效。
+    「首现」按全片顺序首次出现计；beat 边界读 narration.json 的 beatStart
+    （build 派生），旧版产物缺该键时 beat 级点名跳过（静默跳过的门比没有门
+    更糟）、幕级照跑。
+    """
+    # 声明清单归一：casefold 为匹配键、保留原样显示（Jev≠jev 只在显示层）
+    decl: dict[str, str] = {}
+    for t in declared:
+        t = t.strip()
+        if t:
+            decl.setdefault(t.casefold(), t)
+    seen: set[str] = set()
+    display: dict[str, str] = {}
+    first_at: dict[str, tuple[str, str]] = {}  # 术语 → (首现句id, 幕)
+    for it in items:
+        cf = it["text"].casefold()
+        toks = [m.group(0).casefold() for m in TERM_TOKEN_RE.finditer(it["text"])]
+        found: set[str] = set()
+        # 声明面：拉丁词整 token 匹配；中文词子串匹配、按位置最长优先占位
+        claimed: list[tuple[int, int]] = []
+        for k in sorted(decl, key=len, reverse=True):
+            if TERM_TOKEN_RE.fullmatch(k):
+                if k in toks:
+                    found.add(k)
+                continue
+            start = cf.find(k)
+            while start != -1:
+                span = (start, start + len(k))
+                if not any(s < span[1] and span[0] < e for s, e in claimed):
+                    claimed.append(span)
+                    found.add(k)
+                    break
+                start = cf.find(k, start + 1)
+        # 拉丁自动面：≥2 字符整 token
+        found.update(t for t in toks if len(t) >= 2)
+        for t in found - seen:
+            first_at[t] = (it["id"], it["scene"])
+            display[t] = decl.get(t, t)
+        seen |= found
+    for k, shown in decl.items():
+        if k in seen:
+            continue
+        # 被更长声明词占位命中（门槛 ⊂ 高门槛 且 高门槛 已命中）不是失配——
+        # 该处文本已按最长声明计，再报「未命中」会把评审员引向错误结论
+        if any(k in d for d in decl if d != k and d in seen):
+            continue
+        warn(
+            msgs,
+            f"术语密度：声明术语「{shown}」全片未命中——圈词与稿子措辞失配？"
+            "（该术语系统的密度门没有测到）",
+        )
+    # beat 分组：幕切换或 beatStart=True 开新 beat；无 beatStart 时每个幕并为
+    # 一个 beat，但该形态下 beat 级预算与幕级同源（≤2 对 ≤8 必然先红），故点名跳过
+    has_beats = any(i.get("beatStart") for i in items)
+    if not has_beats:
+        warn(
+            msgs,
+            "narration.json 无 beatStart（旧版 build 产物，重跑 build 即得）——"
+            "beat 级术语密度跳过，仅幕级执法",
+        )
+    beat_head: list[str] = []
+    sid_beat: dict[str, int] = {}
+    prev_scene = None
+    for it in items:
+        if (
+            not beat_head
+            or it["scene"] != prev_scene
+            or (has_beats and it.get("beatStart"))
+        ):
+            beat_head.append(it["id"])
+        sid_beat[it["id"]] = len(beat_head) - 1
+        prev_scene = it["scene"]
+    beat_terms: dict[int, list[str]] = {}
+    scene_terms: dict[str, list[str]] = {}
+    for t, (sid, scene) in first_at.items():
+        if (b := sid_beat.get(sid)) is not None:
+            beat_terms.setdefault(b, []).append(t)
+        scene_terms.setdefault(scene, []).append(t)
+    if has_beats:
+        for b, terms in sorted(beat_terms.items()):
+            if len(terms) > TERM_BUDGET_BEAT:
+                warn(
+                    msgs,
+                    f"术语密度：beat {beat_head[b]} 首现术语 {len(terms)} 个"
+                    f"（预算 ≤{TERM_BUDGET_BEAT}）：{'、'.join(sorted(display[t] for t in terms))}"
+                    "——拆 beat 或用白话替代消术语",
+                )
+    for scene, terms in sorted(scene_terms.items()):
+        if len(terms) > TERM_BUDGET_SCENE:
+            warn(
+                msgs,
+                f"术语密度：幕 {scene} 首现术语 {len(terms)} 个"
+                f"（预算 ≤{TERM_BUDGET_SCENE}）：{'、'.join(sorted(display[t] for t in terms))}",
+            )
+    print(
+        f"  术语密度：首现 {len(first_at)} 个术语 · beat {len(beat_head)} 段 · "
+        f"幕 {len(scene_terms)} 处（beat ≤{TERM_BUDGET_BEAT} · 幕 ≤{TERM_BUDGET_SCENE}）"
+    )
+
+
 def check_fade_invariant(root: Path, msgs: list[str]) -> None:
     c = load_constants(root)
     budget = c["sentenceGapSec"] + c["sceneGapSec"]
@@ -784,15 +923,60 @@ def main() -> None:
         help="报告（非门）：列出命中多音字候选表的句子，供复听时重点关注；退出码恒 0",
     )
     ap.add_argument(
+        "--pron-gate",
+        action="store_true",
+        help="门（RSI-014）：候选报告之上，语义规则命中（字典级确定读音，如 每行→HANG2）"
+        "而句中该 occurrence 无任何标注时 FAIL；已标注视为作者显式接管不拦",
+    )
+    ap.add_argument(
+        "--term-density",
+        action="store_true",
+        help="附（WARN，RSI-015）：逐 beat 首现术语 ≤2、逐幕 ≤8 的密度预算；"
+        "中文术语经 --terms 声明，拉丁字母词自动计入",
+    )
+    ap.add_argument(
+        "--terms",
+        default="",
+        help="--term-density 的显式术语清单（逗号分隔，如「集中度,门槛,计费单位」）；"
+        "由 ④B 评审员圈定后喂入",
+    )
+    ap.add_argument(
         "--json", action="store_true", help="以 JSON 输出结果（供 pipeline.py 汇总）"
     )
     args = ap.parse_args()
-    if args.pre_tts and args.pron_candidates:
-        ap.error("--pre-tts 是门、--pron-candidates 是报告，两者互斥")
     try:
         lang = langs.validate(args.lang)
     except ValueError as e:
         ap.error(str(e))
+    pron_face = args.pron_candidates or args.pron_gate
+    if args.pre_tts and pron_face:
+        ap.error(
+            "--pre-tts 是内容门、--pron-candidates/--pron-gate 是发音候选面，两者互斥"
+        )
+    if pron_face and args.term_density:
+        ap.error("--term-density 与 --pron-candidates/--pron-gate 互斥")
+    if args.terms and not args.term_density:
+        ap.error("--terms 只与 --term-density 同用")
+    # 报错按实际触发的 flag 点名——用户只传 --pron-candidates 时报
+    # --pron-gate/--term-density 是指向不存在的误用（评审回归 D5-4）
+    zh_only = [
+        name
+        for name, on in (
+            ("--pron-candidates", args.pron_candidates),
+            ("--pron-gate", args.pron_gate),
+            ("--term-density", args.term_density),
+        )
+        if on
+    ]
+    if zh_only and lang != langs.PRIMARY:
+        ap.error(f"{'/'.join(zh_only)} 仅对主稿（zh）有意义")
+    if pron_face and (args.json or args.check_scenes or args.check_motion):
+        # 静默丢弃比报错更糟：CI 传了 --check-scenes 却以为两项都跑了（评审
+        # 回归 D2-2）；--json 的机读面只存在于内容门路径
+        ap.error(
+            "--json/--check-scenes/--check-motion 属内容门面，"
+            "与 --pron-candidates/--pron-gate 互斥"
+        )
 
     root = Path(args.project).resolve()
     # required=False：内容门在没有 pipeline.toml 时仍应能跑（如新集脚手架期）。
@@ -803,12 +987,44 @@ def main() -> None:
     )
     items = json.loads(langs.narration_json(root, lang).read_text(encoding="utf-8"))
 
-    if args.pron_candidates:
+    if pron_face:
+        # 「已标注 = 作者显式接管」只对合法标注成立：非法标注（拼音无声调/
+        # 未成对尖括号）是必然读错，比门要拦的漏标更严重，先于语义判定收口
+        # （评审回归 D2-1）。报告面按「退出码恒 0」契约只点名不判死。
+        illegal = []
+        for it in items:
+            errs, _warns = validate(it.get("ttsText") or it["text"])
+            if errs:
+                illegal.append((it["id"], errs[0]))
         hits = scan_candidates(items)
         print(f">> 多音字候选 · {root.name} · {len(items)} 句（候选 ≠ 台账，非门）")
         for sid, char, risk, advice in hits:
             print(f"  {sid}  {char}  {risk}  → 若听出错读：{advice}")
-        print(f">> 候选命中 {len(hits)} 处（确认读错才写台账，不要预防性标注）")
+        missing = semantic_missing(items)
+        if missing:
+            print(
+                f">> 语义规则命中而未标注 {len(missing)} 处"
+                "（字典级确定读音，写稿阶段就该标注——RSI-014）"
+            )
+            for sid, char, reading, mark, ctx in missing:
+                print(f"  {sid}  {char} → {reading}（{ctx}）  建议标注 {mark}")
+        tail = f">> 候选命中 {len(hits)} 处 · 语义规则未标注 {len(missing)} 处"
+        if args.pron_gate:
+            for sid, err in illegal:
+                print(f"  FAIL 句 {sid} 发音标注非法：{err}")
+            for sid, char, reading, mark, ctx in missing:
+                print(
+                    f"  FAIL 句 {sid} 高危多音字 {char!r} 语境「{ctx}」应读 {reading} "
+                    f"而句中无标注：加 {mark}（语义规则命中即建议标注，RSI-014）"
+                )
+            print(tail + "（--pron-gate 门）")
+            sys.exit(1 if (missing or illegal) else 0)
+        for sid, err in illegal:
+            print(
+                f"  ⚠ 句 {sid} 发音标注非法：{err}"
+                "（本面退出码恒 0，合法性执法在 --pre-tts 面）"
+            )
+        print(tail + "（语义规则命中处写稿即标注；其余候选确认读错才写台账）")
         return
 
     board = root / "script" / "storyboard.md"
@@ -834,6 +1050,8 @@ def main() -> None:
         if lang == langs.PRIMARY:
             check_reading_traps(items, msgs)
         check_pron_marks(items, msgs)
+        if args.term_density:
+            check_term_density(items, args.terms.split(","), msgs)
     elif lang != langs.PRIMARY:
         # en 完整门：语言无关门（覆盖/淡入/场景互比/动效互比）只在主稿执法——
         # 分镜与场景代码是 zh 主稿的派生物，en 按句 id 复用，重复执法只会双报
@@ -854,6 +1072,8 @@ def main() -> None:
         check_reading_traps(items, msgs)
         check_fade_invariant(root, msgs)
         check_caption_duplication(root, items, msgs)
+        if args.term_density:
+            check_term_density(items, args.terms.split(","), msgs)
         if args.check_scenes:
             check_scenes(root, beats, msgs, known_ids={i["id"] for i in items})
         if args.check_motion:

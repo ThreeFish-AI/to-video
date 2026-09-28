@@ -27,7 +27,7 @@
 - **幕标题即章节标签**：标题文字由 build 派生进 `video/src/chapters.json`，内嵌为顶部分段章节进度条
   段内文字（`## P2 认知残留` → 段内直显「认知残留」）。命名取 2–8 字名词短语，不口号化。
 - 每句一个完整语义单元（一条字幕），长度 8–35 字为宜；TTS 微调规则：`——`→逗号停顿、`……`→句号。
-- **幕内空行 = 一个 beat（自然段）**：一个想法一段、2–8 句，对应分镜一镜；build 只认幕标题行与句行，空行与 `>` 备注均跳过，分段不影响任何派生物。写法与判据见 [05 成文优化](./05-prose-refinement.md) 第四节。
+- **幕内空行 = 一个 beat（自然段）**：一个想法一段、2–8 句，对应分镜一镜；build 只认幕标题行与句行，空行与 `>` 备注均跳过，分段只落 beat 首句的 `beatStart` 标记（供 [④B 术语密度](./04-verification.md) 逐 beat 统计，RSI-015），不影响配音/字幕/时间轴。写法与判据见 [05 成文优化](./05-prose-refinement.md) 第四节。
 
 ## 读法纪律（上游中文归一化的实测行为）
 
@@ -67,6 +67,15 @@
   与 [ADVANCED §2.3 定稿配方](INDEXTTS-2.5-ADVANCED.md)处理（标注 + 重掷 + 无偏验证）；
   **句尾英文词读法一律标注兜底、不赌采样**（take 验收与重掷协议见
   [VOICE-CLONING.md §5.4](VOICE-CLONING.md)）。
+- **高危多音字（语义规则命中 → 建议标注）在写稿阶段标好，不要等试听**（RSI-014）：
+  jev 集 v1 全片 26 处「行(háng)」被 TTS 读成 xíng（negentropy 37692b45d；修复
+8974c2f3f 标 27 处），候选报告全程零拦截、终渲后才靠
+  人耳发现。语义规则表（[pron_marks.py](../scripts/pron_marks.py) 的 `POLYPHONE_CANDIDATES`，
+  按「已证实会错的方向」维护，速查见 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)）命中即给
+  字典级确定的读音；定稿前跑
+  `uv run --no-project $T/scripts/check_script.py --project $P --pron-candidates`
+  看「语义规则命中而未标注」清单逐处补标（CI/门禁场景加 `--pron-gate` 升为 FAIL 门）。
+  规则未覆盖的候选字仍是「确认读错才标注」——歧义语境下预防性标注反而引入风险。
 - 发现的读错字请沉淀到 [PRON-GLOSSARY.md](PRON-GLOSSARY.md) 供跨集复用。
 
 ## 配音台本（narration.cues.toml，与主稿同产）

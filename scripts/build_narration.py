@@ -28,6 +28,10 @@ narration.langs 后附进条目 i18n 键（en 文件缺失/解析失败降级 WA
            并污染字数口径；
   ttsText  原始带标注文本，**仅当该句含标注时才写入** —— tts.py 优先取它送合成。
 
+另有 beatStart（beat 首句标记，RSI-015）：幕首句与幕内每个空行后的首句落
+True（`>` 备注行不断 beat），供 check_script --term-density 逐 beat 统计术语
+密度；不参与配音/字幕/时间轴任何派生，旧版 json 缺该键时密度门降级幕级并点名。
+
 未标注的句子不产生 ttsText 字段，取值与历史完全一致 ⇒ 存量缓存摘要不失效。
 标注本身携带原字，故一处书写即可派生两者，不存在两份副本漂移。
 
@@ -99,11 +103,19 @@ def parse_md(
     mark_errors: list[str] = []
     mark_warnings: list[str] = []
     marked = 0
+    # beat 边界（幕内空行 = 一个 beat，05 规格第四节第 8 条）：落 beatStart=True 派生标记，
+    # 供 check_script --term-density 逐 beat 统计（RSI-015）。`>` 备注行不断 beat——
+    # 断行依据是空行（03 格式契约）；标记只增不改既有键，配音/字幕/时间轴零波及。
+    beat_break = True  # 幕首句天然开一个 beat
     for lineno, raw in enumerate(src.read_text(encoding="utf-8").splitlines(), 1):
         if m := SCENE_RE.match(raw):
             scene = m.group("scene")
             # 插入序即章节序；重号幕保留首个（与句子归属的首次生效口径一致）
             scene_titles.setdefault(scene, m.group("title").strip())
+            beat_break = True
+            continue
+        if not raw.strip():
+            beat_break = True
             continue
         if m := LINE_RE.match(raw):
             sid, text = m.group("id"), m.group("text").strip()
@@ -134,6 +146,9 @@ def parse_md(
                 "scene": scene,
                 "text": strip_marks(text),
             }
+            if beat_break:
+                item["beatStart"] = True
+                beat_break = False
             if has_marks(text):
                 item["ttsText"] = text
                 marked += 1
@@ -150,7 +165,8 @@ def parse_md(
 #       校验「去标点后与 text 全等、发音标注逐个原样」，改字必须回 narration.md 改。
 #   [take] <句id> = N —— take 验收的重掷：该句所在块种子 +N（1–999），只重录这一块；
 #       定稿值留在台本即 canonical（块模式的 §5.4 口径）。
-# 无该文件 ⇒ narration.json 与今日逐字节一致（存量集零波及）；en 构建不消费台本
+# 无该文件 ⇒ narration.json 不因台本而变（beatStart 为 RSI-015 无条件派生，见
+#       上文 beat 边界——对拍时除该键外逐字节一致）；en 构建不消费台本
 # （story 档 EN 回退逐句）。
 #: 「只许改标点」的比较口径，按标点**串**整体判定（逐字符判定会被 `3……5` 绕过）：
 #: 不夹在两数字之间 ⇒ 剥掉；夹在两数字之间且恰为单个半角 `.,:` ⇒ 数值/时刻的一部分
