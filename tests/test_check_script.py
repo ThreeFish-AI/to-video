@@ -461,7 +461,8 @@ def test_term_density_declared_latin_needs_whole_token(project):
 
 def test_term_density_overlapping_declarations_longest_wins(project):
     """中文声明词重叠时长者优先（评审回归 D3-1）：门槛/高门槛 同时声明，
-    「高门槛」一处只计 1 个首现术语。"""
+    「高门槛」一处只计 1 个首现术语；且 门槛 被占位命中不算「全片未命中」
+    失配（二次评审：改前会误报『声明术语「门槛」全片未命中』）。"""
     write_board(project, BOARD_OK)
     write_config(project, CFG_OK)
     write_items(
@@ -476,6 +477,7 @@ def test_term_density_overlapping_declarations_longest_wins(project):
     rc, out = run_check(project, "--term-density", "--terms", "门槛,高门槛")
     assert rc == 0, out
     assert "首现 1 个术语" in out, out
+    assert "全片未命中" not in out, out
 
 
 def test_term_density_declared_zero_hit_warns(project):

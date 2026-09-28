@@ -581,12 +581,17 @@ def check_term_density(items: list[dict], declared: list[str], msgs: list[str]) 
             display[t] = decl.get(t, t)
         seen |= found
     for k, shown in decl.items():
-        if k not in seen:
-            warn(
-                msgs,
-                f"术语密度：声明术语「{shown}」全片未命中——圈词与稿子措辞失配？"
-                "（该术语系统的密度门没有测到）",
-            )
+        if k in seen:
+            continue
+        # 被更长声明词占位命中（门槛 ⊂ 高门槛 且 高门槛 已命中）不是失配——
+        # 该处文本已按最长声明计，再报「未命中」会把评审员引向错误结论
+        if any(k in d for d in decl if d != k and d in seen):
+            continue
+        warn(
+            msgs,
+            f"术语密度：声明术语「{shown}」全片未命中——圈词与稿子措辞失配？"
+            "（该术语系统的密度门没有测到）",
+        )
     # beat 分组：幕切换或 beatStart=True 开新 beat；无 beatStart 时每个幕并为
     # 一个 beat，但该形态下 beat 级预算与幕级同源（≤2 对 ≤8 必然先红），故点名跳过
     has_beats = any(i.get("beatStart") for i in items)
