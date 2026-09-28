@@ -42,15 +42,18 @@ manifest 若在则含实测口径）+ 读法陷阱 + 发音标注合法性（bui
 以 0 退出；storyboard 相关的覆盖性/淡入/场景互比在此模式下一律跳过。
 
 可选 --pron-candidates（报告，非门）：逐句列出命中多音字候选表的句子
-（候选表见 pron_marks.POLYPHONE_CANDIDATES；与 --pre-tts 互斥——一个是门、
-一个是注意力清单，混跑会让退出码语义含混）。退出码恒 0。
+（候选表见 pron_marks.POLYPHONE_CANDIDATES；与 --pre-tts / --lang en 互斥——
+与门混跑会让退出码语义含混，多音字表只针对中文）。退出码恒 0；句中带非法
+标注时点名但不判死（标注合法性的执法在 --pre-tts 面）。
 
 可选 --pron-gate（RSI-014，门）：在候选报告之上，把「语义规则命中而句中该
 occurrence **无任何标注**」升为 FAIL。字典级确定的语境（每行/单选行/银行）
 不该等复听——jev 集全片 30 处「行(háng)」被读成 xíng，候选报告全程零拦截、
 终渲后才靠人耳发现。已标注的 occurrence（无论读音是否同推荐）视为作者显式
-接管，不拦——语义规则是建议不是权威。缺省（不带本 flag）仍为报告。与
---pre-tts / --term-density / --lang en 互斥（规则表只针对中文）。
+接管，不拦——语义规则是建议不是权威；「接管」的前提是标注本身合法：非法
+标注（必然读错，比漏标更严重）在本面直接 FAIL（评审回归 D2-1）。缺省（不带
+本 flag）仍为报告。与 --pre-tts / --term-density / --lang en 互斥（规则表
+只针对中文）；--json/--check-scenes/--check-motion 属内容门面，同样互斥。
 
 可选 --term-density（RSI-015，WARN 级）：④B 密度预算的机器面——逐 beat 统计
 **首现术语**个数（>2 报 WARN）、逐幕汇总（>8 报 WARN），超出须拆 beat 或用
@@ -920,8 +923,26 @@ def main() -> None:
         ap.error("--term-density 与 --pron-candidates/--pron-gate 互斥")
     if args.terms and not args.term_density:
         ap.error("--terms 只与 --term-density 同用")
-    if (pron_face or args.term_density) and lang != langs.PRIMARY:
-        ap.error("--pron-gate/--term-density 仅对主稿（zh）有意义")
+    # 报错按实际触发的 flag 点名——用户只传 --pron-candidates 时报
+    # --pron-gate/--term-density 是指向不存在的误用（评审回归 D5-4）
+    zh_only = [
+        name
+        for name, on in (
+            ("--pron-candidates", args.pron_candidates),
+            ("--pron-gate", args.pron_gate),
+            ("--term-density", args.term_density),
+        )
+        if on
+    ]
+    if zh_only and lang != langs.PRIMARY:
+        ap.error(f"{'/'.join(zh_only)} 仅对主稿（zh）有意义")
+    if pron_face and (args.json or args.check_scenes or args.check_motion):
+        # 静默丢弃比报错更糟：CI 传了 --check-scenes 却以为两项都跑了（评审
+        # 回归 D2-2）；--json 的机读面只存在于内容门路径
+        ap.error(
+            "--json/--check-scenes/--check-motion 属内容门面，"
+            "与 --pron-candidates/--pron-gate 互斥"
+        )
 
     root = Path(args.project).resolve()
     # required=False：内容门在没有 pipeline.toml 时仍应能跑（如新集脚手架期）。
@@ -933,6 +954,14 @@ def main() -> None:
     items = json.loads(langs.narration_json(root, lang).read_text(encoding="utf-8"))
 
     if pron_face:
+        # 「已标注 = 作者显式接管」只对合法标注成立：非法标注（拼音无声调/
+        # 未成对尖括号）是必然读错，比门要拦的漏标更严重，先于语义判定收口
+        # （评审回归 D2-1）。报告面按「退出码恒 0」契约只点名不判死。
+        illegal = []
+        for it in items:
+            errs, _warns = validate(it.get("ttsText") or it["text"])
+            if errs:
+                illegal.append((it["id"], errs[0]))
         hits = scan_candidates(items)
         print(f">> 多音字候选 · {root.name} · {len(items)} 句（候选 ≠ 台账，非门）")
         for sid, char, risk, advice in hits:
@@ -947,13 +976,20 @@ def main() -> None:
                 print(f"  {sid}  {char} → {reading}（{ctx}）  建议标注 {mark}")
         tail = f">> 候选命中 {len(hits)} 处 · 语义规则未标注 {len(missing)} 处"
         if args.pron_gate:
+            for sid, err in illegal:
+                print(f"  FAIL 句 {sid} 发音标注非法：{err}")
             for sid, char, reading, mark, ctx in missing:
                 print(
                     f"  FAIL 句 {sid} 高危多音字 {char!r} 语境「{ctx}」应读 {reading} "
                     f"而句中无标注：加 {mark}（语义规则命中即建议标注，RSI-014）"
                 )
             print(tail + "（--pron-gate 门）")
-            sys.exit(1 if missing else 0)
+            sys.exit(1 if (missing or illegal) else 0)
+        for sid, err in illegal:
+            print(
+                f"  ⚠ 句 {sid} 发音标注非法：{err}"
+                "（本面退出码恒 0，合法性执法在 --pre-tts 面）"
+            )
         print(tail + "（语义规则命中处写稿即标注；其余候选确认读错才写台账）")
         return
 

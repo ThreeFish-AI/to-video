@@ -126,3 +126,56 @@ def test_gate_refuses_lang_en(project):
     rc, out = run_check(project, "--pron-gate", "--lang", "en")
     assert rc != 0
     assert "zh" in out
+
+
+def test_gate_fails_on_illegal_mark(project):
+    """非法标注（必然读错）比漏标更严重：门面直接 FAIL，不得当作有效作者
+    接管放行（评审回归 D2-1——改前 rc=0 假绿）。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_marked_narration(
+        project,
+        ["每一行都要重新算。", BENIGN, BENIGN, BENIGN],
+        {"p0-01": "每一<行|háng>都要重新算。"},  # 小写拼音 = 非法标注
+    )
+    rc, out = run_check(project, "--pron-gate")
+    assert rc == 1, out
+    assert "发音标注非法" in out and "FAIL" in out
+
+
+def test_report_mode_names_illegal_mark_but_stays_nongating(project):
+    """报告面维持「退出码恒 0」契约，但非法标注要点名——静默比非门更糟。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_marked_narration(
+        project,
+        ["每一行都要重新算。", BENIGN, BENIGN, BENIGN],
+        {"p0-01": "报单上每一<行|>都要核对。"},  # 空读音 = 非法标注
+    )
+    rc, out = run_check(project, "--pron-candidates")
+    assert rc == 0, out
+    assert "发音标注非法" in out and "FAIL" not in out
+
+
+def test_gate_refuses_content_face_flags(project):
+    """--json/--check-scenes/--check-motion 属内容门面：pron 面静默丢弃会让人
+    以为两项检查都跑了（评审回归 D2-2）。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    for flag in ("--json", "--check-scenes", "--check-motion"):
+        rc, out = run_check(project, "--pron-gate", flag)
+        assert rc != 0, (flag, out)
+        assert "互斥" in out, (flag, out)
+
+
+def test_candidates_lang_en_error_names_actual_flag(project):
+    """报错按实际触发的 flag 点名：只传 --pron-candidates 却报 --pron-gate
+    是指向不存在的误用（评审回归 D5-4）。断言锚在报错行上——usage 行天然
+    列出全部 flag，锚在全文会假绿。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project, "--pron-candidates", "--lang", "en")
+    assert rc != 0
+    assert any(
+        "仅对主稿" in ln and "--pron-candidates" in ln for ln in out.splitlines()
+    ), out
