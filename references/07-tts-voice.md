@@ -59,7 +59,7 @@ IndexTTS 服务端（端口取自 `tts.server`，默认 8766，下文命令以�
    lsof -nP -iTCP:8766 -sTCP:ESTABLISHED                          # 有非自己的连接 → 有人在用
    pgrep -fl "scripts/tts.py|tts_sample.py|tts_bench.py" # 有他人的合成进程 → 有人在用
    ```
-2. **关闭**：`lsof -ti tcp:8766 -sTCP:LISTEN | xargs kill`——按端口只关判据所查的那一个实例；**勿用 `pkill -f tts_server.py`**，它会连带杀掉 `tts_bench.py` 的 8767 A/B 实例与改过端口的他人实例（判据面 ≠ 作用面；按端口而非扫 argv 的先例见 `tts_bench.py`）。服务是幂等拉起的——下次任何 tts 调用不可达时会自动打印启动命令，无需记忆。
+2. **关闭**：`lsof -ti tcp:8766 -sTCP:LISTEN | xargs kill`——按端口只关判据所查的那一个实例；**勿用 `pkill -f tts_server.py`**，它会连带杀掉 8767 上他人的第二个 `tts_server.py` 实例（A/B 用）与改过端口的他人实例（判据面 ≠ 作用面；按端口而非扫 argv 的先例见 `tts_bench.py`）。服务是幂等拉起的——下次任何 tts 调用不可达时会自动打印启动命令，无需记忆。
 3. **不预启动**：不要为「可能要用」提前拉服务；`tts --plan` 不触网，`doctor` 对离线服务只报 ⚠️ 不计失败——关停是常态，不是待修的红灯。
 
 先完成者**不得**关闭他人正用的实例（以第 1 步判据为准）；适当重启本身即运维收益——清空累积态、归还显存。完整部署/启停命令见 [VOICE-CLONING.md §二](VOICE-CLONING.md)。

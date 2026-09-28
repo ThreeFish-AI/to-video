@@ -665,18 +665,21 @@ TensorRT-LLM）。仓库内**无 vLLM 后端**，README 只给外链 recipe。
 
 **管线处置**（VOICE-CLONING §2.3/§2.5/§七 同面）：服务端 `--mps-mem-limit-gib`
 （缺省策略 `min(0.90×recommended, 16)` GiB，进程级、lifespan 内模型加载**之前**设置——
-模型加载本身就是最大分配波）经 `torch.mps.set_per_process_memory_fraction(fraction)`
+模型加载本身就是最大分配波；缺省额度不足 ~11 GiB 的 16 GB 级机型自动不设限：0.9×rec≈9.6
+已贴平 fp32 常驻 ~9.3 GiB，设限只会开箱即 OOM）经 `torch.mps.set_per_process_memory_fraction(fraction)`
 设置（`torch/mps/__init__.py:89`；fraction=limit/recommended，范围 0~2，**0=unlimited 而非
 恢复默认**，故「不限」必须完全不调 setter）。flag>0 时恒覆盖同名 env；env 与 setter 是同一
 底层旋钮，选 flag 是为 /health 可见 + 启动命令三副本零漂移（同 venv 的 `tts_bench.py` 等
-ad-hoc 脚本用 env 兜底即可）。
+ad-hoc 脚本用 env 兜底即可——**须配** `PYTORCH_MPS_LOW_WATERMARK_RATIO`（如 0.7）：
+分配器要求 low ≤ high 而默认 low=1.4，单设 HIGH<1.4 首个 MPS 分配即抛
+`RuntimeError: invalid low watermark ratio 1.4`，torch 2.8.0 实测）。
 
 **上限选型推演**：稳态 driver_allocated 10.00 GB（§6.5 实测）+ 瞬时峰值放大器
-（CFM 25 步 `sol.append(x)` 死存储 `flow_matching.py:110` + BigVGAN 整段上采样 `:849` +
-beam3 fp32 KV ~1.2 GB）→ 16 GiB 留 ~6 GiB 峰值余量，系统侧留 8 GB。**拒绝 20 GB**：
-20/17.76=1.126 越过 recommended 重新进入超发换页区，且系统仅剩 4 GB——多 App 并行时仍会卡。
-`--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB。长块实测仍 OOM 时上调至 ~17.5
-（fraction≤0.98），勿回 20。
+（CFM 25 步 `sol.append(x)` 死存储 `flow_matching.py:110` + BigVGAN 整段上采样
+`infer_v2_5.py:849` + beam3 fp32 KV ~1.2 GB）→ 16 GiB 留 ~6 GiB 峰值余量，系统侧留 8 GB。
+**拒绝 20 GB**：20/17.76=1.126 越过 recommended 重新进入超发换页区，且系统仅剩 4 GB
+——多 App 并行时仍会卡。`--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB。
+长块实测仍 OOM 时上调至 ~17.4（fraction≤0.98），勿回 20。
 
 ## 七、提升路线图（ROI 排序）
 
