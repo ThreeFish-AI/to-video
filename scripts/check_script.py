@@ -526,7 +526,9 @@ def check_pron_marks(items: list[dict], msgs: list[str]) -> None:
 TERM_BUDGET_BEAT = 2
 TERM_BUDGET_SCENE = 8
 #: 拉丁字母术语 token（自动面）：英文专名/方法名（Jev、top-p、IndexTTS）。
-#: 单字母（变量名 a、倍数 x）不构成术语，长度门 ≥2。
+#: 单字母（变量名 a、倍数 x）不构成术语，长度门 ≥2。近似边界（评审回归 D3-3，
+#: 接受为已知近似）：数字开头的词（3D、802.11）与斜杠对（A/B）漏计；「e.g.」
+#: 这类缩写按术语计入——自动面只做注意力预算，不追求词法完备。
 TERM_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]*[A-Za-z0-9+#]|[A-Za-z]")
 
 
@@ -534,9 +536,14 @@ def check_term_density(items: list[dict], declared: list[str], msgs: list[str]) 
     """首现术语密度（WARN 级）：逐 beat ≤TERM_BUDGET_BEAT、逐幕 ≤TERM_BUDGET_SCENE。
 
     术语 = `--terms` 显式清单（中文术语系统由 ④B 评审员圈定后声明——机器分不出
-    「集中度」是不是术语，声明优于猜测）∪ 拉丁字母词自动面。「首现」按全片顺序
-    首次出现计；beat 边界读 narration.json 的 beatStart（build 派生），旧版产物
-    缺该键时 beat 级点名跳过（静默跳过的门比没有门更糟）、幕级照跑。
+    「集中度」是不是术语，声明优于猜测）∪ 拉丁字母词自动面。声明面语义（评审
+    回归 D3-1）：拉丁声明词只按**整 token** 命中（声明 AI 不得命中 OpenAI 的
+    内嵌子串）；中文声明词按子串命中、与其它声明词重叠时最长优先（门槛/高门槛
+    同处只计 1）——同一处文本只贡献一个首现术语。声明词全片零命中时点名 WARN
+    （评审回归 D3-2）：圈词与稿子措辞失配会让该术语系统的密度门静默失效。
+    「首现」按全片顺序首次出现计；beat 边界读 narration.json 的 beatStart
+    （build 派生），旧版产物缺该键时 beat 级点名跳过（静默跳过的门比没有门
+    更糟）、幕级照跑。
     """
     # 声明清单归一：casefold 为匹配键、保留原样显示（Jev≠jev 只在显示层）
     decl: dict[str, str] = {}
@@ -549,15 +556,36 @@ def check_term_density(items: list[dict], declared: list[str], msgs: list[str]) 
     first_at: dict[str, tuple[str, str]] = {}  # 术语 → (首现句id, 幕)
     for it in items:
         cf = it["text"].casefold()
-        found = {k for k in decl if k in cf}
-        for m in TERM_TOKEN_RE.finditer(it["text"]):
-            tok = m.group(0).casefold()
-            if len(tok) >= 2:
-                found.add(tok)
+        toks = [m.group(0).casefold() for m in TERM_TOKEN_RE.finditer(it["text"])]
+        found: set[str] = set()
+        # 声明面：拉丁词整 token 匹配；中文词子串匹配、按位置最长优先占位
+        claimed: list[tuple[int, int]] = []
+        for k in sorted(decl, key=len, reverse=True):
+            if TERM_TOKEN_RE.fullmatch(k):
+                if k in toks:
+                    found.add(k)
+                continue
+            start = cf.find(k)
+            while start != -1:
+                span = (start, start + len(k))
+                if not any(s < span[1] and span[0] < e for s, e in claimed):
+                    claimed.append(span)
+                    found.add(k)
+                    break
+                start = cf.find(k, start + 1)
+        # 拉丁自动面：≥2 字符整 token
+        found.update(t for t in toks if len(t) >= 2)
         for t in found - seen:
             first_at[t] = (it["id"], it["scene"])
             display[t] = decl.get(t, t)
         seen |= found
+    for k, shown in decl.items():
+        if k not in seen:
+            warn(
+                msgs,
+                f"术语密度：声明术语「{shown}」全片未命中——圈词与稿子措辞失配？"
+                "（该术语系统的密度门没有测到）",
+            )
     # beat 分组：幕切换或 beatStart=True 开新 beat；无 beatStart 时每个幕并为
     # 一个 beat，但该形态下 beat 级预算与幕级同源（≤2 对 ≤8 必然先红），故点名跳过
     has_beats = any(i.get("beatStart") for i in items)

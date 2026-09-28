@@ -440,6 +440,97 @@ def test_terms_flag_requires_term_density(project):
     assert "--term-density" in out
 
 
+def test_term_density_declared_latin_needs_whole_token(project):
+    """声明面拉丁词整 token 匹配（评审回归 D3-1）：声明 AI 不得命中 OpenAI 的
+    内嵌子串——「OpenAI 发布了 GPT-4o」真实新概念只有 2 个，双计会虚报 3。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "OpenAI 发布了 GPT-4o。", beat=True),
+            _item("p0-02", "普通句。"),
+            _item("p1-01", "新幕开讲。", beat=True),
+            _item("p1-02", "普通收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", "AI")
+    assert rc == 0, out
+    assert "首现 2 个术语" in out, out  # openai / gpt-4o，无内嵌 ai
+
+
+def test_term_density_overlapping_declarations_longest_wins(project):
+    """中文声明词重叠时长者优先（评审回归 D3-1）：门槛/高门槛 同时声明，
+    「高门槛」一处只计 1 个首现术语。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "这是个高门槛任务。", beat=True),
+            _item("p0-02", "普通句。"),
+            _item("p1-01", "新幕开讲。", beat=True),
+            _item("p1-02", "普通收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", "门槛,高门槛")
+    assert rc == 0, out
+    assert "首现 1 个术语" in out, out
+
+
+def test_term_density_declared_zero_hit_warns(project):
+    """声明词全片零命中点名 WARN（评审回归 D3-2）：圈词与稿子措辞失配时，
+    静默消失会让评审员误以为该术语系统密度合规。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_items(
+        project,
+        [
+            _item("p0-01", "普通句子没有术语。", beat=True),
+            _item("p0-02", "普通句。"),
+            _item("p1-01", "新幕开讲。", beat=True),
+            _item("p1-02", "普通收尾。"),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", "计费单位")
+    assert rc == 0, out  # WARN 级
+    assert any("计费单位" in ln and "全片未命中" in ln for ln in out.splitlines()), out
+
+
+def test_term_density_scene_boundary_at_budget_silent(project):
+    """幕级预算边界（评审回归 D6-2）：恰 8 个首现术语（beat 全 ≤2）须静默——
+    与 beat 侧 within_budget_silent 对称，防 > 回归成 >= 的变异假绿。"""
+    board = """# 分镜
+## P0
+| 镜 | 句区间 | 画面 | 动效 |
+|---|---|---|---|
+| 0-A | p0-01 | x | y |
+| 0-B | p0-02 | x | y |
+| 0-C | p0-03 | x | y |
+| 0-D | p0-04 | x | y |
+## P1
+| 镜 | 句区间 | 画面 | 动效 |
+|---|---|---|---|
+| 1-A | p1-01 | x | y |
+"""
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    (project / "video" / "public" / "audio" / "manifest.json").unlink()
+    write_items(
+        project,
+        [
+            _item("p0-01", "甲乙讲解。", beat=True),
+            _item("p0-02", "丙丁讲解。", beat=True),
+            _item("p0-03", "戊己讲解。", beat=True),
+            _item("p0-04", "庚辛讲解。", beat=True),
+            _item("p1-01", "普通收尾。", beat=True),
+        ],
+    )
+    rc, out = run_check(project, "--term-density", "--terms", "甲,乙,丙,丁,戊,己,庚,辛")
+    assert rc == 0, out
+    assert not [ln for ln in out.splitlines() if "术语密度" in ln and "WARN" in ln], out
+
+
 def test_term_density_pre_tts_mode_also_runs(project):
     """--pre-tts（分镜未写）也要能跑密度门——④B 评审时 storyboard 尚不存在。"""
     (project / "script" / "storyboard.md").unlink()
