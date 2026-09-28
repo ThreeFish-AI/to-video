@@ -225,21 +225,21 @@
 
 ## RSI-014 多音字候选报告非门且无语义消歧：高危读音零拦截直到终渲才靠人耳发现
 
-**表因**：jev-decision-model-video v1 终渲后发现全片约 30 处「行(háng)」被 TTS 读成 xíng——`check_script.py --pron-candidates` 是非门报告（exit 恒 0），`POLYPHONE_CANDIDATES` 仅按「字符在场」列两种候选读音、不做上下文消歧，全片零拦截；PRON-GLOSSARY 台账仅 1 条已确认记录（英文专名 Context），03 规格的纪律是「确认读错才回填台账」——纯被动、无预防，系统性读错只能等终渲后的人耳。
+**表因**：jev-decision-model-video v1（negentropy `37692b45d`）终渲后发现全片 26 处「行(háng)」被 TTS 读成 xíng（修复提交 `8974c2f3f` 标 27 处 HANG2：26 处 v1 位置 + 1 处 v2 改写新增句）——`check_script.py --pron-candidates` 是非门报告（exit 恒 0），`POLYPHONE_CANDIDATES` 仅按「字符在场」列两种候选读音、不做上下文消歧，全片零拦截；PRON-GLOSSARY 台账仅 1 条已确认记录（英文专名 Context），03 规格的纪律是「确认读错才回填台账」——纯被动、无预防，系统性读错只能等终渲后的人耳。
 
-**复现（修复前）**：对含 `每一行都要重新算。` 的最小工程跑 `check_script.py --pron-candidates` → 输出仅「银行/一行代码 háng · 行走/运行 xíng → 若听出错读：`<行|HANG2>` / `<行|XING2>`」，exit 0。真实语料对拍：把 jev 集现稿（negentropy#1173 修复后，27 处 `<行|HANG2>`）剥掉标注模拟 v1——语义规则表在这份语料上命中 27 处 HANG2，与专家修复集逐一对应；全 14 集存量对拍 51 处命中（claude-code 系列「一行代码」语境为主，每集个位数）。
+**复现（修复前）**：对含 `每一行都要重新算。` 的最小工程跑 `check_script.py --pron-candidates` → 输出仅「银行/一行代码 háng · 行走/运行 xíng → 若听出错读：`<行|HANG2>` / `<行|XING2>`」，exit 0。真实语料对拍：把 jev 集 v2 稿（negentropy `8974c2f3f`，分支 ThreeFish-AI/jev-video-remake，经 [negentropy#1176](https://github.com/ThreeFish-AI/negentropy/pull/1176) 合入 feature/1.x.x 于 `57987b28b`；27 处 `<行|HANG2>` + 1 处 `<行|XING2>`）剥掉标注模拟 v1——语义规则表在这份语料上命中 27 处 HANG2，与专家标注集逐句对应；对真 v1（`37692b45d`，未标注）直接命中 26 处，除 v2 改写新增句 p0-20 外逐一对应。全 14 集存量对拍（negentropy feature/1.x.x@`95f5a532e`）51 处命中、全部 HANG2，以「一行+量词」（一行日志/一行字）与「行业」语境为主，每集 ≤9 处（origin@`57987b28b` 已漂移为 15 集 58 处）。
 
 **根因**：① `pron_marks.py` 的候选表是纯「字符存在→列双候选」报告；② `check_script.py` 的 pron-candidates 子命令 exit 恒 0，不参与任何门禁；③ 03 规格发音标注节的纪律只写了「确认读错才回填台账」，没有区分「字典级确定读音的高危面」与「歧义候选面」——前者的标注时机应是写稿阶段而非事后；④ 台账作为唯一证据入口没有反哺机制的通道。
 
 **定性**：非阻断改进（发现集已由内容侧修复；机制缺陷是防线缺位，同类错读在每集都可能复发）。
 
-**方案比选**：规则面宽度三选——A 仅 行→HANG2 单向（采纳）；B 行 双向全量（HANG2+XING2 词表）；C 全部 9 个候选字都配语义规则词表。实测校准否决 B/C：jev 修复时专家在 8 处 xíng 向语境（运行/执行/放行）只标了 1 处（放行，防御性）——**xíng 是 TTS 的默认倾向**（错读方向恒是 háng→xíng），给默认读对的方向设规则只会产出批量冗余标注（B 在 jev 语料上多要 8 处、C 多要 40+ 处），门退化成噪声然后被绕开。规则入表纪律沿用 READING_TRAPS 的「先探针后成门」：某字经试听证实系统性读错后其高危方向才入表（台账是证据入口）。门粒度二选——句级「句中有任一标注即过」被否决：同句「银行已标注 + 每行未标注」会放过第二个 occurrence，按 occurrence 粒度判定（标注几何与 `strip_marks` 剥离几何逐字符对齐）。已标注 occurrence 即便读音与推荐不同也不拦：语义规则是建议不是权威，作者的不同标注是合法异议（规则表本身可能错）。
+**方案比选**：规则面宽度三选——A 仅 行→HANG2 单向（采纳）；B 行 双向全量（HANG2+XING2 词表）；C 全部 9 个候选字都配语义规则词表。实测校准否决 B/C：v1 全片 36 个「行」中 26 处实证错读（háng 向）、其余 10 处 xíng 向语境专家仅防御性标了 1 处（放行 p6-39）——**xíng 是 TTS 的默认倾向**（错读方向恒是 háng→xíng），给默认读对的方向设规则只会产出批量冗余标注（B 要多标 9 处、C 更多），门退化成噪声然后被绕开。规则入表纪律沿用 READING_TRAPS 的「先探针后成门」：某字经试听证实系统性读错后其高危方向才入表（台账是证据入口）。门粒度二选——句级「句中有任一标注即过」被否决：同句「银行已标注 + 每行未标注」会放过第二个 occurrence，按 occurrence 粒度判定（标注几何与 `strip_marks` 剥离几何逐字符对齐）。已标注 occurrence 即便读音与推荐不同也不拦：语义规则是建议不是权威，作者的不同标注是合法异议（规则表本身可能错）。
 
 **处理方式**：分支 `ThreeFish-AI/rsi-014-015-pron-gate-and-layperson-check`（[PR #20](https://github.com/ThreeFish-AI/to-video/pull/20)）。① `pron_marks.py`：`POLYPHONE_CANDIDATES` 每字扩 `semantic_rules` 字段（`(正则, 推荐读音)`，正则必须含本字、覆盖判定按「匹配区间盖住 occurrence」，三条结构门测试钉住）；新增 `semantic_missing()` 纯函数——occurrence 粒度语义消歧，规则命中而无任何标注 → 建议清单；规则只挂 行→HANG2（三条正则：复合词/量词/`的行`，均带负面预查防 一行人/类行为/的行程 误收）。② `check_script.py`：`--pron-gate` flag 把「规则命中而未标注」升为 FAIL 门（缺省仍为报告；与 `--pre-tts`/`--term-density`/`--lang en` 互斥）。③ 03 规格发音标注节补「高危多音字（语义规则命中→建议标注）写稿阶段标好，不要等试听」。④ PRON-GLOSSARY 加「语义规则速查」节（由测试从 `POLYPHONE_CANDIDATES` 渲染钉住，与代码同源不漂移），候选纪律改为两段式：规则命中写稿即标、无规则依据不预防性标注。⑤ 回归测试 `tests/test_pron_gate.py`（CLI 门：不加标注 FAIL / 加标注过 / 作者异议不拦 / 报告面保持非门 / xíng 向零误报 / 互斥）+ `test_pron_marks.py` 扩语义面（规则锚本字、读音合法、速查同源、occurrence 精度、多字词标注覆盖、作者接管）。
 
 **后续防范**：语义规则宁缺勿错——错规则会把可能读对强推成必然读错（上游丢弃原字无兜底）；新规则须有试听/探针证据再入表，入表同 PR 必须带正反控用例（正例：该语境会被推荐；反例：默认读对的方向零误报）。门的退出码语义不可混：报告面（候选注意力）与门面（FAIL）分 flag，互斥执法。文档里的规则速查表必须与代码同源钉住（测试渲染比对），手抄表必漂移。
 
-**同类问题影响**：14 集存量对拍 51 处规则命中（全部 HANG2），均为已发布成片，本仓不改其内容；各集重制/重配音时跑 `--pron-gate` 即可逐处补标（jev 集现稿已标注、门过 0 命中）。英文专名（CMU 通道）不属本门范围——句尾英文词读法按既有「标注兜底、不赌采样」纪律走 PRON-GLOSSARY 台账。
+**同类问题影响**：14 集存量对拍（feature/1.x.x@`95f5a532e`）51 处规则命中（全部 HANG2），均为已发布成片，本仓不改其内容；各集重制/重配音时跑 `--pron-gate` 即可逐处补标（jev 集自 negentropy origin/feature/1.x.x@`57987b28b` 起已标注 27 处、门过 0 命中；更早的 #1172/#1173 版 0 命中系全片无 háng 语境，并非已标注）。英文专名（CMU 通道）不属本门范围——句尾英文词读法按既有「标注兜底、不赌采样」纪律走 PRON-GLOSSARY 台账。
 
 ## RSI-015 ④B 易懂性检查全是句级局部判据：解释存在≠解释到达时观众还在线
 
@@ -249,7 +249,7 @@
 
 **定性**：非阻断改进（评审判据缺位；机器面 WARN 级，不新增 FAIL 门）。
 
-**处理方式**：分支 `ThreeFish-AI/rsi-014-015-pron-gate-and-layperson-check`（[PR #20](https://github.com/ThreeFish-AI/to-video/pull/20)）。① 04 规格 B 节在既有五条后追加「外行瞬时理解三判据」：**解释可懂性**（递归一层检查——比喻不能建立在另一个未解释概念上）、**先释后用**（术语首次承担载荷——参与因果/触发动作/被比较——时解释须已在前一句出现，不能靠后一句补救）、**密度预算**（每 beat 新术语 ≤2、每幕 ≤8，超出拆 beat 或白话替代）。② `check_script.py` 新增 `--term-density`（WARN 级）：逐 beat 统计**首现术语**个数、逐幕汇总；中文术语经 `--terms` 逗号清单显式声明（④B 评审员圈定后喂入——机器分不出「集中度」是不是术语，声明优于猜测）+ 拉丁字母词自动面（≥2 字符 token，casefold 归并）；beat 边界读 `build_narration.py` 新派生的 `beatStart` 键（幕首句与幕内空行后首句落 True，`>` 备注行不断 beat——与 03 格式契约「幕内空行 = 一个 beat」同源），旧版 json 缺该键时 beat 级点名跳过、幕级照跑；`--pre-tts` 模式同样可跑（④B 评审时分镜未写）。与 `--pron-candidates/--pron-gate/--lang en` 互斥。③ 03/05 规格里「分段不影响派生物」的旧口径同步改写（分段现落 beatStart 标记，仍不影响配音/字幕/时间轴）。④ 测试：`test_build_narration` 黄金更新 + beatStart 边界用例（备注不断 beat/连续空行/换幕）；`test_check_script` 新增 7 条密度用例（beat 超载/幕超载/预算内静默/无 beatStart 降级/拉丁自动面/`--terms` 单独用大声退/pre-tts 模式）。
+**处理方式**：分支 `ThreeFish-AI/rsi-014-015-pron-gate-and-layperson-check`（[PR #20](https://github.com/ThreeFish-AI/to-video/pull/20)）。① 04 规格 B 节在既有五条后追加「外行瞬时理解三判据」：**解释可懂性**（递归一层检查——比喻不能建立在另一个未解释概念上）、**先释后用**（术语首次承担载荷——参与因果/触发动作/被比较——时解释须已在前一句出现，不能靠后一句补救）、**密度预算**（每 beat 新术语 ≤2、每幕 ≤8，超出拆 beat 或白话替代）。② `check_script.py` 新增 `--term-density`（WARN 级）：逐 beat 统计**首现术语**个数、逐幕汇总；中文术语经 `--terms` 逗号清单显式声明（④B 评审员圈定后喂入——机器分不出「集中度」是不是术语，声明优于猜测）+ 拉丁字母词自动面（≥2 字符 token，casefold 归并）；beat 边界读 `build_narration.py` 新派生的 `beatStart` 键（幕首句与幕内空行后首句落 True，`>` 备注行不断 beat——与 03 格式契约「幕内空行 = 一个 beat」同源），旧版 json 缺该键时 beat 级点名跳过、幕级照跑；`--pre-tts` 模式同样可跑（④B 评审时分镜未写）。与 `--pron-candidates/--pron-gate/--lang en` 互斥。③ 03/05 规格里「分段不影响派生物」的旧口径同步改写（分段现落 beatStart 标记，仍不影响配音/字幕/时间轴）。④ 测试：`test_build_narration` 黄金更新 + beatStart 边界用例（备注不断 beat/连续空行/换幕）；`test_check_script` 新增 6 条密度测试（beat 超载/幕超载/预算内静默——同时钉住拉丁字母自动面/无 beatStart 降级/`--terms` 单独用大声退/pre-tts 模式）。
 
 **后续防范**：易懂性判据升级为「解释到达时观众还在线」——评审术语首现时先问三个问题（解释自己可懂吗/载荷前解释到了吗/这一 beat 还有几个新词）。密度门的术语清单由评审员声明，机器不猜术语（猜错的密度门比没有门更糟：噪声会淹没真信号）。beat 边界以 narration.md 的空行为 SSOT（经 build 的 beatStart 派生），不得在消费者里另写 md 解析器。
 

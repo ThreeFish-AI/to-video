@@ -187,8 +187,10 @@ def load_vocab(path) -> frozenset[str] | None:
 #: **入表纪律 = 先探针后成门**（同 READING_TRAPS：加规则前先拿证据，不凭直觉
 #: 列清单）。规则面瞄准的是「**偏离 TTS 默认倾向**的高危读音」，不是多音字的
 #: 全部读法：jev 集实证 TTS 对 行 的默认倾向是 xíng——表格语境（每行/单选行/
-#: 行尾）全片 ~30 处系统性读错（终渲后人耳发现，negentropy#1173 修复标了 27 处
-#: HANG2），而 运行/执行 等 xíng 向语境 8 处仅 1 处（放行）需要标注——默认读
+#: 行尾）全片 26 处系统性读错（v1＝negentropy 37692b45d，终渲后人耳发现；修复
+#: 提交 8974c2f3f——分支 ThreeFish-AI/jev-video-remake，经 negentropy#1176 合入
+#: ——标 27 处 HANG2＝26 处 v1 位置 + 1 处 v2 改写新增句），而 运行/执行 等
+#: xíng 向语境仅 1 处防御性标注（放行）——默认读
 #: 对的方向不设规则，规则只挂**已证实会错**的方向。其余 8 个候选字目前没有
 #: 系统性读错证据，规则留空（`()`）；某字经试听证实系统性读错后，其高危方向
 #: 的规则再入表（台账 PRON-GLOSSARY.md 是证据入口）。错规则会把可能读对强推
@@ -289,7 +291,8 @@ def _char_occurrences(tts: str, char: str) -> list[tuple[int, str | None]]:
 def semantic_missing(items: list[dict]) -> list[tuple[str, str, str, str, str]]:
     """语义规则命中而该 occurrence 无任何标注 → [(句id, 字, 推荐读音, 建议标注, 命中上下文)]。
 
-    RSI-014 的核心判定：jev 集全片 30 处「行(háng)」被读成 xíng 直到终渲才靠人耳
+    RSI-014 的核心判定：jev 集全片 26 处「行(háng)」被读成 xíng（v1＝negentropy
+    37692b45d；修复 8974c2f3f 标 27 处）直到终渲才靠人耳
     发现——字典级确定的语境（每行/单选行/银行）不该等复听。判定按 occurrence
     粒度：规则匹配区间盖住该字且该字**不在任何标注内**才报；已标注（无论读音
     是否同推荐）视为作者已显式接管，不报——语义规则是建议不是权威，规则表

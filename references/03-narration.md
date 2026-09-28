@@ -68,7 +68,8 @@
   **句尾英文词读法一律标注兜底、不赌采样**（take 验收与重掷协议见
   [VOICE-CLONING.md §5.4](VOICE-CLONING.md)）。
 - **高危多音字（语义规则命中 → 建议标注）在写稿阶段标好，不要等试听**（RSI-014）：
-  jev 集全片 ~30 处「行(háng)」被 TTS 读成 xíng，候选报告全程零拦截、终渲后才靠
+  jev 集 v1 全片 26 处「行(háng)」被 TTS 读成 xíng（negentropy 37692b45d；修复
+8974c2f3f 标 27 处），候选报告全程零拦截、终渲后才靠
   人耳发现。语义规则表（[pron_marks.py](../scripts/pron_marks.py) 的 `POLYPHONE_CANDIDATES`，
   按「已证实会错的方向」维护，速查见 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)）命中即给
   字典级确定的读音；定稿前跑

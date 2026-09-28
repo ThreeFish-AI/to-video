@@ -245,7 +245,7 @@ def test_rule_readings_are_legal_pinyin():
             errs, _ = validate(f"测试句<{char}|{reading}>测试。")
             assert errs == [], f"{char!r} 规则推荐读音 {reading} 非法：{errs}"
             n += 1
-    assert n > 0, "语义规则表为空——行→HANG2 的实证规则被误删（jev 集全片 ~30 处）"
+    assert n > 0, "语义规则表为空——行→HANG2 的实证规则被误删（jev 集 v1 全片 26 处）"
 
 
 def test_glossary_quickref_in_sync_with_rules():
@@ -293,7 +293,7 @@ def test_glossary_quickref_in_sync_with_rules():
 
 def test_semantic_missing_recommends_hang_for_table_contexts():
     """jev 病理的正控：表格/量词语境的 行 未标注 → 推荐 HANG2（TTS 默认倾向 xíng，
-    全片 ~30 处系统性读错直到终渲才被发现）。"""
+    全片 26 处系统性读错直到终渲才被发现）。"""
     for text in (
         "每一行都要重新算。",
         "单选行记一分。",

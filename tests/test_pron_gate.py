@@ -1,6 +1,7 @@
 """--pron-gate（RSI-014）：多音字读音候选门升级的 CLI 回归。
 
-病理（jev-decision-model-video v1）：全片约 30 处「行(háng)」被 TTS 读成 xíng，
+病理（jev-decision-model-video v1，negentropy 37692b45d）：全片 26 处「行(háng)」
+被 TTS 读成 xíng（修复 8974c2f3f 标 27 处），
 `--pron-candidates` 是非门报告（exit 恒 0）、POLYPHONE_CANDIDATES 纯字符匹配
 无语义消歧——全片零拦截，终渲后才靠人耳发现。本文件钉住升级后的门语义：
 
