@@ -640,6 +640,42 @@ TensorRT-LLM）。仓库内**无 vLLM 后端**，README 只给外链 recipe。
 **风险收益不对称，明确不做**。旁证：4090 上 2.5 的 bf16（0.2065）本身就不比 fp32（0.2060）快
 ——说明 2.5 架构里已经没有对低精度友好的 compute-bound 块了。
 
+### 6.8 MPS 内存水位线与进程上限（RSI-017，2026-09-28）
+
+**为什么 24 GB 机器会被吃满卡顿**——三层事实（本机实测 + torch 2.8.0 源码/二进制取证）：
+
+1. Metal 给 GPU 的推荐工作集 `recommendedMaxWorkingSetSize` = `torch.mps.recommended_max_memory()`
+   = **17.76 GiB**（约为物理内存的 74%，不是全部）；
+2. torch MPS 分配器默认高水位 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=1.7` → 允许分配
+   **1.7×17.76 ≈ 30.2 GiB > 24 GB 物理统一内存**——分配器放行一切，直到系统级换页/压缩才
+   表现为整机卡顿，torch 全程不报 OOM（libtorch 内置警告字符串自证该机制的存在：
+   *"Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit (may cause system
+   failure)"*）。§6.5 曾记录的「~40 分钟击穿 30 GiB」即此水位线，非巧合而是 1.7×recommended 的必然；
+3. 上游 indextts 全仓**无任何** MPS 内存限制（`set_per_process_memory_fraction` 0 命中；
+   仅有的两处 `torch.cuda.empty_cache()` 在 MPS 上是 no-op），low_vram 自动降载只查
+   `torch.cuda`（`:125-129`）——MPS 上永不触发。
+
+**超限计数含缓存**：水位线约束的是分配器持有的总量（活跃张量 + 缓存池）——这既解释了
+长跑累积为何能一路涨到 30 GiB，也正是水位线上限能**结构性兜住累积**的原因：逼近上限时
+分配器先自动归还缓存（empty_cache），仍不足才抛
+`"Failed to allocate memory on MPS device"`。因此缓存压力型 OOM 在进程内自愈、根本不冒到
+HTTP 层；冒出来的 500 ≈ 该句/块**内在需求**超上限（确定性 OOM，重试救不回）。
+
+**管线处置**（VOICE-CLONING §2.3/§2.5/§七 同面）：服务端 `--mps-mem-limit-gib`
+（缺省策略 `min(0.90×recommended, 16)` GiB，进程级、lifespan 内模型加载**之前**设置——
+模型加载本身就是最大分配波）经 `torch.mps.set_per_process_memory_fraction(fraction)`
+设置（`torch/mps/__init__.py:89`；fraction=limit/recommended，范围 0~2，**0=unlimited 而非
+恢复默认**，故「不限」必须完全不调 setter）。flag>0 时恒覆盖同名 env；env 与 setter 是同一
+底层旋钮，选 flag 是为 /health 可见 + 启动命令三副本零漂移（同 venv 的 `tts_bench.py` 等
+ad-hoc 脚本用 env 兜底即可）。
+
+**上限选型推演**：稳态 driver_allocated 10.00 GB（§6.5 实测）+ 瞬时峰值放大器
+（CFM 25 步 `sol.append(x)` 死存储 `flow_matching.py:110` + BigVGAN 整段上采样 `:849` +
+beam3 fp32 KV ~1.2 GB）→ 16 GiB 留 ~6 GiB 峰值余量，系统侧留 8 GB。**拒绝 20 GB**：
+20/17.76=1.126 越过 recommended 重新进入超发换页区，且系统仅剩 4 GB——多 App 并行时仍会卡。
+`--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB。长块实测仍 OOM 时上调至 ~17.5
+（fraction≤0.98），勿回 20。
+
 ## 七、提升路线图（ROI 排序）
 
 每项都给「依据 / 代价 / 验证方法」。**未验证的一律标注**，不要当成结论执行。

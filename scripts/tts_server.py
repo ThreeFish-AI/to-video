@@ -7,6 +7,9 @@
 - 启动（在 index-tts 根目录）：
     uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --with lameenc \
         python $T/scripts/tts_server.py --model-dir checkpoints --port 8766
+- MPS 显存上限（--mps-mem-limit-gib，缺省 min(0.90×recommended, 16) GiB）：进程级水位线，
+  防 torch 默认 1.7×recommended（本机 ≈30 GiB，超 24 GB 物理统一内存）把系统内存拉爆致卡顿
+  （RSI-017，机制循证见 INDEXTTS-2.5-ADVANCED §6.8）；0=不限。
 - 端点：
     GET  /health     —— 服务与模型元信息（version/device/dtype/encoder + 四个 supports_* 能力位）
     POST /synthesize —— JSON 请求合成，返回 MP3 bytes（X-Audio-Format 头）
@@ -433,6 +436,9 @@ def _read_audio(path: Path) -> tuple[np.ndarray, int]:
 async def lifespan(app: FastAPI):
     args = app.state.args
     ensure_indextts_import(args.index_tts_root)
+    # 上限必须先于 load_model：模型加载本身就是最大分配波（fp32 权重常驻 ~10 GiB），且设置
+    # 失败要在服务就绪前暴露；uvicorn 单进程下 lifespan 与 infer 同进程，水位线必然作用于推理。
+    mps_limit_gib = _apply_mps_limit(args.mps_mem_limit_gib)
     print(">> 加载 IndexTTS 模型（首次运行会自动下载 w2v-bert 等辅助模型）…")
     tts, meta = load_model(
         args.version, args.model_dir, args.dtype, args.device, args.use_qwen_emo
@@ -449,6 +455,7 @@ async def lifespan(app: FastAPI):
         supports_blocks=meta.get("supports_blocks", False),
         low_vram=bool(getattr(tts, "low_vram", False)),
         supports_emo_text=getattr(tts, "qwen_emo", None) is not None,
+        mps_mem_limit_gib=mps_limit_gib,
         infer_lock=asyncio.Lock(),
     )
     print(
@@ -456,6 +463,7 @@ async def lifespan(app: FastAPI):
         f"encoder={encoder} emo_text={'on' if STATE['supports_emo_text'] else 'off'} "
         f"blocks={'on' if STATE['supports_blocks'] else 'off'} "
         f"sampling=on seed=on"
+        + (f" mps_limit={STATE['mps_mem_limit_gib']}GiB" if mps_limit_gib else "")
     )
     yield
     STATE.clear()
@@ -470,6 +478,9 @@ async def health():
         "ok": True,
         "version": STATE.get("version"),
         "device": STATE.get("device"),
+        # MPS 进程显存上限（GiB）：null=未设（非 MPS / --mps-mem-limit-gib 0 / 设置失败）。
+        # 仅提示性字段（无 must-act 语义），旧客户端不读无影响，新客户端可用于排障展示。
+        "mps_mem_limit_gib": STATE.get("mps_mem_limit_gib"),
         "synthesizing": STATE["infer_lock"].locked()
         if STATE.get("infer_lock")
         else False,
@@ -500,6 +511,57 @@ def _mps_empty_cache() -> None:
             torch.mps.empty_cache()
     except Exception:  # noqa: BLE001 - 清缓存失败不影响合成结果
         pass
+
+
+def _apply_mps_limit(limit_gib: float | None) -> float | None:
+    """设置 MPS 进程级显存水位线，返回生效上限（GiB）；非 MPS / 未设 / 失败 → None。
+
+    torch MPS 分配器默认高水位 = 1.7 × recommendedMaxWorkingSetSize（本机 17.76 GiB →
+    ≈30.2 GiB，超 24 GB 物理统一内存）：长跑累积与单次峰值都能把系统内存拉爆成换页卡顿，
+    且 torch 在系统级内存压力前不报 OOM（RSI-017，机制循证见 INDEXTTS-2.5-ADVANCED §6.8）。
+    上限经 set_per_process_memory_fraction（fraction = limit / recommended）设置；超限路径：
+    分配器先自动归还缓存，仍不足抛 "Failed to allocate memory on MPS device"。
+    torch 语义 fraction=0 是 unlimited 而非恢复默认，故 limit<=0 一律不调 setter。
+    """
+    try:
+        import torch
+
+        if not (hasattr(torch, "mps") and torch.backends.mps.is_available()):
+            return None
+        rec_gib = torch.mps.recommended_max_memory() / (1024**3)
+        if rec_gib <= 0:
+            print(
+                ">> ⚠️ MPS recommendedMaxWorkingSetSize 读取异常（0），跳过显存上限设置"
+            )
+            return None
+        if limit_gib is None:
+            # 策略默认：90% 推荐值与 16 GiB 取小——防 16 GB 小机型上固定值直接越界超发
+            limit_gib = min(0.90 * rec_gib, 16.0)
+        if limit_gib <= 0:
+            print(">> MPS 显存上限未设置（--mps-mem-limit-gib 0），沿用 torch 默认水位")
+            return None
+        if limit_gib < 2.0:
+            print(
+                f">> ⚠️ MPS 显存上限 {limit_gib} GiB 低于模型常驻（~10 GiB），加载即可能 OOM"
+            )
+        fraction = limit_gib / rec_gib
+        if (
+            fraction > 2.0
+        ):  # torch API 硬边界（>2 抛 ValueError），截断并告警保留用户可感知性
+            fraction = 2.0
+            print(
+                f">> ⚠️ MPS 显存上限 {limit_gib} GiB 超出 API 边界，已截断为 2.0×recommended"
+            )
+        torch.mps.set_per_process_memory_fraction(float(fraction))
+    except Exception as exc:  # noqa: BLE001 - fail-open：上限失败不阻断服务
+        print(f">> ⚠️ MPS 显存上限设置失败（{exc}），继续以 torch 默认水位运行")
+        return None
+    effective = rec_gib * fraction
+    print(
+        f">> MPS 内存上限: {effective:.1f} GiB"
+        f"（fraction {fraction:.3f} × recommended {rec_gib:.2f} GiB）"
+    )
+    return round(effective, 2)
 
 
 def _block_reply(data, sr: int, req: SynthesizeRequest) -> tuple[dict, str]:
@@ -651,6 +713,23 @@ async def synthesize(req: SynthesizeRequest):
                     audio, fmt = await asyncio.to_thread(_block_reply, data, sr, req)
                 else:
                     audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
+        except Exception as exc:
+            # 水位线 OOM 转可操作 500：未捕获异常只会得到无信息的 "Internal Server Error"，而
+            # 确定性 OOM（该句/块内在需求超上限）客户端重试 4 次也救不回——带上限值与三出路，
+            # detail 会经客户端 _http_error_detail 透传到最终报错。签名匹配为主判据（MPS OOM
+            # 是 RuntimeError 文本）；类型名兜底 torch.OutOfMemoryError 子类（不 import torch）。
+            # 其余异常原样放行（NaN 已在 _read_audio 单独 500）。
+            if (
+                "Failed to allocate memory on MPS device" in str(exc)
+                or type(exc).__name__ == "OutOfMemoryError"
+            ):
+                raise HTTPException(
+                    500,
+                    f"MPS 显存上限不足（当前上限 {STATE.get('mps_mem_limit_gib')} GiB）："
+                    f"上调 --mps-mem-limit-gib 重启、拆短该句/块，"
+                    f"或 --mps-mem-limit-gib 0 关闭（回退旧行为）。原始错误: {exc}",
+                ) from exc
+            raise
         finally:
             # MPS 长跑泄漏对冲：每次合成后归还分配器缓存。实测（2026-09-23 本机）连续
             # 合成约 40 分钟后 MPS 缓存累积击穿 30 GiB 上限，之后所有请求 500 且 health
@@ -696,7 +775,22 @@ def main() -> None:
         action="store_true",
         help="加载 QwenEmotion（0.6B，约 +1.5 GB 内存），开启后请求可用 emo_text 自然语言描述情感",
     )
+    parser.add_argument(
+        "--mps-mem-limit-gib",
+        type=float,
+        default=None,
+        help="MPS 进程显存上限（GiB）：缺省 min(0.90×recommended, 16)（本机 ≈16）；"
+        "0=不限（torch 默认水位 1.7×recommended，24GB 机型 ≈30 GiB 超物理内存，长跑易拉爆系统内存）",
+    )
     args = parser.parse_args()
+
+    # argparse type=float 会放过 nan/inf（比较恒 False 的老陷阱），在此整体拦截
+    if args.mps_mem_limit_gib is not None and not (
+        math.isfinite(args.mps_mem_limit_gib) and args.mps_mem_limit_gib >= 0
+    ):
+        sys.exit(
+            f"--mps-mem-limit-gib 必须为 ≥0 的有限数值（0=不限），收到: {args.mps_mem_limit_gib}"
+        )
 
     args.index_tts_root = Path(args.index_tts_root).resolve()
     args.model_dir = Path(args.model_dir).resolve()
