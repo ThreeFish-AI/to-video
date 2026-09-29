@@ -39,6 +39,16 @@ def make_png(path: Path, mode: str, scale: float = 1.0) -> None:
             h - round(158 * scale) : h - round(136 * scale),
             round(60 * scale) : round(220 * scale),
         ] = 210
+    elif mode == "content":  # 正常帧：字幕 + 内容区中部一块亮矩形（RSI-020 用）
+        arr[
+            h - round(80 * scale) : h - round(20 * scale),
+            (w - round(600 * scale)) // 2 : (w + round(600 * scale)) // 2,
+        ] = 235
+        arr[
+            h // 3 : h // 3 + round(200 * scale),
+            (w - round(500 * scale)) // 2 : (w - round(500 * scale)) // 2
+            + round(500 * scale),
+        ] = 200
     elif mode == "bright":
         arr[:] = 120
     path.write_bytes(b"")
@@ -349,3 +359,81 @@ def test_qa_modes_fail_when_selection_is_empty(project, monkeypatch, mode):
         qa_frames.main()
 
     assert exc.value.code != 0
+
+
+# ── 纯底色段（RSI-020）：跨帧时序判据 ────────────────────────────────────
+
+
+def test_blank_scene_run_fails(tmp_path):
+    """RSI-020 回归：整幕仅字幕无画面（内容区无内容像素）持续 ≥ 阈值 → FAIL。
+
+    上游形态（五集系列 ep4）：场景分片代理在文件头声称另一半场由另一文件承担
+    而该文件不存在，52.8s/55.5s 两段纯黑+字幕——帧均值被字幕带抬高（黑帧门放行）、
+    相邻帧字幕文本不同（冻帧门放行），帧内判据全数失明，只能跨帧看时长。
+    """
+    out = tmp_path / "frames"
+    out.mkdir()
+    # 时间轴带一个未抽帧的 p5 尾幕：末幕豁免按**全集时间轴**的最后一幕判定，
+    # 被测的 p4 必须不是末幕（真实事故形态：p4 空段、p5 片尾正常渐黑）。
+    tl = {f"p4-{i:02d}": (float(i) * 10, 10.0) for i in range(1, 5)}  # 整幕 40s
+    tl["p5-01"] = (40.0, 10.0)
+    for n in ("p4-01", "p4-02", "p4-03", "p4-04"):
+        make_png(out / f"{n}.png", "subtitle")  # 底色 + 字幕条 = 事故帧形态
+    msgs: list[str] = []
+    check_frames(
+        out, [k for k in tl if k.startswith("p4-")], 1.0, False, msgs, timeline=tl
+    )
+    assert any(m.startswith("FAIL") and "纯底色段" in m for m in msgs), msgs
+
+
+def test_blank_run_clean_frames_stay_clean(tmp_path):
+    """已知干净帧零报警（ISSUE-167 上架纪律）：有内容的段过、短于阈值的暗段过、
+    末幕（片尾渐黑合法形态）豁免——三条正控同测，防判据上架即刷假报。"""
+    out = tmp_path / "frames"
+    out.mkdir()
+    tl = {
+        "p1-01": (0.0, 3.0),  # 单句 3s 空段 < 8s：幕间淡出的合法瞬态形态
+        "p1-02": (3.0, 8.0),  # 有内容
+        "p6-01": (11.0, 30.0),  # 末幕 30s 全黑（渐黑收尾）——末幕豁免
+    }
+    make_png(out / "p1-01.png", "subtitle")
+    make_png(out / "p1-02.png", "content")
+    Image.fromarray(np.zeros((1080, 1920), dtype=np.uint8)).save(out / "p6-01.png")
+    msgs: list[str] = []
+    check_frames(out, list(tl), 1.0, True, msgs, timeline=tl)
+    assert not any("纯底色段" in m for m in msgs), msgs
+
+
+def test_blank_run_threshold_is_configurable(tmp_path):
+    """阈值可配（SCHEMA 默认 8s；显式传参/ toml 覆写路径；0 = 关门）。"""
+    out = tmp_path / "frames"
+    out.mkdir()
+    tl = {"p2-01": (0.0, 5.0), "p3-01": (5.0, 10.0)}  # p3 尾幕不抽帧
+    ids = ["p2-01"]
+    make_png(out / "p2-01.png", "subtitle")
+    msgs: list[str] = []
+    check_frames(out, ids, 1.0, False, msgs, timeline=tl, max_dark_sec=2.0)
+    assert any("纯底色段" in m for m in msgs), msgs  # 5s ≥ 2s
+    msgs = []
+    check_frames(out, ids, 1.0, False, msgs, timeline=tl, max_dark_sec=0)
+    assert not any("纯底色段" in m for m in msgs), msgs  # 0 = 关闭
+    # 不传 timeline（--beat-heads 形态）判据自然不参与
+    msgs = []
+    check_frames(out, ids, 1.0, False, msgs, max_dark_sec=2.0)
+    assert not any("纯底色段" in m for m in msgs), msgs
+
+
+def test_blank_run_does_not_join_across_scenes(tmp_path):
+    """run 不跨幕：幕两侧短暗段（SceneFade 淡出/淡入尾）不得拼接成假空段。"""
+    out = tmp_path / "frames"
+    out.mkdir()
+    tl = {
+        "p1-01": (0.0, 4.0),  # P1 末 4s 暗
+        "p2-01": (4.0, 4.0),  # P2 首 4s 暗——跨幕合计 8s 也不许 FAIL
+        "p3-01": (8.0, 4.0),  # p3 尾幕不抽帧（p2 不因末幕豁免逃过判定）
+    }
+    for n in ("p1-01", "p2-01"):
+        make_png(out / f"{n}.png", "subtitle")
+    msgs: list[str] = []
+    check_frames(out, ["p1-01", "p2-01"], 1.0, False, msgs, timeline=tl)
+    assert not any("纯底色段" in m for m in msgs), msgs

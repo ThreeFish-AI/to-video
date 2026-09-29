@@ -24,6 +24,16 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 # 主题对比度（零依赖，不需视频；新配色/改 theme.ts 后必跑）
 uv run --no-project $T/scripts/qa_frames.py --project $P --check-theme
 
+# 全片内容带扫描（⑨ 必做，RSI-020）：草渲后对**全部幕**抽帧 + --check——纯底色段门
+# （画面内容区无内容像素持续 ≥ qa.max_dark_sec 秒，默认 8s、toml 可覆写；末幕豁免）
+# 拦「整段仅字幕无画面」：场景组件整段渲染为空时，帧均值被字幕带抬高、相邻帧字幕
+# 不同指纹也不同，黑帧/冻帧/字幕带判据全数放行（上游五集系列 ep4 分片事故：
+# 52.8s/55.5s 两段纯黑+字幕，集成期人工才发现）。每幕 ~8 帧抽样 ≈ 5–7s 采样形态，
+# 门按持续时长在样点间内插；--scene 必须把本集全部幕逐个传齐（漏传即检查面静默缩小）
+uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
+    --project $P $P/out/draft.mp4 --scene P0 --scene P1 --scene P2 --scene P3 \
+    --scene P4 --scene P5 --scene P6 --check --scale 0.5   # 幕数按本集实际增减
+
 # beat 头部连抽（每 beat 首句起点连抽 N 帧）——入场瞬态的机械补盲：
 # ISSUE-170 实证「落位态干净、入场越界」会被句中点采样整段错过（此模式冻帧判定关闭）
 uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
@@ -50,12 +60,13 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 | 判据 | 级别 | 处置 |
 |---|---|---|
 | 黑帧/早渐黑（均值 <0.02；末 beat 且分镜标「渐黑」豁免） | FAIL | 查尾幕渐黑是否从**末 beat** 而非末句推导（references/08 红线 4）；查 SceneFade 末幕是否误开淡出 |
+| 纯底色段（内容区无内容像素持续 ≥ `qa.max_dark_sec`，默认 8s；末幕豁免；须句中点采样形态） | FAIL | 场景组件整段渲染为空（仅字幕无画面）——查场景文件是否整段返回 null / 声称「另一半场在另一文件」而该文件不存在（场景分片并行代理的高发形态） |
 | 字幕带侵入（字幕框 x 区间外有独立亮块） | WARN | 角标/图形挪出 bottom≥160px 安全区（角标一律绝对定位并写死 `bottom ≥ 150`） |
 | 冻帧（相邻采样帧 16×16 指纹相同） | WARN | 查 beat 窗口是否错位/句子未被分镜覆盖（`check_script.py --check-scenes`） |
 | 字幕缺失（字幕带无文字亮度像素） | WARN | 查该句 Subtitle 是否被遮挡或文本为空 |
 | 主题对比度 <4.5:1 | FAIL | 换色或加深；概念色清单见 references/08 视觉契约 |
 
-**FAIL 0 的边界（ISSUE-187 泛化）**：`--check` 只覆盖黑帧/冻帧/字幕带侵入/对比度——对文字朝向、
+**FAIL 0 的边界（ISSUE-187 泛化）**：`--check` 只覆盖黑帧/冻帧/字幕带侵入/纯底色段/对比度——对文字朝向、
 几何锚点、图层遮挡**全盲**（四类画面缺陷曾在 FAIL 0 · WARN 0 下全部漏网），FAIL 0 不是视觉正确性的
 证据，2D 同样必须按分幕复检抽帧目视（3D 侧同款要求见 [08 §3D 验收](./08-remotion-implementation.md)）。
 **判据上架纪律（ISSUE-167）**：新增/修改判据必须先在一帧**已知干净**的画面上验证零报警——半透明
@@ -113,7 +124,7 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 
 ## 修复回路
 
-问题 → 改场景组件（或分镜/文稿）→ `tsc --noEmit` → 重草渲 → 复抽帧。**禁止跳过复检直接终渲**。
+问题 → 改场景组件（或分镜/文稿）→ `tsc --noEmit` → 重草渲 → 复抽帧（含全片内容带扫描——命令闭环节的 ⑨ 必做项）。**禁止跳过复检直接终渲**。
 草渲前若已做过分幕复检，草渲阶段主要验「整片连续性」（转场、字幕带、幕间呼吸），
 单镜构图类问题应在复检阶段就已清零。
 **建模信号当场留存**：复检中用户对某个建模方法明确认可或否决（且可跨集复用）时，往

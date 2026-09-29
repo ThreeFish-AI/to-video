@@ -51,7 +51,14 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         "须等于工程目录名；是否登记进 series.json 仅由 verify_skeleton 警告",
     ),
     ("narration.target_minutes", list, None, True, "[下限, 上限] 两元素，单位分钟"),
-    ("narration.chars_per_min", int, 280, False, "机制常数：含停顿的等效口径"),
+    (
+        "narration.chars_per_min",
+        int,
+        280,
+        False,
+        "机制常数：含停顿的等效口径；默认层按 tts.style 分档（story=254，"
+        "见 STYLE_CHARS_PER_MIN——仅 story 有整集实测，新档位首轮 TTS 后回写）",
+    ),
     (
         "narration.langs",
         list,
@@ -220,7 +227,24 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         "重录：不守约定命名的例外表 {slug = 文件名}（如 next-episode-blueprint 的源图"
         "是上一集的 context-layer-blueprint--architecture.html）；命中者自动传 --slug 保产物命名",
     ),
+    (
+        "qa.max_dark_sec",
+        float,
+        8.0,
+        False,
+        "纯底色段门（RSI-020）：画面内容区无内容像素持续 ≥ 此秒数 → FAIL"
+        "（末幕豁免防片尾渐黑误报；0 = 关闭；qa_frames --check 消费）",
+    ),
 )
+
+#: chars_per_min 默认层按 tts.style 分档（RSI-021）——档位间语速差此前未被机制
+#: 感知：story 档（块级情绪演绎）实测含停顿等效 254 字/分，sunny 等逐句档为 280。
+#: 上游实证：五集系列 ep1 首轮按 280 写 3961 字 → TTS 实测外推 15.62 分超
+#: [13.0, 14.6] 硬窗 → 回 ③ 减脂 317 字 → story 块缓存整失效全量重合成 ~40 分钟；
+#: 后续四集按 254 直写全部一次过窗。显式 toml 覆写仍优先（本集实测校准走那条路）。
+#: **仅 story 有整集实测**——新档位首轮 TTS 完成后以 manifest 实测秒数回写本表
+#: （操作指引见 references/07 完成门）。住 SCHEMA 侧的默认层延伸，非第二事实源。
+STYLE_CHARS_PER_MIN: dict[str, int] = {"story": 254}
 
 #: 环境变量覆盖：仅限「机器属性」类键，不进受版本控制的 toml
 ENV_OVERRIDES = {"tts.server": "INDEXTTS_SERVER"}
@@ -303,6 +327,13 @@ def resolve(raw: dict) -> tuple[dict, dict[str, str]]:
             origin[dotted] = "default"
         else:
             origin[dotted] = "缺失"
+    # chars_per_min 的默认层按 tts.style 分档（RSI-021）：显式 toml 覆写恒优先
+    # （origin 非 default 不进本分支）。分档表住 SCHEMA 侧（不变量 7），消费者
+    # 无需感知——check_script / build_narration 的既有读取路径零改动。
+    if origin.get("narration.chars_per_min") == "default":
+        style = _get(cfg, "tts.style")
+        if isinstance(style, str) and style in STYLE_CHARS_PER_MIN:
+            _set(cfg, "narration.chars_per_min", STYLE_CHARS_PER_MIN[style])
     return cfg, origin
 
 
@@ -429,6 +460,9 @@ def validate(
         fails.append(
             f"archify.html_overrides 应为 {{slug = 文件名}} 的字符串表，实际 {ho}"
         )
+    mds = _get(cfg, "qa.max_dark_sec") if in_scope("qa.x") else None
+    if isinstance(mds, (int, float)) and mds < 0:
+        fails.append(f"qa.max_dark_sec 应 ≥ 0（0 = 关闭纯底色段门），实际 {mds}")
 
     # ── 双语声明与逐语言覆写表（RSI-004）───────────────────────────────
     # langs 是语言激活的唯一来源（chapters i18n、命令缺省全由它定——二源归一，
