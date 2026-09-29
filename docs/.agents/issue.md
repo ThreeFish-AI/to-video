@@ -322,3 +322,36 @@
 **后续防范**：新资产类型入片先问「它在 headless 渲染后端下有已知确定性边界吗」，有则先冒烟；崩溃排障先分诊「随机 vs 确定」再动手——漂移 + 资源压力的表象会掩盖确定性崩点。
 
 **同类问题影响**：「fetch + delayRender」形态的资产加载组件在此环境均有同款潜在风险，冒烟纪律不限于 Lottie。
+## RSI-020 场景渲染内容为空无门可拦：108 秒纯黑+字幕段靠人工事故后发现
+
+**表因**：五集系列重制 ep4（上游 negentropy 分支 ThreeFish-AI/learn-claude-code-5-episode-revamp，ep4 交付 commit `a783411f2`；上游台账 https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md ），场景分片并行代理在文件头声称「另一半场由另一文件承担」但该文件不存在——`check_script --check-scenes` 查句覆盖与场景互比，不查场景渲染内容是否为空；成片草渲后 52.8s/55.5s 两段仅字幕无画面，集成期人工发现。`qa_frames --check` 判据族（黑帧/重复帧/安全区/字幕带）无「连续纯底色段」：帧均值被字幕带抬高（事故帧 ≈0.106 > 黑帧阈值 0.02，黑帧门放行），相邻采样帧字幕文本不同、16×16 指纹也不同（冻帧门放行）。
+
+**根因**：`--check` 的判据都是**帧内**判据，无跨帧时序判据（「连续 N 秒画面区近黑但字幕带在场」）；「画面有没有内容」从未进入自动体检判据族，只能靠人工全片目检兜底。
+
+**定性**：阻断级缺陷（门形同虚设：分钟级空段绿着门进终渲）。
+
+**方案比选**：判据落位三案——A **并入 qa_frames --check 作跨帧时序门（采纳）**：与既有判据族同址、草渲后随既有命令自动执法；B 独立扫描脚本（ffmpeg 全片亮度带采样）——第二工具面、与抽帧 QA 分叉，违反最小干预；C 只升格文档步骤（人工扫描）——上游已实证人工兜底会漏（集成期才发现），门不承载等于没升格。「有内容」信号比选：整帧均值（被字幕带抬高，事故形态下恒过黑帧门——无效）；内容区均值（底色 0.065 与 panel 0.108 分离度不足）；**内容区亮像素占比（采纳）**——平底+JPEG 噪声 <0.09、设计系统最弱结构元素 panelBorder 0.194，阈值 0.15 居中零贴边（ISSUE-167：亮度阈值须在已知干净帧零报警）。片尾渐黑区分取**末幕豁免（只检 N-1 幕）**而非渐黑感知窗：无新自由度，末幕纯黑已由黑帧门+渐黑豁免覆盖，8s 时长阈值本身也天然区分 <2s 的渐变与数十秒的空段。run 不跨幕：幕间 SceneFade 淡出尾会让两侧帧短暂近底色，跨幕累计会把合法转场拼成假空段。阈值 `qa.max_dark_sec` 住 SCHEMA（默认 8s，toml 可覆写，0=关闭——逃逸口须存在且可声明）。
+
+**处理方式**：`qa_frames.py --check` 新增纯底色段门——`check_frames` 增 `timeline`/`max_dark_sec` 参数，逐帧算**画面内容区**（顶部安全带 y<56 之下、字幕带之上；几何 SSOT 来自 ChapterProgress 零碰撞带契约「各幕内容 y≥56 起」）亮像素占比 <5e-4 判「无内容」，同幕连续无内容帧按「首帧中点−半句距 .. 末帧中点+半句距」计持续时长，≥ `qa.max_dark_sec` → FAIL；末幕按**全集时间轴**最后一幕豁免；`--beat-heads` 头帧不在时间轴里、判据自然不参与（头帧落在淡入瞬态，近底色是合法态）。config SCHEMA 新键 `qa.max_dark_sec`（默认 8.0、负值 FAIL、0=关闭）。[09](../../references/09-render-qa.md) 把「草渲后全片亮度带扫描」从经验散条升格为 ⑨ 必做步骤（`--scene` 全幕传齐 + `--check`，每幕 ~8 帧 ≈5–7s 采样形态，门按持续时长在样点间内插）+ 判据表新行 + FAIL 0 边界句与修复回路同步；[PIPELINE.md](../../references/PIPELINE.md) 字段表/工具表登记。回归测试 4 组（整幕空段 FAIL／干净帧零报警含末幕豁免与亚阈值暗段／阈值可配与关门／run 不跨幕）。实施：[PR #24](https://github.com/ThreeFish-AI/to-video/pull/24)。
+
+合并前评审加固（2026-09-29）：①`--check` 消费 config 不再丢弃 validate FAIL——带病 `[qa]`（类型错→阈值比较处裸 traceback、负值→借「0=关闭」分支无声关门假绿）改为点名 FAIL 拒跑；独立直调本命令正是 09 ⑨ 必做路径，不能赌 pipeline.py check 先跑过全量 validate（回归测试 2 条：字符串/负值对拍）。②09 FAIL 0 边界句的体检清单与 PIPELINE.md 工具表/模块 docstring 同构化（补「字幕缺失」、对比度归位 `--check-theme`——原句继承 main 旧口径漏 WARN 级「字幕缺失」而混入对比度）。③RSI-021 回归测试计数订正（4 函数 5 断言面，见下）。
+
+**后续防范**：自动体检新增判据先问「它是帧内性质还是跨帧性质」——时长/连续性类缺陷（空段、卡死、整段丢字幕）单帧判据结构性失明；场景分片并行代理的交付面须含「本文件实际渲染哪些 beat」的机器可核声明（`--check-scenes` 只对账分镜↔代码句覆盖，文件级互相推诿它看不见）；草渲后全片内容带扫描未跑不得进终渲（09 ⑨ 必做项）。
+
+**同类问题影响**：门只认句中点采样形态（`--beat-heads` 不查）；未来若有合法的 >8s 纯底色艺术段，本集 toml 覆写 `qa.max_dark_sec` 并在分镜留决策记录。
+
+## RSI-021 chars_per_min 默认值不区分 tts.style，story 档首轮必超窗返工
+
+**表因**：五集系列 ep1（上游同分支，ep1 交付 commit `6f58fac2e`）首轮按默认 280 字/分写 3961 字 → TTS 实测外推 15.62 分超 [13.0, 14.6] 硬窗 → 回 ③ 减脂 317 字 → story 档块缓存整失效全量重合成（~40 分钟浪费）；后续四集按实测 254 直写全部一次过窗零返工（ep2–ep5 的 pipeline.toml 已显式 `chars_per_min = 254`——内容侧自发的手工 workaround，正是 B 案的存量形态）。
+
+**根因**：`config.py` chars_per_min 默认 280 是 sunny 档（逐句）含停顿等效口径；story 档（块级情绪演绎）实测纯语音 274 字/分、含停顿等效 254——档位间语速差未被机制感知，每集靠人把教训抄进 toml。
+
+**定性**：非阻断改进（有手工 workaround，但每个新系列首轮必复发一次「超窗 → 减脂 → 块缓存全量重合成」返工）。
+
+**方案比选**：A **SCHEMA 分档默认（采纳）**——`resolve()` 在默认层按 tts.style 分档（story=254、其余=280，档位表 `STYLE_CHARS_PER_MIN` 紧邻 SCHEMA），显式 toml 覆写恒优先；check_script / build_narration 的既有读取路径零改动即生效（scope 加载同样过 resolve）。B 只在 07 文档教「story 集手写 254」——每集手工重复、漏写即复发。C 消费者按 style 分支——两处内联档位逻辑即第二事实源，违反不变量 7 与 `test_consumers_do_not_inline_schema_defaults` 的执法精神。分档默认住 SCHEMA 侧，不变量 7（默认值唯一来源）合规。
+
+**处理方式**：`config.py`：SCHEMA 的 narration.chars_per_min 注明分档 + `STYLE_CHARS_PER_MIN = {"story": 254}`（注释写明仅 story 有整集实测、新档位首轮 TTS 后以 manifest 实测回写）；`resolve()` 尾部对「默认层 chars_per_min + tts.style 命中档位表」生效分档（origin 保持 default；显式 toml 优先；非字符串 style 不崩——类型执法归 validate）。[07](../../references/07-tts-voice.md) 完成门新增「首轮 TTS 完成后校准本集语速」操作指引（manifest 实测分钟复算，偏差 >3% 写本集 toml）；[PIPELINE.md](../../references/PIPELINE.md) 字段表同步。回归测试 4 函数 5 断言面（story→254／sunny→280 并把分档表与基础默认钉在 SCHEMA、toml 覆写优先、toml 端到端、非字符串 style 不崩）。实施：[PR #24](https://github.com/ThreeFish-AI/to-video/pull/24)。
+
+**后续防范**：STYLE_PRESETS 新增风格档时，检查所有「按档位变化的口径常数」（语速/停顿/种子）是否需入 `STYLE_CHARS_PER_MIN` 一类分档表——首轮后以 manifest 实测回写，不拿单集标定当普适；预算门超窗先查生效 chars_per_min 的来源（doctor 打印 default/pipeline.toml 分层），再回 ③ 减脂。
+
+**同类问题影响**：en 版走 words_per_min（词/分）不受本分档影响（首集英文实测后按 07 完成门同模式校准）；14 个存量 sunny-steady 集默认值不变（280），零波及；已显式写 254 的 story 集（上游五集）走 toml 覆写路径，行为不变。
