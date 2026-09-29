@@ -290,3 +290,33 @@
 **同类问题影响**：同 venv 的 `tts_bench.py` 等直调 infer 的脚本不受本 flag 保护（单进程各自设限），已在 §2.5 注记 env 兜底；webui.py 同理（本管线不用）。8767 上的 A/B 实例是第二个 `tts_server.py`，拉起即应用缺省上限。上限按进程计，多实例并行时总量仍需人工控制。
 
 五轮评审（2026-09-29）：① CPU/CUDA `OutOfMemoryError` 类型兜底仅在实际 `mps` device 下启用，避免非 MPS 部署收到错误的显存排障指引；② 显式 `--mps-mem-limit-gib 0` 在 allocator 初始化前覆盖继承的 `PYTORCH_MPS_HIGH_WATERMARK_RATIO`，并调用 `set_per_process_memory_fraction(0.0)`，保证「不限」不随 shell 环境漂移；③ 只有解析到 `MPS allocated + other allocations + Tried to allocate > max allowed` 才进入不可重试的「MPS 显存上限不足」契约，普通 MPS OOM、系统内存压力、碎片化与解析不完整均保留重试；④ 解析器兼容 PyTorch 的 `MiB/GiB` 及十进制单位，新增 helper、环境覆盖与客户端分流测试，相关测试与全量回归通过。
+
+## RSI-018 archify 建图产物三重静默缺陷，录制前置校验缺位
+
+**表因**：上游五集系列重制（[negentropy ISSUE-201](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md)，2026-10-02）四起同类：①ep4 两图建图产物缺 guided-views 嵌入——全局 archify CLI 3.0.0 删除了该模块，用全局 CLI 的产物天然无嵌入，录制空转不报错；②ep2 三图漏 `claude-code--` 前缀（html_pattern 失配，dry-run 有报但在建图完成数小时后）；③ep1 四图漏 sidecar type（图型多样性门晚期才红）；④两图 sidecar type=state 被录制器 argparse choices 拒绝、退出码 2——archify 出图词汇含 state 而录制器词表不含，规格与录制器词表不一致是机制内矛盾。
+
+**根因**：`record_archify_all.py` 的 `--dry-run` 只校验「views/ slug → HTML 文件存在」映射，不校验 HTML 内 guided-views 数据非空、不校验 sidecar type 合法性——三重缺陷全部拖到录制中段（或更晚的覆盖门）才暴露，而录制是整链路最贵的一步。
+
+**定性**：阻断级缺陷（建图完成数小时后的录制批次中途失败/静默空转）。
+
+**方案比选**：预检落位三选——A 只挂 `--dry-run` 分支（工单字面形态）：漏跑 dry-run 的真录批次仍在中段撞墙，等于留后门；B 检查下沉到录制器 `record_archify.py`：空 views 已有开浏览器前 FAIL、type 词表已有 argparse 执法，缺的是**批次级前置门 + 映射指路**，且 dry-run 不经录制器；**C 扩既有「映射 + 源图存在性」预检循环（采纳）**——dry-run 与真录共用同一段（本脚本既有 doctrine「全部先验完再开录」），零新代码路径。词表事实源二选：驱动内镜像 + AST 一致性测试（tts.py 镜像表先例）vs **提升为 `record_archify.DIAGRAM_TYPES` 模块常量、驱动 import（采纳）**——零漂移由构造保证，3 行改动（触碰 record_archify.py，白名单扩圈一处，理由即此）。guided-views 判空复用录制器 `read_views`（同一提取器——预检与录制对「什么算空」永不各说各话，不写第二份判据）。
+
+**处理方式**：分支 `ThreeFish-AI/rsi-018-record-preflight`（PR 待主代理审后统一创建，链接回填）。①`record_archify.py` 图型词表提升为 `DIAGRAM_TYPES`（argparse choices 同源引用）；②`record_archify_all.py` 预检循环扩两查：HTML 缺/空 `archify-guided-views-data` 容器 → FAIL（提示「产物可能出自删除该模块的 archify 版本（全局 CLI 3.0.0 起无 guided-views）」）；sidecar type 越表 → FAIL（报全词表 + state→lifecycle 映射 + sidecar 顶层改写位置）；③references/06 archify 资产标注规范补词表脚注（工单所指「图型预算表」在现行 06 不存在，最小落位 = 标注规范纪律列表）。回归测试 5 条（CLI 级，钉门语义而非纯函数）：无容器 / 空容器 / type=state → exit 1 且指路文案在场；真录（不带 --dry-run）同样在起浏览器前被拦；健康现场 → exit 0「预演 1」——前四条在修复前形态下全红（红绿对拍实测）。
+
+**后续防范**：录制链新增静默缺陷形态时先进 dry-run 预检、再谈运行期兜底；跨工具词表（archify 出图词汇 vs 录制器 `--type` 词表）以消费端 choices 为 SSOT，规格只写映射不复制词表；前置校验与运行期校验共用同一提取器/常量，不写第二份判据。
+
+**同类问题影响**：`check_archify_coverage.py` 的图型多样性门按 sidecar type 去重计数、不验词表——越表值（如 state 与 lifecycle 并存）会虚增图型数；预检把越表拦在建图侧后该路径不可达。所有用全局 archify CLI 新建的图都带①的风险，预检 FAIL 即「须用仍含 guided-views 的版本重新出图」的信号。
+
+## RSI-019 @remotion/lottie 在 headless ANGLE 渲染确定性挂死，边界无文档
+
+**表因**：上游 [negentropy ISSUE-202](https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md)（2026-10-02）：ep4 草渲五连崩（Target closed / 静默死，崩点漂移 10170/13727/1199/3339 + swap 耗尽 38GB 表象），ep5 同款两崩。
+
+**根因**：`LottieEmphasis`（fetch + delayRender + @remotion/lottie）在 chrome-headless-shell + ANGLE 后端下对**特定 JSON** 初始化挂死，`Waiting for Lottie animation to load` 的 delayRender 永不解除；结构等价的另一 JSON 同环境可用（plug-pulse 实测）——按资产触发、非全量失效。本仓侧缺陷：该渲染确定性边界无任何文档，新 Lottie 资产入片没有冒烟关口；排障侧也没有「随机崩 vs 确定性崩点」的分诊方法论（上游三试浪费：降并发 / 换机器 / 清缓存后才定位）。
+
+**定性**：非阻断改进（纯文档；机制不变——处置仍是换实现，文档把关口前移到入片前）。
+
+**处理方式**：分支同 RSI-018（PR 待主代理审后统一创建，链接回填）。references/08 事实条新增「Lottie 资产渲染边界」：新 Lottie 资产入片前必须先过 100 帧段渲冒烟（`./node_modules/.bin/remotion render Main /tmp/smoke.mp4 --frames=<起点>-<起点+100> --concurrency=1`，起点取该资产出场帧位），挂死即弃用该 JSON、换原生 SVG / 运动层实现（上游以原生组件替换实证）；references/09 修复回路新增「渲染崩溃分诊」：崩点漂移 + 系统内存压力表象时先按确定性崩点处理——分段 100 帧窗渲染定位 + 禁用法二分（同段全过即定位到组件），勿先降并发 / 换机器 / 清缓存。测试面由既有 test_docs_paths（链接可达 / 命令锚定 / 围栏平衡）覆盖，无新增机制代码。
+
+**后续防范**：新资产类型入片先问「它在 headless 渲染后端下有已知确定性边界吗」，有则先冒烟；崩溃排障先分诊「随机 vs 确定」再动手——漂移 + 资源压力的表象会掩盖确定性崩点。
+
+**同类问题影响**：「fetch + delayRender」形态的资产加载组件在此环境均有同款潜在风险，冒烟纪律不限于 Lottie。
