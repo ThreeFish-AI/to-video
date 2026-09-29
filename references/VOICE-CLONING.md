@@ -69,7 +69,7 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 ```
 
 - 启动即加载模型（约 30–60 秒），出现 `>> 就绪：IndexTTS-2.5 device=mps ... emo_text=on|off` 后可服务请求；
-- **MPS 显存上限**（`--mps-mem-limit-gib`，缺省即生效，无需显式传参）：服务内置进程级水位线，缺省 `min(0.90×recommended, 16) GiB`（24GB 机型 ≈16 GiB；缺省额度不足 ~11 GiB 的 16 GB 级机型自动不设限——0.9×recommended≈9.6 贴平 v2.5 fp32 常驻 ~9.3 GiB，设限只会开箱即 OOM）。torch MPS 分配器默认水位 1.7×recommended ≈ **30 GiB，超物理内存**——长跑累积与单次峰值会把系统内存拉爆成换页卡顿（机制循证见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md) §6.8）。上限过低时长块会得到点名显存的 500（三出路见 §七，客户端已按签名跳过无效重试）；`0`=不限（回退旧行为）；`--device cpu` 不设不上报。开 `--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB，长块多时可上调；
+- **MPS 显存上限**（`--mps-mem-limit-gib`，缺省即生效，无需显式传参）：服务内置进程级水位线，缺省 `min(0.90×recommended, 16) GiB`（24GB 机型 ≈16 GiB；缺省额度不足 ~11 GiB 的 16 GB 级机型自动不设限——0.9×recommended≈9.6 贴平 v2.5 fp32 常驻 ~9.3 GiB，设限只会开箱即 OOM）。torch MPS 分配器默认水位 1.7×recommended ≈ **30 GiB，超物理内存**——长跑累积与单次峰值会把系统内存拉爆成换页卡顿（机制循证见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md) §6.8）。上限过低时长块会得到点名显存的 500（三出路见 §七，客户端已按签名跳过无效重试）；`0`=禁用 high watermark（unlimited，承担系统内存耗尽风险）；`--device cpu` 不设不上报。开 `--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB，长块多时可上调；
 - 健康检查：`curl http://127.0.0.1:8766/health` → `{"ok": true, "version": "2.5", "device": "mps", "mps_mem_limit_gib": 15.98, "synthesizing": false, "dtype": "fp32", "encoder": "soundfile", "supports_duration_factor": true, "supports_emo_text": false}`（MPS 上 dtype 恒为 fp32，属预期；`supports_emo_text` 随 `--use-qwen-emo` 变化；`mps_mem_limit_gib` 为生效上限，null=未设；24GB 机型缺省 `round(0.90×17.76, 2)`=15.98）；
 - **仅监听 127.0.0.1、无鉴权，勿暴露公网**；`ref_path` 为服务端本地绝对路径。
 
