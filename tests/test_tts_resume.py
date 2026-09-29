@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import http.client
 import json
 import re
 import signal
@@ -77,33 +78,54 @@ def _mock_loop(monkeypatch, healthy_seq, rc_seq, restart_ok=True):
 FWD = ["--engine", "indextts", "--project", "ep-x"]
 
 
-def test_main_succeeds_after_transient_failures(monkeypatch):
+@pytest.fixture()
+def fake_root(tmp_path):
+    """封闭化的 index-tts checkout 目录——main() 入口校验根存在（评审加固），
+    不显式指认会让 mock 测试依赖本机 ~/tools/index-tts 真伪。"""
+    root = tmp_path / "index-tts"
+    root.mkdir()
+    return root
+
+
+def test_main_succeeds_after_transient_failures(monkeypatch, fake_root):
     """两轮瞬时失败（服务态挂死）→ 冷重启两次 → 第三轮成功：退出 0。"""
     calls = _mock_loop(monkeypatch, healthy_seq=[True], rc_seq=[1, 1, 0])
-    rc = tts_resume.main(["--", *FWD])
+    rc = tts_resume.main(["--index-tts-root", str(fake_root), "--", *FWD])
     assert rc == 0
     assert calls == {"healthy": 3, "restart": 2, "tts": 3}
 
 
-def test_main_gives_up_after_max_restarts(monkeypatch):
+def test_main_gives_up_after_max_restarts(monkeypatch, fake_root):
     """连续失败达 --max-restarts：返回末轮客户端退出码，不再重启。"""
     calls = _mock_loop(monkeypatch, healthy_seq=[True], rc_seq=[5, 5, 5])
-    rc = tts_resume.main(["--max-restarts", "3", "--", *FWD])
+    rc = tts_resume.main(
+        ["--max-restarts", "3", "--index-tts-root", str(fake_root), "--", *FWD]
+    )
     assert rc == 5
     assert calls["restart"] == 2  # 第 3 轮失败即放弃，未做第 3 次重启
 
 
-def test_main_restarts_unhealthy_server_before_first_run(monkeypatch):
+def test_main_restarts_unhealthy_server_before_first_run(monkeypatch, fake_root):
     """服务不健康：先冷重启再跑客户端（不健康的服务不进合成）。"""
     calls = _mock_loop(monkeypatch, healthy_seq=[False], rc_seq=[0])
-    assert tts_resume.main(["--", *FWD]) == 0
+    assert tts_resume.main(["--index-tts-root", str(fake_root), "--", *FWD]) == 0
     assert calls == {"healthy": 1, "restart": 1, "tts": 1}
 
 
-def test_main_exit_3_when_server_wont_start(monkeypatch):
+def test_main_exit_3_when_server_wont_start(monkeypatch, fake_root):
     """冷启动超时：退出码 3（区别于客户端失败码）。"""
     _mock_loop(monkeypatch, healthy_seq=[False], rc_seq=[0], restart_ok=False)
-    assert tts_resume.main(["--", *FWD]) == 3
+    assert tts_resume.main(["--index-tts-root", str(fake_root), "--", *FWD]) == 3
+
+
+def test_main_exits_when_index_tts_root_missing(monkeypatch, tmp_path):
+    """评审加固：checkout 缺失在入口大声退出（可操作提示）——配置错误不等到
+    服务掉线（本脚本靶场景）才以 Popen 裸 traceback 炸出。"""
+    calls = _mock_loop(monkeypatch, healthy_seq=[True], rc_seq=[0])
+    with pytest.raises(SystemExit) as e:
+        tts_resume.main(["--index-tts-root", str(tmp_path / "nope"), "--", *FWD])
+    assert "index-tts" in str(e.value) and "TO_VIDEO_INDEX_TTS_ROOT" in str(e.value)
+    assert calls["tts"] == 0  # 未进合成即拦
 
 
 def test_main_requires_forwarded_args():
@@ -162,10 +184,16 @@ def test_server_healthy_payload_branches(monkeypatch, resp, expected):
         urllib.error.URLError("Connection refused"),
         socket.timeout("timed out"),
         OSError("reset"),
+        # HTTPException 族（评审加固）：端口被非 HTTP 进程占用（BadStatusLine）
+        # 或半截响应（IncompleteRead）——MRO 不经 URLError/OSError/ValueError，
+        # 实测曾直接穿透 main() 裸 traceback（自愈编排器在自身职责域的病态
+        # 服务形态上丧失自愈）。
+        http.client.BadStatusLine("REDIS-GARBAGE-NOT-HTTP"),
+        http.client.IncompleteRead(b"partial"),
     ],
 )
 def test_server_healthy_transport_failures_are_unhealthy(monkeypatch, exc):
-    """连接拒绝/探测超时/传输错误一律按不健康（含 /health 假绿之外的掉线形态）。"""
+    """连接拒绝/探测超时/传输错误/非 HTTP 回包一律按不健康（含假绿之外的掉线形态）。"""
 
     def boom(*_a, **_k):
         raise exc
@@ -240,6 +268,14 @@ def test_mps_env_pairing_rules():
         tts_resume.mps_env(None, "0.7")  # 单设 low 无语义
     with pytest.raises(SystemExit):
         tts_resume.mps_env("zero", "0.7")  # 非数值
+    # 评审加固：nan/-inf 比较恒 False 会溜过 `> 0` 配对分支、负数同例——注入后
+    # torch 首个 MPS 分配崩出的错误不含任何可定位信息，防呆在入口拦。
+    with pytest.raises(SystemExit):
+        tts_resume.mps_env("nan", None)
+    with pytest.raises(SystemExit):
+        tts_resume.mps_env("-inf", "0.7")
+    with pytest.raises(SystemExit):
+        tts_resume.mps_env("-1", "0.7")
 
 
 # ---------------- 入口门禁：引擎面 + 客户端依赖面 ----------------
@@ -261,6 +297,19 @@ def test_require_client_deps_hints_with_incantation(monkeypatch):
 
 
 # ---------------- 冷重启纪律：按端口，判据面=作用面 ----------------
+
+
+def test_start_server_missing_root_or_exec_exits_with_hint(tmp_path):
+    """评审加固：Popen 的 FileNotFoundError（cwd 缺失/uv 不在 PATH）转可操作
+    退出——服务掉线正是靶场景，配置错误不裸 traceback（对齐 port_listeners
+    对 lsof 缺失的先例）。"""
+    with pytest.raises(SystemExit) as e:
+        tts_resume.start_server(
+            ["uv", "run"], tmp_path / "no-such-dir", tmp_path / "s.log", {}
+        )
+    assert "--index-tts-root" in str(e.value) and "TO_VIDEO_INDEX_TTS_ROOT" in str(
+        e.value
+    )
 
 
 def test_stop_server_kills_by_port_not_pkill(monkeypatch):

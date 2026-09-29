@@ -24,8 +24,10 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import importlib.util
 import json
+import math
 import os
 import shlex
 import signal
@@ -115,6 +117,12 @@ def mps_env(high: str | None, low: str | None) -> dict[str, str]:
         high_v = float(high)
     except ValueError:
         sys.exit(f"--mps-high-ratio 非数值: {high!r}")
+    if not math.isfinite(high_v) or high_v < 0:
+        # nan/-inf 比较恒 False 会溜过 `> 0` 分支，负数同例——注入后 torch 首个
+        # MPS 分配崩出的错误不含任何可定位信息，防呆须在入口拦。
+        sys.exit(
+            f"--mps-high-ratio 须为 ≥ 0 的有限数（0.0 = 禁用水位线），实际 {high!r}"
+        )
     if high_v > 0 and low is None:
         sys.exit(
             "单设正的 --mps-high-ratio 而不配 --mps-low-ratio：默认 low=1.4，"
@@ -138,8 +146,10 @@ def server_healthy(
             if getattr(resp, "status", 200) != 200:
                 return False
             return bool(json.loads(resp.read()).get("ok"))
-    except (urllib.error.URLError, OSError, ValueError):
-        # URLError/连接拒绝/超时(OSError 族)/坏 JSON(ValueError 族) 一律按不健康
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+        # URLError/连接拒绝/超时(OSError 族)/坏 JSON(ValueError 族)/非 HTTP 回包
+        # 或半截响应（HTTPException 族：BadStatusLine/IncompleteRead——实测不经
+        # URLError/OSError 穿透，端口被非 HTTP 进程占用即此形态）一律按不健康
         return False
 
 
@@ -188,14 +198,24 @@ def start_server(
     """后台拉起服务（新会话，输出追加进日志文件——不与客户端输出混流）。"""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **extra_env}
-    with log_path.open("ab") as log:
-        return subprocess.Popen(
-            argv,
-            cwd=str(cwd),
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
+    try:
+        with log_path.open("ab") as log:
+            return subprocess.Popen(
+                argv,
+                cwd=str(cwd),
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+    except FileNotFoundError as e:
+        # 根目录缺失（cwd 不存在）或启动命令不在 PATH（uv 未装）——服务掉线正是
+        # 本脚本的靶场景，配置错误不许以裸 traceback 退场（对齐 port_listeners
+        # 对 lsof 缺失的可操作退出先例）。
+        sys.exit(
+            f"服务起不来：{e}\n  检查 --index-tts-root / TO_VIDEO_INDEX_TTS_ROOT"
+            f"（当前 {cwd}，须为存在的 index-tts checkout）与 --server-cmd"
+            " 可执行（缺省经 uv，须在 PATH）"
         )
 
 
@@ -360,6 +380,13 @@ def main(argv: list[str] | None = None) -> int:
         shlex.split(args.server_cmd) if args.server_cmd else default_server_argv(port)
     )
     root = index_tts_root(args.index_tts_root)
+    if not root.is_dir():
+        # 冷重启的 Popen cwd：缺目录会在服务掉线时（恰是本脚本靶场景）裸
+        # traceback——配置错误在入口就大声退出，不等到半夜长跑掉线才炸。
+        sys.exit(
+            f"index-tts checkout 不存在: {root}——设 --index-tts-root 或 env"
+            " TO_VIDEO_INDEX_TTS_ROOT 指向实际 checkout（冷重启的运行目录）"
+        )
     log_path = (
         Path(args.server_log)
         if args.server_log
