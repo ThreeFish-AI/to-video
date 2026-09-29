@@ -301,7 +301,7 @@
 
 **方案比选**：三案——① `source_ledger.py` 新增 kind="gl" 纳管本地冻结文档（否决：fetch/verify 是「活信源重抓比对」语义，冻结本地文档强挂 kind 制造语义漂移，且违背最小干预）；② 01 新增 C 型规格小节 + 下游指针化泛引（采纳：对齐 A 型「断言回溯到事实源文件小节」地基铁律；穿透抽查复用 paper_extract.py find 与 B 型台账纪律；活源指纹沿用 sources.toml 既有机制，不开第二本笔记；零机制脚本改动）；③ 不设 C 型、仅口头建议先跑 GL（否决：无规格无验收门等于没有，且触发面不含该形态）。
 
-**处理方式**：01 顶部表加 C 行 + 「# C 型信源 · guided-learn 精读产物」大节（冻结快照 / 锚点回溯 / 穿透抽查 / 证据定级 / 补证 / 鲜度登记 / 验收）；02:3/:11/:18/:24、03 头部模板行与素材引用、04 核查表列名、05:17/:145、PIPELINE.md 目录树与脚手架清单的事实源引用泛化为三型指针（顺带修 B 型命名缺口）；SKILL.md 任务表加 GL 产物入口行 + 速查表 ① 行补 C 型（门列不动）+ 相邻技能协作第一条改为输入信源关系 + description 触发面扩充；README 相邻 Skill 行同步；scaffold.py 建集指引补 C 型半句；trigger-evals 追加 1 正 1 负；新增 tests/test_source_types.py 锚定测试。（PR 链接与 commit 待回填）
+**处理方式**：01 顶部表加 C 行 + 「# C 型信源 · guided-learn 精读产物」大节（冻结快照 / 锚点回溯 / 穿透抽查 / 证据定级 / 补证 / 鲜度登记 / 验收）；02:3/:11/:18/:24、03 头部模板行与素材引用、04 核查表列名、05:17/:145、PIPELINE.md 目录树与脚手架清单的事实源引用泛化为三型指针（顺带修 B 型命名缺口）；SKILL.md 任务表加 GL 产物入口行 + 速查表 ① 行补 C 型（门列不动）+ 相邻技能协作第一条改为输入信源关系 + description 触发面扩充；README 相邻 Skill 行同步；scaffold.py 建集指引补 C 型半句；trigger-evals 追加 1 正 1 负；新增 tests/test_source_types.py 锚定测试。。[PR #27](https://github.com/ThreeFish-AI/to-video/pull/27)，commit `1aba7a8`。
 
 **后续防范**：① 新增信源形态先查 01 顶部分流表是否可挂，挂不进 = 规格缺口而非绕路理由；② 下游规格提及事实源一律三型泛引（文件名清单只在 01 顶部表一处枚举，防第四型再复制十余处）；③ 触发面变更必须补 trigger-evals 近邻用例（正负各一）防精度回归。
 
@@ -317,6 +317,6 @@
 
 **方案比选**：清理路径三案——① 全局 pkill -f Chrome（否决：误杀用户在用的可见 Chrome，违背 TTS 域已确立的防误杀纪律）；② try/finally 结构化保证 + 失败时窄域清理指引（采纳：close 成为结构不变量；SIGKILL 级残留给出「headless + playwright 临时 profile 双特征」窄域检测/清理命令、只指引不自动杀）；③ atexit+signal 兜底（否决：finally 已覆盖全部可捕获路径，信号钩子复杂度收益边际）。context 关闭形状两案：统一 contextmanager 替换三处显式 close（否决：:753 编码前关 context 是刻意次序，统一包裹会改变正常路径生命周期语义）vs 显式关闭保留 + finally 幂等兜底（采纳，正常路径行为不变）。
 
-**处理方式**：record_archify.py 提取 launched_browser contextmanager（launch/close 结构化，SystemExit/TimeoutError 路径必关）+ 每章 context try/finally 幂等兜底；新增 tests/test_record_archify_session.py（importorskip playwright + Mock 假 browser/context，断言异常路径 close 仍被调、正常路径恰一次；--with playwright 专项跑入 PR 记录）；record_archify_all.py 失败汇总后补孤儿复核指引 + 串行理由勘误；PIPELINE.md 新增「浏览器进程纪律」小节（headless 缺省 / 复用既定决策 / Remotion 无头自退 / 两步窄域清理与防误杀禁令）+ §三 脚本表补 record_archify*.py 两行；10:88-90 勘误指向新小节；SKILL.md 运行时陷阱加一行指针；README 依赖表补 playwright 与系统 Chrome。（PR 链接与 commit 待回填）
+**处理方式**：record_archify.py 提取 launched_browser contextmanager（launch/close 结构化，SystemExit/TimeoutError 路径必关）+ 每章 context try/finally 幂等兜底；新增 tests/test_record_archify_session.py（importorskip playwright + Mock 假 browser/context，断言异常路径 close 仍被调、正常路径恰一次；--with playwright 专项跑入 PR 记录）；record_archify_all.py 失败汇总后补孤儿复核指引 + 串行理由勘误；PIPELINE.md 新增「浏览器进程纪律」小节（headless 缺省 / 复用既定决策 / Remotion 无头自退 / 两步窄域清理与防误杀禁令）+ §三 脚本表补 record_archify*.py 两行；10:88-90 勘误指向新小节；SKILL.md 运行时陷阱加一行指针；README 依赖表补 playwright 与系统 Chrome。。[PR #27](https://github.com/ThreeFish-AI/to-video/pull/27)，commit `1aba7a8`。
 
 **后续防范**：① 浏览器生命周期一律 contextmanager/finally 结构化，禁止裸 close 顺序语句；② 进程清理必须窄域双特征匹配（headless + 临时 profile），严禁全局 pkill Chrome；③ 文档归因须与代码实况对拍（headless 无前台焦点——错误机理描述会诱导错误优化）。
