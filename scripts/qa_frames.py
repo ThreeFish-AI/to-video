@@ -27,6 +27,11 @@ A/B 对拍（有帧时 advisory；零匹配帧硬失败，供重制/重构回归
     冻帧           同幕相邻采样帧 16×16 灰度均值哈希 Hamming 距离 0 → WARN
                    （beat 窗口错位/未覆盖句区间渲染空白）
     字幕缺失       字幕带内无任何像素达文字亮度 → WARN（单句字幕渲染失败）
+    纯底色段       画面内容区（顶部安全带 y<56 之下、字幕带之上）无内容像素持续
+                   ≥ qa.max_dark_sec 秒（默认 8s，toml 可覆写；末幕豁免防片尾渐黑）
+                   → FAIL——跨帧时序判据（RSI-020）：场景组件整段渲染为空（仅字幕
+                   无画面）时帧均值被字幕带抬高、相邻帧字幕不同指纹也不同，帧内
+                   判据全数放行；须句中点采样形态（--beat-heads 头帧落在淡入瞬态，不查）
 
 主题对比度（--check-theme，零依赖、不需要视频）：
     解析 video/src/design/theme.ts 的 #RRGGBB，按 WCAG 2.x 相对亮度对比
@@ -55,6 +60,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config  # noqa: E402
 import langs  # noqa: E402
 from timeline import blend, compute, load_constants  # noqa: E402
 
@@ -260,6 +266,17 @@ INTRUSION_MIN_W_PX = 24
 CONTRAST_MIN = 4.5
 #: A/B 对拍的逐像素刚可辨差异（just-noticeable diff 的经验值）
 DIFF_JND = 12
+#: 纯底色段判据（RSI-020）的几何：画面内容区 = 顶部安全带（y<56，章节条零碰撞
+#: 带，几何 SSOT 见 ChapterProgress.tsx 注释）之下、字幕安全带（底部 160px）之上
+#: ——场景内容按设计契约全部落在这条带内，空段判定只看它。
+CONTENT_TOP_PX = 56
+#: 「内容区有内容」的信号 = 亮像素占比：底色 #0E1116 灰度 ≈0.065、JPEG q60 平底
+#: 噪声 <0.09，而设计系统最弱的结构元素 panelBorder #2A3242 ≈0.19——阈值取中，
+#: 两侧都不贴边（ISSUE-167：亮度阈值须在已知干净帧零报警，几何量优先）。
+BLANK_CONTENT_BRIGHTNESS = 0.15
+#: 内容区亮像素占比低于此值判「无内容」：抗 JPEG 斑点与抗锯齿碎屑（一条 40px 高
+#: 的文字行的墨水占比已高出它一个数量级以上）
+BLANK_CONTENT_FRAC_FLOOR = 0.0005
 
 
 def bright_segments(col, threshold: float) -> list[tuple[int, int]]:
@@ -358,7 +375,16 @@ def check_frames(
     msgs: list[str],
     freeze_check: bool = True,
     subtitle_check: bool = True,
+    timeline: dict[str, tuple[float, float]] | None = None,
+    max_dark_sec: float | None = None,
 ) -> None:
+    """逐帧体检（黑帧/侵入/字幕/冻帧）+ 纯底色段跨帧时序门（RSI-020）。
+
+    `timeline`（{句id: (startSec, spanSec)}，qa_frames.timeline() 的产物）给到时
+    才启用纯底色段判定——须句中点采样形态；--beat-heads 的头帧名不在时间轴里，
+    自然不参与。`max_dark_sec` 缺省取 SCHEMA 默认（qa.max_dark_sec），调用方传入
+    toml 覆写值。
+    """
     try:
         import numpy as np
         from PIL import Image
@@ -370,8 +396,11 @@ def check_frames(
     band_px = round(SUBTITLE_BAND_PX * scale)
     min_w_px = round(INTRUSION_MIN_W_PX * scale)  # 侵入物最小宽度，同口径折算
     box_h_px = round(SUBTITLE_BOX_H_PX * scale)  # 字幕框高度，同口径折算
+    top_px = round(CONTENT_TOP_PX * scale)  # 画面内容区上缘，同口径折算
     hashes: dict[str, int] = {}
     ordered: list[tuple[str, Path]] = []
+    # (句id, startSec, spanSec, 内容区是否无内容) —— 纯底色段判定的逐帧证据
+    blank_rows: list[tuple[str, float, float, bool]] = []
     for sid in ids:
         png = out / f"{sid}.png"
         if not png.is_file():
@@ -400,6 +429,21 @@ def check_frames(
                         f"WARN {sid}: 字幕框上方安全带内有亮块 x{a}–{b}"
                         f"（角标/图形侵入 bottom≥{SUBTITLE_BAND_PX}px 安全区）"
                     )
+        if timeline is not None and sid in timeline:
+            content = img[top_px : img.shape[0] - band_px, :]
+            frac = (
+                float((content > BLANK_CONTENT_BRIGHTNESS).mean())
+                if content.size
+                else 1.0
+            )
+            blank_rows.append(
+                (
+                    sid,
+                    timeline[sid][0],
+                    timeline[sid][1],
+                    frac < BLANK_CONTENT_FRAC_FLOOR,
+                )
+            )
         hashes[sid] = mean_hash(
             np.asarray(Image.open(png).convert("L").resize((16, 16)))
         )
@@ -409,6 +453,57 @@ def check_frames(
             if a.rsplit("-", 1)[0][:2] == b.rsplit("-", 1)[0][:2]:  # 同幕前缀
                 if hashes[a] == hashes[b]:
                     msgs.append(f"WARN {a} 与 {b} 帧指纹相同（疑似冻帧/beat 窗口错位）")
+
+    _check_blank_runs(blank_rows, timeline or {}, max_dark_sec, msgs)
+
+
+def _check_blank_runs(
+    rows: list[tuple[str, float, float, bool]],
+    timeline: dict[str, tuple[float, float]],
+    max_dark_sec: float | None,
+    msgs: list[str],
+) -> None:
+    """纯底色段门（RSI-020）：内容区无内容的采样帧连成段，持续 ≥ 阈值 → FAIL。
+
+    单帧判据对「整段仅字幕无画面」失明（帧均值被字幕带抬高、相邻帧字幕文本不同
+    指纹也不同），必须跨帧看时长。run 不跨幕（幕间 SceneFade 淡出尾会让两侧帧
+    都短暂近底色，跨幕累计会把合法转场拼成假空段）；末幕整幕豁免——片尾渐黑
+    从末 beat 起渐进变暗，可能长时间低于内容亮度阈值，是合法形态（黑帧门已管
+    末帧纯黑）。时长按「首帧中点 − 半句距 .. 末帧中点 + 半句距」计：句中点采样
+    的空白观察自然外推到各自句区，幕内 5–7s 的抽样空档由「持续 ≥8s」内插兜住。
+    """
+    if not rows or not timeline:
+        return
+    threshold = (
+        config.default("qa.max_dark_sec") if max_dark_sec is None else max_dark_sec
+    )
+    if threshold <= 0:
+        return  # 0 = 关闭（合法偏离走 toml 覆写）
+    last_scene = list(timeline)[-1].rsplit("-", 1)[0]
+    run: list[tuple[str, float, float]] = []
+
+    def flush() -> None:
+        if not run:
+            return
+        dur = (run[-1][1] + run[-1][2] / 2) - (run[0][1] - run[0][2] / 2)
+        if dur >= threshold:
+            msgs.append(
+                f"FAIL 纯底色段: {run[0][0]}..{run[-1][0]} 画面内容区无内容像素"
+                f"持续 {dur:.0f}s ≥ {threshold:g}s（场景渲染为空？仅字幕无画面——"
+                "查场景组件是否整段返回 null / 分片文件缺失）"
+            )
+        run.clear()
+
+    for sid, start, span, blank in rows:
+        scene = sid.rsplit("-", 1)[0]
+        contiguous = bool(run) and run[-1][0].rsplit("-", 1)[0] == scene
+        if blank and scene != last_scene and (not run or contiguous):
+            run.append((sid, start, span))
+        else:
+            flush()
+            if blank and scene != last_scene:
+                run.append((sid, start, span))
+    flush()
 
 
 # ---------------- main ----------------
@@ -653,7 +748,33 @@ def main() -> None:
         board = root / "script" / "storyboard.md"
         fade_tail = tail_row_has_fade(board)
         msgs: list[str] = []
-        check_frames(out, extracted, args.scale, fade_tail, msgs)
+        # 纯底色段阈值走 config（toml 可覆写，默认 8s）；缺 pipeline.toml 时 load
+        # 返回 {}，兜底即 SCHEMA 默认（缺文件时也无 tts.style，档位分层不适用）。
+        qa_cfg, _origin, qa_fails, _warns = config.load(
+            root, required=False, scope={"qa"}
+        )
+        if qa_fails:
+            # validate 的 FAIL 不许被静默丢弃（config.py 自述存在的首要理由就是
+            # 消灭「你以为开着其实关着的门」）：字符串值会在阈值比较处裸
+            # traceback、负值会借「0=关闭」分支无声关门——独立直调本命令正是
+            # 09 ⑨ 必做路径，不能赌 pipeline.py check 先跑过全量 validate。
+            sys.exit(
+                "FAIL: qa 配置校验失败，自动体检拒绝带病运行"
+                "（0 = 关闭纯底色段门是唯一合法关闭形态）：\n      "
+                + "\n      ".join(qa_fails)
+            )
+        max_dark = qa_cfg.get("qa", {}).get(
+            "max_dark_sec", config.default("qa.max_dark_sec")
+        )
+        check_frames(
+            out,
+            extracted,
+            args.scale,
+            fade_tail,
+            msgs,
+            timeline=tl,
+            max_dark_sec=max_dark,
+        )
         for m in msgs:
             print(f"  {m}")
         n_fail = sum(m.startswith("FAIL") for m in msgs)

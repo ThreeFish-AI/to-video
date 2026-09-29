@@ -228,6 +228,62 @@ def test_model_designator_warns_not_fails(project):
     assert "WARN" in out and "一千零八十" in out
 
 
+# ---------------- zh 字幕单行宽度门（RSI-024：物理上限 50 全角当量） ----------------
+
+
+def _write_current_gen_subtitle(root: Path) -> None:
+    """字幕宽度门的代际标记：当前模板特征行 `twoLine = !isZh && …`（zh 恒单行）。"""
+    f = root / "video" / "src" / "components" / "Subtitle.tsx"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("const twoLine = !isZh && fitted < MIN_FONT_SIZE;\n", encoding="utf-8")
+
+
+def test_subtitle_width_overflow_fails(project):
+    """52 个全角字符（51 字 + 句号）= 52.0 当量 > 50（30px×1528px 物理预算）——E3 事故形态。"""
+    _write_current_gen_subtitle(project)
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(project, ["务" * 51 + "。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project)
+    assert rc == 1, out
+    assert "字幕宽度" in out and "超字幕单行上限" in out and "p0-01" in out
+
+
+def test_subtitle_width_at_limit_passes(project):
+    """恰 50 个全角字符（49 字 + 句号）= 50.0 当量，在物理预算内放行。"""
+    _write_current_gen_subtitle(project)
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(project, ["务" * 49 + "。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "字幕宽度" in out and "超限 0 处" in out
+
+
+def test_subtitle_width_mixed_halfwidth_fails(project):
+    """混排按半角 ~0.55 折算：40 全角 + 20 半角字母 = 40 + 11 = 51.0 > 50。"""
+    _write_current_gen_subtitle(project)
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(
+        project, ["字" * 40 + "abcdefghij" + "klmnopqrst", BENIGN, BENIGN, BENIGN]
+    )
+    rc, out = run_check(project)
+    assert rc == 1, out
+    assert "超字幕单行上限" in out
+
+
+def test_subtitle_width_runs_in_pre_tts(project):
+    """分镜未写时门照跑（句级检查不依赖 storyboard）——两遍法草稿遍即拦截。"""
+    _write_current_gen_subtitle(project)
+    (project / "script" / "storyboard.md").unlink()
+    write_config(project, CFG_OK)
+    write_narration(project, ["务" * 51 + "。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project, "--pre-tts")
+    assert rc == 1, out
+    assert "超字幕单行上限" in out
+
+
 # ---------------- --pre-tts：TTS 前置门（两遍法草稿遍，分镜未写） ----------------
 
 
@@ -1046,3 +1102,16 @@ def test_check_scenes_en_reports_untranslated_literals(project):
         assert f"P0Card.tsx:{n} " not in out, (n, out)
     # en 模式下不再跑主稿的场景互比门（语言无关，主稿执法）
     assert "beatWindow" not in out
+
+
+def test_subtitle_width_skips_old_gen_subtitle(project):
+    """旧代 Subtitle（无 `twoLine = !isZh` 守卫，zh 可折行）——门点名跳过不误报。"""
+    f = project / "video" / "src" / "components" / "Subtitle.tsx"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("const twoLine = fitted < MIN_FONT_SIZE;\n", encoding="utf-8")
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(project, ["务" * 60 + "。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "门不适用，点名跳过" in out

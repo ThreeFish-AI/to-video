@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 import config
-from record_archify import find_remotion
+from record_archify import DIAGRAM_TYPES, find_remotion, read_views
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from paths import PROJECT  # noqa: E402 - 惰性锚（取代 parents[4] 数层数）
@@ -180,9 +180,13 @@ def main() -> None:
             )
         slugs = want
 
-    # 映射 + 源图存在性：全部先验完再开录，免得跑到第 40 分钟才发现某张缺源图。
+    # 映射 + 源图存在性 + 录制前置预检：全部先验完再开录，免得跑到第 40 分钟才发现
+    # 某张缺源图。dry-run 与真录共用这一段——预检只在 dry-run 跑等于给漏跑 dry-run
+    # 的批次留一道敞开的门（上游 ISSUE-201：三重静默缺陷全部拖到录制中段才暴露）。
     plan: list[tuple[str, Path, bool]] = []
     missing: list[str] = []
+    no_views: list[str] = []
+    bad_types: list[str] = []
     for slug in slugs:
         overridden = slug in overrides
         name = overrides[slug] if overridden else pattern.format(slug=slug)
@@ -190,11 +194,39 @@ def main() -> None:
         if not html.is_file():
             missing.append(f"{slug} → {html}")
             continue
+        # ① 源图须含非空 guided-views 数据（与录制器 materialize/read_views 同一
+        # 提取器，预检与录制对「什么算空」永不各说各话）。
+        if not read_views(html):
+            no_views.append(f"{slug} → {html}")
+            continue
+        # ② 既有 sidecar 的审定图型须在录制器词表内——越表 type 重录时被 argparse
+        # 拒绝（退出码 2），这里提前拦并给出映射指路。
+        if (t := prior_type(archify_dir / f"{slug}.json")) and t not in DIAGRAM_TYPES:
+            bad_types.append(f"{slug}（type={t}）")
+            continue
         plan.append((slug, html, overridden))
     if missing:
         sys.exit(
             "FAIL: 以下图找不到源 HTML（约定 = html_pattern，例外走 html_overrides）：\n      "
             + "\n      ".join(missing)
+        )
+    if no_views:
+        sys.exit(
+            "FAIL: 以下源图缺非空 guided-views 数据（archify-guided-views-data 容器"
+            "缺位或为空）：\n      "
+            + "\n      ".join(no_views)
+            + "\n      产物可能出自删除该模块的 archify 版本（全局 CLI 3.0.0 起无"
+            " guided-views）——须用仍含该模块的版本重新出图并落 html_dir。"
+        )
+    if bad_types:
+        sys.exit(
+            "FAIL: 以下 sidecar type 越出录制器图型词表（"
+            + "/".join(DIAGRAM_TYPES)
+            + "）：\n      "
+            + "\n      ".join(bad_types)
+            + "\n      state 型（archify 出图词汇）在本管线映射为 lifecycle——在"
+            " video/public/archify/<slug>.json 顶层改写 type；词表以录制器 --type"
+            " 为准（references/06 archify 资产标注规范）。"
         )
 
     if find_remotion() is None:

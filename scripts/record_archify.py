@@ -497,6 +497,12 @@ _FRAME_KIND_TO_TYPE = {
     "segment": "sequence",
 }
 
+#: 图型词表（--type argparse choices 的唯一事实源）。record_archify_all 的录制
+#: 前置预检从这里 import——上游 ISSUE-201：sidecar 手工回填 type=state（archify
+#: 出图词汇含 state）曾被 argparse 拒绝、退出码 2，发生在建图完成数小时之后；
+#: 词表只此一份，预检与 argparse 永不漂移。
+DIAGRAM_TYPES = ("architecture", "workflow", "sequence", "dataflow", "lifecycle")
+
 
 def _sniff_diagram_type(src: Path) -> str:
     """从交付 HTML 的渲染器指纹嗅图型（best-effort，嗅不出返回 ""）。
@@ -571,7 +577,7 @@ def main() -> None:
     ap.add_argument("--crf", type=int, default=16)
     ap.add_argument(
         "--type",
-        choices=["architecture", "workflow", "sequence", "dataflow", "lifecycle"],
+        choices=DIAGRAM_TYPES,
         help="图型（落 sidecar 顶层 type，覆盖门图型多样性门的数据源）；"
         "省略则从交付 HTML 的渲染器指纹嗅探，嗅不出（lifecycle/无框平铺）留空",
     )

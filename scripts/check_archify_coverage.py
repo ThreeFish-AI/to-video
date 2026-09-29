@@ -107,7 +107,9 @@ def extract_cues(scenes_dir: Path) -> list[Cue]:
                     raise SystemExit(
                         f"FAIL: {sm.group(1)}/{c.group(1)} 未识别出 `dur('句id')` "
                         "单参时长——多句窗（dur('a','b')）会与邻句 cue 重叠，"
-                        "全屏独占下请一章锚一句。"
+                        "全屏独占下请一章锚一句；确需跨句扩窗（空窗回填）改拼写为 "
+                        "`dur('a') + dur('b')` 求和形态（帧数等价、本门可识别对账，"
+                        "首段句 id 须与 at 锚一致）。"
                     )
                 if dm.group(1) != am.group(1):
                     raise SystemExit(

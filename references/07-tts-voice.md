@@ -49,6 +49,7 @@ story 档（默认）**不需要两遍法**——1 束本来就是定稿口径�
 - 直接薄包装（工程内）：`uv run --no-project --with mutagen scripts/tts.py --engine indextts …`（须带 `--expect-ref-sha1`，编排入口会自动带上）
 - 服务端启动命令由 `tts.py`/`tts_sample.py` 在不可达时自动打印（可直接粘贴），手册见 [VOICE-CLONING.md §二](VOICE-CLONING.md)
 - 长跑旁路监视：`uv run --no-project $T/scripts/tts_progress.py --project $P`（按逐句 mp3 mtime 重建墙钟进度与热漂移告警，story 块合成按 <1s 聚簇并折回每句口径，与合成进程零耦合——nohup 长跑时另开终端跑）
+- 长跑自愈编排（RSI-022）：`uv run --no-project --with mutagen $T/scripts/tts_resume.py -- --engine indextts --project $P …`——服务掉线/MPS 挂死时按端口冷重启 + 真实退出码续跑（幂等缓存从断点续）；用法与参数定义见 [PIPELINE.md §三](PIPELINE.md) 脚本表，与本节「服务生命周期」同一端口纪律（重启只杀该端口 LISTEN）
 
 ## 服务生命周期：按需启停，用完即关
 
@@ -67,5 +68,6 @@ IndexTTS 服务端（端口取自 `tts.server`，默认 8766，下文命令以�
 ## 完成门（交给 Stage ⑨ 前）
 
 - manifest 句数 = narration 句数；`pipeline.py check` 的实测时长口径落在预算窗内；
+- **首轮 TTS 完成后校准本集语速**（RSI-021）：写稿预算门的 `narration.chars_per_min` 默认层按 `tts.style` 分档（story=254、其余=280，档位表住 `scripts/config.py` 的 `STYLE_CHARS_PER_MIN`——**仅 story 有整集实测**，新档位首轮后按下述回写）；首轮完成后用 manifest 实测秒数复算 `本集字数 ÷ 实测分钟数`，与生效默认偏差 >3% 就把实测值写进本集 toml 的 `narration.chars_per_min`（显式覆写恒优先，下一集写稿即按本集实测口径执法）。上游教训：五集系列 ep1 首轮按 280 写 3961 字 → 实测外推 15.62 分超 [13.0, 14.6] 硬窗 → 回 ③ 减脂 317 字 → story 块缓存整失效全量重合成 ~40 分钟；后续四集按 254 直写全部一次过窗零返工；
 - sidecar `{id}.sha` 逐句齐备（断点续跑的依据）；`.engine` 标记已更新；
 - 句尾英文产品名收尾的句子跑无偏 ASR-与逐字稿 diff（**禁 `initial_prompt`**，判据组合见 [VOICE-CLONING §5.4](VOICE-CLONING.md)；候选管线门——自动化前人工执行）。

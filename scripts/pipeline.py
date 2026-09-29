@@ -351,6 +351,20 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
         print(f"  ❌ {e}")
         ok = False
     if tts.get("engine") == "indextts":
+        # 客户端依赖预检（RSI-022）：mutagen 是 tts.py 两引擎共用的惰性 import（MP3
+        # 实测时长），缺失的历史崩溃形态是「首句合成成功、写完 mp3 测时长才
+        # ModuleNotFoundError」（uv --no-project 裸调漏 --with）——长跑空转数小时后才
+        # 暴露。⚠️ 不计失败：doctor 的规范调用本就不带 --with（依赖装进跑 tts 的那次
+        # uv 调用才算数），计入失败会让正常态恒红（同「服务离线不计失败」先例）；
+        # tts_resume.py 入口另有硬门禁（缺即大声退出，不进自愈循环）。
+        import importlib.util
+
+        if importlib.util.find_spec("mutagen") is None:
+            print(
+                "  ⚠️  客户端依赖 mutagen 缺失（当前解释器）——跑 tts/tts_resume 须"
+                " `--with mutagen`，否则首句合成成功、测时长才崩；长跑自愈编排见"
+                " references/PIPELINE.md §三 tts_resume.py"
+            )
         # doctor 容忍配置 FAIL 继续跑（见 main()），故 ref 可能真的没配。此时须
         # 明说「未配置」——`WORKSPACE / ""` 会解析成工作区根，把它报成「样本缺失」
         # 是在用一个不存在的路径掩盖配置缺失，两种病因不可混为一谈。
