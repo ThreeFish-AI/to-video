@@ -570,7 +570,7 @@ async def synth_edge(
 
 
 class NonRetryableError(Exception):
-    """4xx 类错误：重试无意义，直接失败并携带服务端错误详情。"""
+    """重试无意义的错误（4xx 类 / 确定性 MPS OOM 签名）：直接失败并携带服务端错误详情。"""
 
 
 def _http_error_detail(e: urllib.error.HTTPError) -> str:
@@ -583,6 +583,15 @@ def _http_error_detail(e: urllib.error.HTTPError) -> str:
         return str(parsed)
     except Exception:  # noqa: BLE001 - 详情解析失败退化为字符串
         return str(e)
+
+
+def _deterministic_mps_oom(detail: str) -> bool:
+    """上限在场时的确定性 MPS 水位线 OOM（服务端 tts_server remedy 的「上限不足」分支
+    以「MPS 显存上限不足」开头）：该句/块内在需求超上限，重试只是分钟级空跑（手册 §七）
+    ——转 NonRetryableError 短路。**只匹配该分支**：未设上限时默认水位 1.7×recommended
+    极高，OOM 为本进程缓存累积或极端峰值（超限只计本进程分配，服务端 finally 已归还
+    缓存），重试仍可能自愈，须留在 5xx 重试桶；文案失配时自然回退可重试（fail-safe 方向）。"""
+    return detail.startswith("MPS 显存上限不足")
 
 
 def http_json(
@@ -623,7 +632,7 @@ def http_synthesize(
     headers_out: dict | None = None,
     sampling: dict | None = None,
 ) -> tuple[bytes, str]:
-    """POST /synthesize → (mp3 bytes, X-Audio-Format)。4xx 不可重试。
+    """POST /synthesize → (mp3 bytes, X-Audio-Format)。4xx 与确定性 MPS OOM 不可重试。
 
     headers_out：可选出参，传入 dict 时回填全部响应头（如 emo_text 模式的 X-Emo-Vector），
     供试听工具回显；管线主路径不需要，故保持返回值签名不变。
@@ -659,7 +668,7 @@ def http_synthesize(
             return resp.read(), resp.headers.get("X-Audio-Format", "unknown")
     except urllib.error.HTTPError as e:
         detail = _http_error_detail(e)
-        if 400 <= e.code < 500:
+        if 400 <= e.code < 500 or _deterministic_mps_oom(detail):
             raise NonRetryableError(f"HTTP {e.code}: {detail}") from e
         raise RuntimeError(f"HTTP {e.code}: {detail}") from e
     except urllib.error.URLError as e:
@@ -904,8 +913,10 @@ async def synth_indextts(
                     meta.write_text(digest)
                     store_deposit(mp3, sid, digest, store, slug)
                     break
-                except NonRetryableError:
-                    raise
+                except NonRetryableError as e:
+                    # 与重试耗尽分支同款包装：确定性失败（4xx / MPS 上限 OOM）也带句 id，
+                    # remedy 的「拆短该句」才有定位锚点
+                    raise NonRetryableError(f"{sid} 合成失败: {e}") from e
                 except Exception as e:  # noqa: BLE001 - 推理服务需要整体重试
                     last_err = e
                     await asyncio.sleep(1.5 * (attempt + 1))
@@ -967,7 +978,7 @@ def http_synthesize_block(
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         detail = _http_error_detail(e)
-        if 400 <= e.code < 500:
+        if 400 <= e.code < 500 or _deterministic_mps_oom(detail):
             raise NonRetryableError(f"HTTP {e.code}: {detail}") from e
         raise RuntimeError(f"HTTP {e.code}: {detail}") from e
     except urllib.error.URLError as e:
@@ -1147,8 +1158,9 @@ async def synth_block_indextts(
                         pad,
                         sampling,
                     )
-                except NonRetryableError:
-                    raise
+                except NonRetryableError as e:
+                    # 同逐句路径：确定性失败也带块 label，供「拆短该块」定位
+                    raise NonRetryableError(f"块合成失败（{label}）: {e}") from e
                 except Exception as e:  # noqa: BLE001 - 推理服务需要整体重试
                     last_err = e
                     await asyncio.sleep(1.5 * (attempt + 1))

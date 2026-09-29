@@ -69,7 +69,8 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 ```
 
 - 启动即加载模型（约 30–60 秒），出现 `>> 就绪：IndexTTS-2.5 device=mps ... emo_text=on|off` 后可服务请求；
-- 健康检查：`curl http://127.0.0.1:8766/health` → `{"ok": true, "version": "2.5", "device": "mps", "synthesizing": false, "dtype": "fp32", "encoder": "soundfile", "supports_duration_factor": true, "supports_emo_text": false}`（MPS 上 dtype 恒为 fp32，属预期；`supports_emo_text` 随 `--use-qwen-emo` 变化）；
+- **MPS 显存上限**（`--mps-mem-limit-gib`，缺省即生效，无需显式传参）：服务内置进程级水位线，缺省 `min(0.90×recommended, 16) GiB`（24GB 机型 ≈16 GiB；缺省额度不足 ~11 GiB 的 16 GB 级机型自动不设限——0.9×recommended≈9.6 贴平 v2.5 fp32 常驻 ~9.3 GiB，设限只会开箱即 OOM）。torch MPS 分配器默认水位 1.7×recommended ≈ **30 GiB，超物理内存**——长跑累积与单次峰值会把系统内存拉爆成换页卡顿（机制循证见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md) §6.8）。上限过低时长块会得到点名显存的 500（三出路见 §七，客户端已按签名跳过无效重试）；`0`=禁用 high watermark（unlimited，承担系统内存耗尽风险）；`--device cpu` 不设不上报。开 `--use-qwen-emo`（+1.5 GB 常驻）余量收窄至 ~4.5 GiB，长块多时可上调；
+- 健康检查：`curl http://127.0.0.1:8766/health` → `{"ok": true, "version": "2.5", "device": "mps", "mps_mem_limit_gib": 15.98, "synthesizing": false, "dtype": "fp32", "encoder": "soundfile", "supports_duration_factor": true, "supports_emo_text": false}`（MPS 上 dtype 恒为 fp32，属预期；`supports_emo_text` 随 `--use-qwen-emo` 变化；`mps_mem_limit_gib` 为生效上限，null=未设；24GB 机型缺省 `round(0.90×17.76, 2)`=15.98）；
 - **仅监听 127.0.0.1、无鉴权，勿暴露公网**；`ref_path` 为服务端本地绝对路径。
 
 
@@ -92,11 +93,21 @@ uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --wi
 # 判在用（两查皆空才可关）：他人连接 or 他人合成进程
 lsof -nP -iTCP:8766 -sTCP:ESTABLISHED
 pgrep -fl "scripts/tts.py|tts_sample.py|tts_bench.py"
-# 关闭：按端口只关这一个实例（勿 pkill -f tts_server.py——会连带 tts_bench 的 8767 等他人实例）
+# 关闭：按端口只关这一个实例（勿 pkill -f tts_server.py——会连带杀掉 8767 上他人的第二个 tts_server.py 实例）
 lsof -ti tcp:8766 -sTCP:LISTEN | xargs kill
 ```
 
 端口取自 `tts.server`（默认 8766，`INDEXTTS_SERVER` 可覆写）；`pipeline.py doctor` 对离线服务只报 ⚠️ 不计失败。
+
+**内存治理分工**（三层，勿混用）：
+
+| 层 | 手段 | 作用面 |
+|---|---|---|
+| 进程硬上限 | `--mps-mem-limit-gib`（§2.3，缺省即生效；16 GB 级小机型缺省额度不足时自动不设限） | 分配器水位线：逼近上限先自动归还缓存，仍不足抛可操作 OOM（上限在场时≈确定性超限，客户端跳过重试）——结构性兜住长跑累积与单次峰值 |
+| 句间缓存归还 | 服务端每句 `finally` 里的 `torch.mps.empty_cache` | 治累积**速率**（此前 40 分钟击穿 30 GiB 的对冲），不设天花板 |
+| 系统级应急 | `sudo sysctl iogpu.wired_limit_mb=<N>`（如 16384；恢复置 0，重启失效） | **全局** GPU wired 硬顶，影响所有 Metal 应用（含 Chrome/WindowServer），仅多进程失控时短期使用 |
+
+上限按**进程**计：8766/8767 多实例并行时各自生效、总量仍可能超——多实例并行本就该避免（见 [INDEXTTS-2.5-ADVANCED.md](INDEXTTS-2.5-ADVANCED.md) §6.5 测量协议）。重启服务仍是最干净的状态复位。同 venv 无 flag 的脚本（`tts_bench.py` 等）可用 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=<ratio>`（ratio×recommended=上限，16 GiB ≈ 0.9）**配** `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.7` 兜底——分配器要求 low ≤ high，而默认 low=1.4，单设 HIGH<1.4 会在首个 MPS 分配即抛 `RuntimeError: invalid low watermark ratio 1.4`（torch 2.8.0 实测）。
 
 ## 三、参考音色样本
 
@@ -491,7 +502,9 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 | 症状 | 原因 | 处理 |
 |---|---|---|
 | 合成请求全部失败，报「服务不可用」 | 服务未启动/端口错 | `curl 127.0.0.1:8766/health`；按 §2.3 启动；`lsof -ti:8766` 查占用 |
-| 合成全 500 而 `/health` 假绿（长跑数十分钟后出现，外表像「毒句」） | MPS 分配器缓存累积击穿显存上限（实测约 40 分钟 / 30 GiB）；`/health` 不探显存，故照报 ok | 服务端已每句 `empty_cache` 对冲（含失败路径）；仍发生即重启服务端（§2.3），客户端按缓存续跑 |
+| 合成 500 且 detail 点名「MPS 显存上限不足」 | 该句/块**瞬时需求**超出进程上限（`/health` 的 `mps_mem_limit_gib`）：torch 默认水位 1.7×17.76≈30 GiB 超 24 GB 物理内存曾是整机卡顿根因，上限即为此设 | 按 detail 三出路：上调 `--mps-mem-limit-gib` 重启 / 拆短该句块 / 置 0 关闭。缓存压力型 OOM 在进程内已被分配器自愈，冒到 500 的≈确定性超限，重试救不回 |
+| 合成全 500 而 `/health` 假绿（长跑数十分钟，外表像「毒句」） | MPS 分配器缓存累积（历史实测 ~40 分钟击穿 30 GiB；设上限的机型**根因已被结构性兜住**——逼近上限时分配器自动归还缓存；小机型缺省不设限、无此护栏）；`/health` 不探显存，故照报 ok | 服务端每句 `empty_cache` 对冲（含失败路径）+ 显存上限双保险；仍发生即重启服务端（§2.3），客户端按缓存续跑 |
+| 整机卡顿/内存压力（非合成 500） | 系统级内存不足（多实例并行、其它 GPU 进程） | 短期应急 `sudo sysctl iogpu.wired_limit_mb=16384`（全局 GPU 硬顶，影响所有 Metal 应用，重启失效，恢复置 0；慎用，见 §2.5 分工表） |
 | 生成音频含 NaN（HTTP 500，detail 提示） | MPS 数值问题 | 客户端自动重试常可清；持续则服务加 `--device cpu` 重启（速度大幅下降，仅救急） |
 | 合成极慢 / 内存飙高 | fp32 + 长句 | 服务串行推理已是缓解；进一步可 `--device cpu` 换稳定；句长已由 max_text_tokens_per_segment=120 内部切分 |
 | 服务日志 `QwenEmotion not loaded` | 正常 | 仅向量模式，不加载 Qwen（省内存） |
