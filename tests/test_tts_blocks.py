@@ -516,7 +516,7 @@ def test_apply_cues_emits_block_and_say(tmp_path):
 
 
 def test_apply_cues_noop_say_collects_warning(tmp_path):
-    """say 与正文逐字相同 = 零效果假动作：合法（不进 errs）但 WARN 可收集（RSI-020）。"""
+    """say 与正文逐字相同 = 零效果假动作：合法（不进 errs）但 WARN 可收集（RSI-025）。"""
     import build_narration as bn
 
     _write_md(tmp_path)
@@ -540,7 +540,7 @@ def test_apply_cues_noop_say_collects_warning(tmp_path):
 
 
 def test_apply_cues_real_performance_say_warns_nothing(tmp_path):
-    """反控：真句读表演（标点与正文不同）不产生 no-op WARN（RSI-020 假阳方向钉子）。"""
+    """反控：真句读表演（标点与正文不同）不产生 no-op WARN（RSI-025 假阳方向钉子）。"""
     import build_narration as bn
 
     _write_md(tmp_path)

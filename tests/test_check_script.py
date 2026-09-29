@@ -228,7 +228,7 @@ def test_model_designator_warns_not_fails(project):
     assert "WARN" in out and "一千零八十" in out
 
 
-# ---------------- zh 字幕单行宽度门（RSI-019：物理上限 50 全角当量） ----------------
+# ---------------- zh 字幕单行宽度门（RSI-024：物理上限 50 全角当量） ----------------
 
 
 def _write_current_gen_subtitle(root: Path) -> None:

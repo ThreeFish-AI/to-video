@@ -524,7 +524,7 @@ def test_multi_sentence_duration_form_fails(tmp_path):
 
 
 def test_sum_form_duration_is_recognized(tmp_path):
-    """求和形态 dur('a') + dur('b') = 合规扩窗拼写（FAIL 文案给的改法，RSI-018）：
+    """求和形态 dur('a') + dur('b') = 合规扩窗拼写（FAIL 文案给的改法，RSI-023）：
     正则命中首段并与 at 锚对账，cue 正常计数、门放行。"""
     scene = SCENE_P1.replace(
         "at: at('p1-01a') - bA.from, durationInFrames: dur('p1-01a')",

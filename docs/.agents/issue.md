@@ -291,7 +291,7 @@
 
 五轮评审（2026-09-29）：① CPU/CUDA `OutOfMemoryError` 类型兜底仅在实际 `mps` device 下启用，避免非 MPS 部署收到错误的显存排障指引；② 显式 `--mps-mem-limit-gib 0` 在 allocator 初始化前覆盖继承的 `PYTORCH_MPS_HIGH_WATERMARK_RATIO`，并调用 `set_per_process_memory_fraction(0.0)`，保证「不限」不随 shell 环境漂移；③ 只有解析到 `MPS allocated + other allocations + Tried to allocate > max allowed` 才进入不可重试的「MPS 显存上限不足」契约，普通 MPS OOM、系统内存压力、碎片化与解析不完整均保留重试；④ 解析器兼容 PyTorch 的 `MiB/GiB` 及十进制单位，新增 helper、环境覆盖与客户端分流测试，相关测试与全量回归通过。
 
-## RSI-018 覆盖门只认单参 dur 拼写，FAIL 文案未给合规扩窗改法——空窗回填用了门读不到的写法且登记口径失效
+## RSI-023 覆盖门只认单参 dur 拼写，FAIL 文案未给合规扩窗改法——空窗回填用了门读不到的写法且登记口径失效
 
 **表因**：上游内容仓 E2 第 4 轮评审（2026-09-29）发现：空窗回填提交把 6 处 cue 时长写成双参 `durationInFrames: dur('a','b')`（P1Hangar×3/P5Tarmac×3），`CUE_DUR_RE` 只识别单参对象字面量形态——门一跑即 SystemExit，且该提交未重跑门，series.json/CHANGELOG 里「覆盖门 FAIL 0」的登记口径就此失效（门炸与登记绿并存）。
 
@@ -305,11 +305,11 @@
 
 **同类问题影响**：Sequence 级 JSX 等号形态（`durationInFrames={dur('a','b')}`）不在此门管辖（正则只查对象字面量冒号形态），该形态合法勿误改。
 
-## RSI-019 zh 字幕单行宽度无门：超限句横向溢出画布只靠稿风纪律
+## RSI-024 zh 字幕单行宽度无门：超限句横向溢出画布只靠稿风纪律
 
 **表因**：上游内容仓两起实测——E3 曾 81 字散文句在 30px 最小字号下两侧各溢出 1920 画布 ~255px；E2 重制评审（2026-09-29）确认构造仍在（当时最长 39 字不触发，复活门槛 ≈51 全角字）。
 
-**根因**：frozen 模板 `Subtitle.tsx` 对 zh 恒单行（`twoLine = !isZh && fitted < MIN_FONT_SIZE`——两行回退仅 en）、字号下限钳 30px、`nowrap` 不折行——「不溢出」⇔ 全角当量 ≤ floor(1528/30) = 50，但该物理上限只存在于渲染层，build/check 期无门；「超宽句压短」的稿风纪律不执法。zh 组件层加两行回退属 frozen 整组同步（见 RSI-023），门是独立于模板的最小干预。
+**根因**：frozen 模板 `Subtitle.tsx` 对 zh 恒单行（`twoLine = !isZh && fitted < MIN_FONT_SIZE`——两行回退仅 en）、字号下限钳 30px、`nowrap` 不折行——「不溢出」⇔ 全角当量 ≤ floor(1528/30) = 50，但该物理上限只存在于渲染层，build/check 期无门；「超宽句压短」的稿风纪律不执法。zh 组件层加两行回退属 frozen 整组同步（见 RSI-028），门是独立于模板的最小干预。
 
 **定性**：阻断性缺陷缺门（缺陷复活门槛低：一次成文放宽即触发，且 qa 帧级检查对字幕盒内文字溢出不敏感）。
 
@@ -319,7 +319,7 @@
 
 **后续防范**：字幕物理类上限钉进门里不钉在稿风里；新增句级门须同时想清 zh/en 归属并在两条分发路径挂载（漏挂即静默缺门）。
 
-## RSI-020 台本 [say] 与正文逐字相同时零告警：no-op 表演标点静默攒批
+## RSI-025 台本 [say] 与正文逐字相同时零告警：no-op 表演标点静默攒批
 
 **表因**：上游 E2 重制（2026-09-29 清理）实测 cues.toml 攒了 8 条 `[say]` 与句原文逐字相同——三处逐字一致（say == text == ttsText），纯假动作；build 只在 say 与正文**改字**时报 FAIL，零改动无任何提示。
 
@@ -327,11 +327,11 @@
 
 **定性**：非阻断改进（合法但 noisy，攒批只会让台本看起来做了没做的事）。
 
-**处理方式**：`build_narration.py` `apply_cues` 增可选 out-param `warnings`（say == src 逐字相同即记，附「改出真句读或删除该条」出路；不传则丢弃——只影响提醒不影响校验），三元组返回契约不变（既有 15 处调用点零波及），main 仿 `mark_warnings` 先例输出（`WARN  ` 前缀、stderr）；无 cues 文件零输出契约不变。`tests/test_tts_blocks.py` 正反控（no-op 报 WARN / 真句读不报 / 旧调用面三元组契约回归）。
+**处理方式**：`build_narration.py` `apply_cues` 增可选 out-param `warnings`（say == src 逐字相同即记，附「改出真句读或删除该条」出路；不传则丢弃——只影响提醒不影响校验），三元组返回契约不变（既有 14 处调用点零波及：build_narration 生产 1 + 既有测试 13），main 仿 `mark_warnings` 先例输出（`WARN  ` 前缀、stderr）；无 cues 文件零输出契约不变。`tests/test_tts_blocks.py` 正反控（no-op 报 WARN / 真句读不报 / 旧调用面三元组契约回归）。
 
 **后续防范**：表演层输入的「零效果边界」与「非法边界」都要有声音——只拦非法会把「写了等于没写」留成静默债。
 
-## RSI-021 选色判据缺「色相距离」维度与未登记色盲区：撞值门全绿仍可同色相撞车
+## RSI-026 选色判据缺「色相距离」维度与未登记色盲区：撞值门全绿仍可同色相撞车
 
 **表因**：上游 E2 流光五色选色（2026-09-29）初选玫红 #E85D75（350°，colorsys 口径），与同系列既有 E3 玫红 #FF6F91（346°）色相仅差 4°——`check_series` 规则 4 只拦精确同值，门全绿、视觉同色相；两次改向后落品红 #D65DB1（318°，全系列空槽；最近占用 E1 紫 #C9A0FF 266° 差 52°）。另发现材料色数组 token（`sourceFlows`）不进 series.json `accents` 清单，机器完全不看见。
 
@@ -343,7 +343,7 @@
 
 **后续防范**：「机器不判」的判据必须写明人工承接面在哪，否则契约只有被执法的那一半活着。
 
-## RSI-022 派生产物确定性无门：提交的 narration.json 可相对钉定生成器陈旧
+## RSI-027 派生产物确定性无门：提交的 narration.json 可相对钉定生成器陈旧
 
 **表因**：上游 E2 第 4 轮（2026-09-29）rebuild 发现提交版 narration.json 与当前生成器输出不一致——生成器在 RSI-015 起派生 `beatStart` 键，提交版是旧生成器产物（0 个 beatStart vs 新 31 个）；无任何门报告这一漂移，语义对账（ids/text/scene/blockStart/cue 五维全等）只能靠人手写脚本。
 
@@ -357,7 +357,7 @@
 
 **同类问题影响**：chapters.json/series-layers.json 等同型派生物。
 
-## RSI-023 冻结件整组同步积压六项：单改一集即破 skeleton 字节契约
+## RSI-028 冻结件整组同步积压六项：单改一集即破 skeleton 字节契约
 
 **表因**：上游 E2 第 4 轮评审（2026-09-29）判「明确不动」清单六项——frozen `Subtitle.tsx` 的 zh 两行回退与 scrim 色值 `rgba(6,8,12,0.68)`（四集共享规范值）、`ArchifyClip.tsx` 内衬色 `#0B0E13` 与注释里指向集内 `scripts/` 的悬空路径、`ArchifyRecap.tsx` 手抄匿名类型断言（应引用导出的 `ArchifyChapter`）、`ArchifyYield.tsx` 零挂载死件、`i18n.tsx` `useL`/`L` 零消费导出（四集字节一致）、`build_narration.py` 侧 zh 句长防线（episode 薄包装受 frozen 字节执法）。
 
@@ -365,11 +365,11 @@
 
 **定性**：非阻断积压（登记待批；六项均已在上游内容仓经 md5 跨集指纹实证为共享件）。
 
-**处理方式**：登记待办。建议攒一个集中 generation 批次：模板侧六项一次改齐（Subtitle zh 两行回退落地后 RSI-019 的代际守卫消失、门自动退位点名跳过——双保险仅在过渡期成立；scrim/内衬色走 theme 派生；ArchifyYield 删或给活例；类型断言改引用；i18n 死导出删；薄包装注释限定 skill 路径），同步 CHANGELOG Breaking 自适配指引与各集 `[[skeleton.generation]]` 登记。
+**处理方式**：登记待办。建议攒一个集中 generation 批次：模板侧六项一次改齐（Subtitle zh 两行回退落地后 RSI-024 的代际守卫消失、门自动退位点名跳过——双保险仅在过渡期成立；scrim/内衬色走 theme 派生；ArchifyYield 删或给活例；类型断言改引用；i18n 死导出删；薄包装注释限定 skill 路径），同步 CHANGELOG Breaking 自适配指引与各集 `[[skeleton.generation]]` 登记。
 
 **后续防范**：跨集共享件的缺陷一律先 md5 抽跨集指纹定性再动手；「本集不修」必须像本条一样落到台账而不是只留在当轮 commit message 里。
 
-## RSI-024 草渲半分辨率下「帧指纹相同」WARN 可假阳：冻帧误报无像素级复核通道
+## RSI-029 草渲半分辨率下「帧指纹相同」WARN 可假阳：冻帧误报无像素级复核通道
 
 **表因**：上游 E2 v2 草渲 QA（2026-09-29）四条「帧指纹相同（疑似冻帧）」WARN（p1-21b/p1-24、p3-10/p3-11c、p4-01/p4-04、p6-26/p6-27），像素级对账全部证伪——变更像素 3.5–7.7%、diff bbox 非空，是 `--scale 0.5 --jpeg-quality 60` 草渲下指纹分辨率不足的假阳。
 
@@ -380,3 +380,5 @@
 **处理方式**：登记待办。候选：WARN 文案附一行像素级对账指引（PIL ImageChops.difference + 变更像素占比，本地秒级）；或指纹改在原分辨率灰度图上取（成本权衡待定）。
 
 **后续防范**：数值/指纹类 WARN 上线时想好「假阳时如何一票证伪」并把证伪命令写进文案——不能复核的告警等于噪声。
+
+合并前评审（2026-09-29）：①编号与并行创建的 RSI-018..022（PR #23/#24/#25，首创在前）撞号，本批七条目整体重编号 018..024 → 023..029（条目内互引同步：024 宽度门 ↔ 028 冻结件）；②文档漂移修复——check_script.py 模块头机制清单/--pre-tts 枚举/--help 三面与 references/05 第九节第 5 条补收 zh 字幕宽度门（门已挂 --pre-tts 与 zh 完整门两路，枚举面漏同步）；③say 条目「既有 15 处调用点」订正为 14 处（build_narration 生产 1 + 既有测试 13，可 grep 复核）。
