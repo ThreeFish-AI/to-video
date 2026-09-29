@@ -303,6 +303,8 @@
 
 **处理方式**：`qa_frames.py --check` 新增纯底色段门——`check_frames` 增 `timeline`/`max_dark_sec` 参数，逐帧算**画面内容区**（顶部安全带 y<56 之下、字幕带之上；几何 SSOT 来自 ChapterProgress 零碰撞带契约「各幕内容 y≥56 起」）亮像素占比 <5e-4 判「无内容」，同幕连续无内容帧按「首帧中点−半句距 .. 末帧中点+半句距」计持续时长，≥ `qa.max_dark_sec` → FAIL；末幕按**全集时间轴**最后一幕豁免；`--beat-heads` 头帧不在时间轴里、判据自然不参与（头帧落在淡入瞬态，近底色是合法态）。config SCHEMA 新键 `qa.max_dark_sec`（默认 8.0、负值 FAIL、0=关闭）。[09](../../references/09-render-qa.md) 把「草渲后全片亮度带扫描」从经验散条升格为 ⑨ 必做步骤（`--scene` 全幕传齐 + `--check`，每幕 ~8 帧 ≈5–7s 采样形态，门按持续时长在样点间内插）+ 判据表新行 + FAIL 0 边界句与修复回路同步；[PIPELINE.md](../../references/PIPELINE.md) 字段表/工具表登记。回归测试 4 组（整幕空段 FAIL／干净帧零报警含末幕豁免与亚阈值暗段／阈值可配与关门／run 不跨幕）。
 
+合并前评审加固（2026-09-29）：①`--check` 消费 config 不再丢弃 validate FAIL——带病 `[qa]`（类型错→阈值比较处裸 traceback、负值→借「0=关闭」分支无声关门假绿）改为点名 FAIL 拒跑；独立直调本命令正是 09 ⑨ 必做路径，不能赌 pipeline.py check 先跑过全量 validate（回归测试 2 条：字符串/负值对拍）。②09 FAIL 0 边界句的体检清单与 PIPELINE.md 工具表/模块 docstring 同构化（补「字幕缺失」、对比度归位 `--check-theme`——原句继承 main 旧口径漏 WARN 级「字幕缺失」而混入对比度）。③RSI-021 回归测试计数订正（4 函数 5 断言面，见下）。
+
 **后续防范**：自动体检新增判据先问「它是帧内性质还是跨帧性质」——时长/连续性类缺陷（空段、卡死、整段丢字幕）单帧判据结构性失明；场景分片并行代理的交付面须含「本文件实际渲染哪些 beat」的机器可核声明（`--check-scenes` 只对账分镜↔代码句覆盖，文件级互相推诿它看不见）；草渲后全片内容带扫描未跑不得进终渲（09 ⑨ 必做项）。
 
 **同类问题影响**：门只认句中点采样形态（`--beat-heads` 不查）；未来若有合法的 >8s 纯底色艺术段，本集 toml 覆写 `qa.max_dark_sec` 并在分镜留决策记录。
@@ -317,7 +319,7 @@
 
 **方案比选**：A **SCHEMA 分档默认（采纳）**——`resolve()` 在默认层按 tts.style 分档（story=254、其余=280，档位表 `STYLE_CHARS_PER_MIN` 紧邻 SCHEMA），显式 toml 覆写恒优先；check_script / build_narration 的既有读取路径零改动即生效（scope 加载同样过 resolve）。B 只在 07 文档教「story 集手写 254」——每集手工重复、漏写即复发。C 消费者按 style 分支——两处内联档位逻辑即第二事实源，违反不变量 7 与 `test_consumers_do_not_inline_schema_defaults` 的执法精神。分档默认住 SCHEMA 侧，不变量 7（默认值唯一来源）合规。
 
-**处理方式**：`config.py`：SCHEMA 的 narration.chars_per_min 注明分档 + `STYLE_CHARS_PER_MIN = {"story": 254}`（注释写明仅 story 有整集实测、新档位首轮 TTS 后以 manifest 实测回写）；`resolve()` 尾部对「默认层 chars_per_min + tts.style 命中档位表」生效分档（origin 保持 default；显式 toml 优先；非字符串 style 不崩——类型执法归 validate）。[07](../../references/07-tts-voice.md) 完成门新增「首轮 TTS 完成后校准本集语速」操作指引（manifest 实测分钟复算，偏差 >3% 写本集 toml）；[PIPELINE.md](../../references/PIPELINE.md) 字段表同步。回归测试 5 条（story→254／sunny→280、toml 覆写优先、toml 端到端、非字符串 style 不崩、分档表与基础默认钉在 SCHEMA）。
+**处理方式**：`config.py`：SCHEMA 的 narration.chars_per_min 注明分档 + `STYLE_CHARS_PER_MIN = {"story": 254}`（注释写明仅 story 有整集实测、新档位首轮 TTS 后以 manifest 实测回写）；`resolve()` 尾部对「默认层 chars_per_min + tts.style 命中档位表」生效分档（origin 保持 default；显式 toml 优先；非字符串 style 不崩——类型执法归 validate）。[07](../../references/07-tts-voice.md) 完成门新增「首轮 TTS 完成后校准本集语速」操作指引（manifest 实测分钟复算，偏差 >3% 写本集 toml）；[PIPELINE.md](../../references/PIPELINE.md) 字段表同步。回归测试 4 函数 5 断言面（story→254／sunny→280 并把分档表与基础默认钉在 SCHEMA、toml 覆写优先、toml 端到端、非字符串 style 不崩）。
 
 **后续防范**：STYLE_PRESETS 新增风格档时，检查所有「按档位变化的口径常数」（语速/停顿/种子）是否需入 `STYLE_CHARS_PER_MIN` 一类分档表——首轮后以 manifest 实测回写，不拿单集标定当普适；预算门超窗先查生效 chars_per_min 的来源（doctor 打印 default/pipeline.toml 分层），再回 ③ 减脂。
 

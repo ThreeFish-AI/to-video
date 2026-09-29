@@ -66,7 +66,7 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 | 字幕缺失（字幕带无文字亮度像素） | WARN | 查该句 Subtitle 是否被遮挡或文本为空 |
 | 主题对比度 <4.5:1 | FAIL | 换色或加深；概念色清单见 references/08 视觉契约 |
 
-**FAIL 0 的边界（ISSUE-187 泛化）**：`--check` 只覆盖黑帧/冻帧/字幕带侵入/纯底色段/对比度——对文字朝向、
+**FAIL 0 的边界（ISSUE-187 泛化）**：`--check` 只覆盖黑帧/冻帧/字幕带侵入/字幕缺失/纯底色段（对比度另走 `--check-theme`）——对文字朝向、
 几何锚点、图层遮挡**全盲**（四类画面缺陷曾在 FAIL 0 · WARN 0 下全部漏网），FAIL 0 不是视觉正确性的
 证据，2D 同样必须按分幕复检抽帧目视（3D 侧同款要求见 [08 §3D 验收](./08-remotion-implementation.md)）。
 **判据上架纪律（ISSUE-167）**：新增/修改判据必须先在一帧**已知干净**的画面上验证零报警——半透明

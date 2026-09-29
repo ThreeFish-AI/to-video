@@ -750,7 +750,19 @@ def main() -> None:
         msgs: list[str] = []
         # 纯底色段阈值走 config（toml 可覆写，默认 8s）；缺 pipeline.toml 时 load
         # 返回 {}，兜底即 SCHEMA 默认（缺文件时也无 tts.style，档位分层不适用）。
-        qa_cfg, *_rest = config.load(root, required=False, scope={"qa"})
+        qa_cfg, _origin, qa_fails, _warns = config.load(
+            root, required=False, scope={"qa"}
+        )
+        if qa_fails:
+            # validate 的 FAIL 不许被静默丢弃（config.py 自述存在的首要理由就是
+            # 消灭「你以为开着其实关着的门」）：字符串值会在阈值比较处裸
+            # traceback、负值会借「0=关闭」分支无声关门——独立直调本命令正是
+            # 09 ⑨ 必做路径，不能赌 pipeline.py check 先跑过全量 validate。
+            sys.exit(
+                "FAIL: qa 配置校验失败，自动体检拒绝带病运行"
+                "（0 = 关闭纯底色段门是唯一合法关闭形态）：\n      "
+                + "\n      ".join(qa_fails)
+            )
         max_dark = qa_cfg.get("qa", {}).get(
             "max_dark_sec", config.default("qa.max_dark_sec")
         )

@@ -437,3 +437,40 @@ def test_blank_run_does_not_join_across_scenes(tmp_path):
     msgs: list[str] = []
     check_frames(out, ["p1-01", "p2-01"], 1.0, False, msgs, timeline=tl)
     assert not any("纯底色段" in m for m in msgs), msgs
+
+
+@pytest.mark.parametrize(
+    ("toml_body", "must_mention"),
+    [
+        ('[qa]\nmax_dark_sec = "8"\n', "类型应为 float"),
+        ("[qa]\nmax_dark_sec = -1\n", "应 ≥ 0"),
+    ],
+)
+def test_check_rejects_invalid_qa_config_loudly(
+    project, monkeypatch, toml_body, must_mention
+):
+    """带病 [qa] 拒跑（RSI-020 评审加固）：validate FAIL 不许被静默丢弃。
+
+    修复前的两种病理形态：字符串值在阈值比较处 ``threshold <= 0`` 裸
+    TypeError traceback；负值借「0=关闭」分支**无声关门假绿**（exit 0，上游
+    ep4 型 52.8s 空段照旧放行）——独立直调 --check 正是 09 ⑨ 必做路径。
+    """
+    (project / "pipeline.toml").write_text(toml_body, encoding="utf-8")
+    monkeypatch.setattr(qa_frames, "extract_frame", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "qa_frames.py",
+            "--project",
+            str(project),
+            "draft.mp4",
+            "--last-n",
+            "1",
+            "--check",
+        ],
+    )
+    with pytest.raises(SystemExit) as e:
+        qa_frames.main()
+    # sys.exit(str) → code 即文案：点名病键与病因，而非笼统拒绝或裸 traceback
+    assert isinstance(e.value.code, str), e.value.code
+    assert "qa.max_dark_sec" in e.value.code and must_mention in e.value.code
