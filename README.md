@@ -56,6 +56,8 @@ Skill 本体是纯指令，零依赖即装即用；下表工具链仅运行流�
 | [uv](https://docs.astral.sh/uv/) | 运行全部 Python 脚本（`uv run --no-project --with …` 按需取依赖，无需预装环境） |
 | pnpm ≥ 12 | 分集 Remotion 工程的依赖安装（workspace 隔离与构建脚本许可已按 pnpm 12 行为配好） |
 | Node ≥ 23.6 | 运动层单测用 `node --test` 原生跑 TS |
+| playwright（Python） | archify 图解录制驱动（按需 `uv run --with playwright`，无需预装；进程纪律见 [references/PIPELINE.md](references/PIPELINE.md) §十） |
+| 系统 Chrome | archify 录制器以 `channel="chrome"` 起真实 Chrome 的无头实例（无头优先、用后即关，见 [references/PIPELINE.md](references/PIPELINE.md) §十） |
 | （可选）IndexTTS-2.5 本地服务 | 声音克隆后端（默认 `127.0.0.1:8766`），部署见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md) §二 |
 
 表中版本为**最低地板**：所有依赖（含分集工程内的 Remotion 家族）一律优先最新稳定版——建集装依赖前先 `npm view remotion version` 对照，追新与跨 major 升级规则见 [references/PIPELINE.md](references/PIPELINE.md) §九。
@@ -165,7 +167,7 @@ uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4
 
 ## 六、相邻 Skill
 
-同一作者的配套技能：[guided-learn](https://github.com/ThreeFish-AI/guided-learn)（信源精读方法论，阶段 ① 的上游能力）、[archify](https://github.com/tt-a1i/archify)（架构图绘制与动效录制，阶段 ⑧ 的图例资产来源、覆盖门的消费对象）。
+同一作者的配套技能：[guided-learn](https://github.com/ThreeFish-AI/guided-learn)（产出《精读与通俗拆解》；其精读产物是 Stage ① 的 C 型输入信源（见 [references/01](references/01-source-extraction.md)），无产物时是精读上游）、[archify](https://github.com/tt-a1i/archify)（架构图绘制与动效录制，阶段 ⑧ 的图例资产来源、覆盖门的消费对象）。
 
 ## 七、致谢
 

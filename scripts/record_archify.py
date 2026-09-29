@@ -53,6 +53,7 @@ dispatcher fiber）——只写文件 + 入队 sessionId，ack 由主 greenlet �
 
 import argparse
 import base64
+import contextlib
 import json
 import os
 import re
@@ -420,6 +421,35 @@ def measure_fps(webm: Path) -> float | None:
     return None
 
 
+@contextlib.contextmanager
+def launched_browser(chromium, **kwargs):
+    """launch/close 的结构化保证：with 体任何出口——pump_until / encode_frames 的
+    SystemExit、wait_for_* 的 Playwright TimeoutError——都必关浏览器。裸 close
+    顺序语句只覆盖正常返回，一次超时即残留整套 headless 系统 Chrome 常驻内存
+    （孤儿成因与窄域清理见 references/PIPELINE.md §十）。
+    """
+    browser = chromium.launch(**kwargs)
+    try:
+        yield browser
+    finally:  # 覆盖 BaseException（SystemExit 一律必关）
+        try:
+            browser.close()
+        except Exception:  # noqa: BLE001 - 兜底关闭失败不得盖掉原始异常
+            pass
+
+
+def _close_ctx_quietly(ctx) -> None:
+    """context 异常路径兜底关闭：对已关闭/非法态静默，幂等可二次调用。
+
+    只兜异常路径；正常路径的显式 ctx.close()（含编码前先关的刻意次序）原样
+    保留，不由此取代。
+    """
+    try:
+        ctx.close()
+    except Exception:  # noqa: BLE001 - 兜底关闭失败不得盖掉原始异常
+        pass
+
+
 def new_ctx(browser, tmpvid: Path, scale: int = 1, playwright_video: bool = True):
     kwargs = {
         "viewport": {"width": 1920, "height": 1080},
@@ -614,18 +644,20 @@ def main() -> None:
             )
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(
+            # 单 browser 跨章复用、每章独立 context（复用决策成文见 PIPELINE.md §十）；
+            # launch/close 走 launched_browser 结构化保证，异常路径必关。
+            with launched_browser(
+                p.chromium,
                 channel="chrome",
                 headless=True,
                 args=["--force-color-profile=srgb", "--disable-lcd-text"],
-            )
-            if a.mode == "story":
-                sidecar = record_story(browser, page_src, tmp, out_dir, a)
-            else:
-                sidecar = record_chapters(
-                    browser, page_src, tmp, out_dir, slug, views, a
-                )
-            browser.close()
+            ) as browser:
+                if a.mode == "story":
+                    sidecar = record_story(browser, page_src, tmp, out_dir, a)
+                else:
+                    sidecar = record_chapters(
+                        browser, page_src, tmp, out_dir, slug, views, a
+                    )
 
     sidecar["source"] = str(src)
     sidecar["slug"] = slug
@@ -641,26 +673,30 @@ def record_story(browser, page_src, tmp, out_dir, a) -> dict:
     tmpvid = tmp / "story"
     tmpvid.mkdir()
     ctx = new_ctx(browser, tmpvid)
-    t0 = time.time()
-    page = open_page(ctx, page_src)
-    page.wait_for_selector("#guided-view-play", state="attached", timeout=15000)
-    page.wait_for_timeout(a.settle_ms)
-    t_play = time.time()
-    page.keyboard.press("p")
-    became, deadline = False, time.time() + 180
-    while time.time() < deadline:
-        state = page.get_attribute("#guided-view-play", "aria-pressed")
-        if state == "true":
-            became = True
-        elif became:
-            break
-        page.wait_for_timeout(400)
-    t_done = time.time()
-    page.wait_for_timeout(1500)
-    vpath = page.video.path()
-    ctx.close()
-    dst = Path(a.out_webm).resolve()
-    shutil.copyfile(vpath, dst)
+    try:
+        t0 = time.time()
+        page = open_page(ctx, page_src)
+        page.wait_for_selector("#guided-view-play", state="attached", timeout=15000)
+        page.wait_for_timeout(a.settle_ms)
+        t_play = time.time()
+        page.keyboard.press("p")
+        became, deadline = False, time.time() + 180
+        while time.time() < deadline:
+            state = page.get_attribute("#guided-view-play", "aria-pressed")
+            if state == "true":
+                became = True
+            elif became:
+                break
+            page.wait_for_timeout(400)
+        t_done = time.time()
+        page.wait_for_timeout(1500)
+        vpath = page.video.path()
+        ctx.close()
+        dst = Path(a.out_webm).resolve()
+        shutil.copyfile(vpath, dst)
+    finally:
+        # 异常路径兜底；video.path → ctx.close → copyfile 的正常次序不变（上方显式关）。
+        _close_ctx_quietly(ctx)
     return {
         "schema": 2,
         "mode": "story",
@@ -701,99 +737,109 @@ def record_chapters(browser, page_src, tmp, out_dir, slug, views, a) -> dict:
             scale=a.scale if use_cdp else 1,
             playwright_video=not use_cdp,
         )
-        page = open_page(ctx, page_src)
-        page.wait_for_function(
-            "() => window.Archify && Archify.guidedViews && Archify.guidedViews.count > 0",
-            timeout=15000,
-        )
-        page.evaluate(
-            "(id) => Archify.guidedViews.activate(id, {updateUrl:false})", cid
-        )
-        page.wait_for_timeout(a.settle_ms)
-        active = page.evaluate("() => Archify.guidedViews.active()")
-        if active != cid:
-            # activateById 找不到 id 会静默回退 showAll()，录出「全图无高亮」——必须硬失败
-            ctx.close()
-            sys.exit(
-                f"FAIL: {slug}/{cid} 激活失败（active={active!r}）——检查 views 的节点 id"
-            )
-        recorder = None
-        if use_cdp:
-            recorder = CdpRecorder(tmpvid / "frames", a.scale)
-            recorder.start(ctx, page)
-            # 先泵 300ms 再打场记板：startScreencast 的激活与白闪渲染存在竞态，
-            # 首帧若晚于白闪到达，整段视频就没有零点标记（实测 19/86 章白闪丢失）。
-            # 预滚保证白闪落在已确认在流的中段，lead 测定不再依赖运气。
-            page.wait_for_timeout(300)
-            recorder.ack_pending()
-        clapper(page)
-        t_play = time.time()
-        page.evaluate("() => Archify.guidedViews.playCurrent()")
-        # 先等「真的播起来」再等「停」——否则 playCurrent() 尚未置位时
-        # `!isPlaying()` 立刻为真，会录出零长片段（本轮自查发现的竞态）。
-        if use_cdp:
-            pump_until(page, recorder, "Archify.guidedViews.isPlaying()", 15)
-            pump_until(page, recorder, "!Archify.guidedViews.isPlaying()", 120)
-        else:
+        try:
+            page = open_page(ctx, page_src)
             page.wait_for_function(
-                "() => Archify.guidedViews.isPlaying()", timeout=15000
+                "() => window.Archify && Archify.guidedViews"
+                " && Archify.guidedViews.count > 0",
+                timeout=15000,
             )
-            page.wait_for_function(
-                "() => !Archify.guidedViews.isPlaying()", timeout=120000
+            page.evaluate(
+                "(id) => Archify.guidedViews.activate(id, {updateUrl:false})", cid
             )
-        t_done = time.time()
-        page.wait_for_timeout(350)
-        still = out_dir / f"{slug}--{cid}-end.png"
-        # 整视口截图：必须与成片同构同框，否则 fit='hold' 切换处突跳（见模块 docstring）
-        page.screenshot(path=str(still))
-        beats = page.evaluate("() => window.__archify.beats")
-        capture_fps = None
-        if use_cdp:
-            recorder.stop()
-            ctx.close()  # 编码/探宽高只剩文件与 CPU 侧工作——不关则每章泄漏一个 4K 渲染 context
-            ext = "mp4" if a.encode == "h264" else "webm"
-            video = out_dir / f"{slug}--{cid}.{ext}"
-            capture_fps, out_h = encode_frames(recorder, video, a.encode, a.crf)
-            downscale_still(still, out_h)
-            vd, pd = probe_dims(video), probe_dims(still)
-            if vd and pd and vd != pd:
+            page.wait_for_timeout(a.settle_ms)
+            active = page.evaluate("() => Archify.guidedViews.active()")
+            if active != cid:
+                # activateById 找不到 id 会静默回退 showAll()，录出「全图无高亮」——
+                # 必须硬失败（context 关闭收敛进下方 finally）
                 sys.exit(
-                    f"FAIL: {slug}/{cid} 末帧 PNG {pd} ≠ 视频 {vd}——hold 接缝会突跳"
+                    f"FAIL: {slug}/{cid} 激活失败（active={active!r}）"
+                    "——检查 views 的节点 id"
                 )
-        else:
-            vpath = page.video.path()
-            ctx.close()
-            video = out_dir / f"{slug}--{cid}.webm"
-            shutil.copyfile(vpath, video)
-        fps = measure_fps(video)
-        n = len(view["focus"])
-        rel = (
-            [round((b["t"] - beats[0]["t"]) / 1000, 3) for b in beats] if beats else []
-        )
-        chapters.append(
-            {
-                "id": cid,
-                "label": view.get("label", cid),
-                "index": idx,
-                "file": video.name,
-                "end_still": still.name,
-                "beats": n,
-                "dwell_ms": round(dwell_ms(n)),
-                "lead_sec": 0.0,  # 场记板白闪即视频钟零点
-                "story_sec": round(t_done - t_play, 2),
-                "beat_offsets_sec": rel,
-                "beat_nodes": view["focus"],
-                "measured_fps": fps,
-                "capture_fps": capture_fps,
-            }
-        )
-        eff = capture_fps if capture_fps is not None else fps
-        flag = "⚠️ 低帧率" if (eff is not None and eff < a.min_fps) else "ok"
-        print(
-            f"  [{idx + 1}/{len(targets)}] {slug}/{cid} "
-            f"{chapters[-1]['story_sec']}s · {n} 拍 · fps={eff} {flag}",
-            file=sys.stderr,
-        )
+            recorder = None
+            if use_cdp:
+                recorder = CdpRecorder(tmpvid / "frames", a.scale)
+                recorder.start(ctx, page)
+                # 先泵 300ms 再打场记板：startScreencast 的激活与白闪渲染存在竞态，
+                # 首帧若晚于白闪到达，整段视频就没有零点标记（实测 19/86 章白闪丢失）。
+                # 预滚保证白闪落在已确认在流的中段，lead 测定不再依赖运气。
+                page.wait_for_timeout(300)
+                recorder.ack_pending()
+            clapper(page)
+            t_play = time.time()
+            page.evaluate("() => Archify.guidedViews.playCurrent()")
+            # 先等「真的播起来」再等「停」——否则 playCurrent() 尚未置位时
+            # `!isPlaying()` 立刻为真，会录出零长片段（本轮自查发现的竞态）。
+            if use_cdp:
+                pump_until(page, recorder, "Archify.guidedViews.isPlaying()", 15)
+                pump_until(page, recorder, "!Archify.guidedViews.isPlaying()", 120)
+            else:
+                page.wait_for_function(
+                    "() => Archify.guidedViews.isPlaying()", timeout=15000
+                )
+                page.wait_for_function(
+                    "() => !Archify.guidedViews.isPlaying()", timeout=120000
+                )
+            t_done = time.time()
+            page.wait_for_timeout(350)
+            still = out_dir / f"{slug}--{cid}-end.png"
+            # 整视口截图：必须与成片同构同框，否则 fit='hold' 切换处突跳（见模块 docstring）
+            page.screenshot(path=str(still))
+            beats = page.evaluate("() => window.__archify.beats")
+            capture_fps = None
+            if use_cdp:
+                recorder.stop()
+                # 编码/探宽高只剩文件与 CPU 侧工作——不关则每章泄漏一个 4K 渲染 context
+                ctx.close()
+                ext = "mp4" if a.encode == "h264" else "webm"
+                video = out_dir / f"{slug}--{cid}.{ext}"
+                capture_fps, out_h = encode_frames(recorder, video, a.encode, a.crf)
+                downscale_still(still, out_h)
+                vd, pd = probe_dims(video), probe_dims(still)
+                if vd and pd and vd != pd:
+                    sys.exit(
+                        f"FAIL: {slug}/{cid} 末帧 PNG {pd} ≠ 视频 {vd}——hold 接缝会突跳"
+                    )
+            else:
+                vpath = page.video.path()
+                ctx.close()
+                video = out_dir / f"{slug}--{cid}.webm"
+                shutil.copyfile(vpath, video)
+            fps = measure_fps(video)
+            n = len(view["focus"])
+            rel = (
+                [round((b["t"] - beats[0]["t"]) / 1000, 3) for b in beats]
+                if beats
+                else []
+            )
+            chapters.append(
+                {
+                    "id": cid,
+                    "label": view.get("label", cid),
+                    "index": idx,
+                    "file": video.name,
+                    "end_still": still.name,
+                    "beats": n,
+                    "dwell_ms": round(dwell_ms(n)),
+                    "lead_sec": 0.0,  # 场记板白闪即视频钟零点
+                    "story_sec": round(t_done - t_play, 2),
+                    "beat_offsets_sec": rel,
+                    "beat_nodes": view["focus"],
+                    "measured_fps": fps,
+                    "capture_fps": capture_fps,
+                }
+            )
+            eff = capture_fps if capture_fps is not None else fps
+            flag = "⚠️ 低帧率" if (eff is not None and eff < a.min_fps) else "ok"
+            print(
+                f"  [{idx + 1}/{len(targets)}] {slug}/{cid} "
+                f"{chapters[-1]['story_sec']}s · {n} 拍 · fps={eff} {flag}",
+                file=sys.stderr,
+            )
+        finally:
+            # 每章 context 异常路径兜底（wait 超时 / pump_until / encode / 激活失败）；
+            # 正常路径的显式关闭（编码前 / 取 video 路径后）原样保留，此处幂等二次调用。
+            _close_ctx_quietly(ctx)
     fpss = [c["measured_fps"] for c in chapters if c["measured_fps"]]
     out = {
         "schema": 2,

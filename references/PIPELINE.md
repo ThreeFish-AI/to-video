@@ -3,7 +3,7 @@
 > 从「论文精读 → 逐字稿 → 配音 → 代码动画 → 终渲」全链路中沉淀的**可复用流水线机制**：抽取自 negentropy 仓，以 to-video 技能仓为家，安装在任意内容工作区上使用。
 > 首个建成的完整范例：《AI 如何自己变强？》（`$W/episodes/self-improving-agents-video/`；建成时间上的第一个，非系列首集，发布顺序见 `$W/series.json`）。
 
-**目录**：一、Pipeline 总览 · 路径变量约定（含环境变量） · 二、工程目录约定 · 三、公共脚本与编排入口（含 pipeline.toml 字段表、交付归档） · 四、复用边界 · 五、音画同步机制（含双语渲染） · 六、新集脚手架清单 · 七、工程模式 · 八、许可注意 · 九、依赖与版本策略
+**目录**：一、Pipeline 总览 · 路径变量约定（含环境变量） · 二、工程目录约定 · 三、公共脚本与编排入口（含 pipeline.toml 字段表、交付归档） · 四、复用边界 · 五、音画同步机制（含双语渲染） · 六、新集脚手架清单 · 七、工程模式 · 八、许可注意 · 九、依赖与版本策略 · 十、浏览器进程纪律
 
 ## 一、Pipeline 总览（10 Stages）
 
@@ -75,7 +75,7 @@ $W/
 ```
 $P/
 ├── README.md               # 本集说明（目录表/复现流水线/视觉契约/许可）
-├── research/paper-notes.md # 事实源：全部口播断言须可回溯至此
+├── research/<notes>.md   # 事实源（A/B/C 型文件名见 01）：全部口播断言须可回溯至此
 ├── script/
 │   ├── planning.md         # 策划案
 │   ├── narration.md        # 逐字稿（唯一维护处，勿改 narration.json）
@@ -144,6 +144,8 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | [scripts/pron_marks.py](../scripts/pron_marks.py) | 发音标注 `<原文\|读音>` 的解析与校验（纯函数库，无 IO）：多音字/英文专名的精确读音控制；被 `build_narration.py` 用于硬失败拦非法标注 | 库，不直接调用；语法与规则见其模块文档，台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md) |
 | [scripts/tts_progress.py](../scripts/tts_progress.py) | IndexTTS 长跑**旁路**监视：按逐句 mp3 的 mtime 序列重建墙钟进度 + 滚动秒/字 vs 基线（与合成进程零耦合、退出码恒 0——监视器不打断长跑；越阈先分因：负载竞争可继续只重排期，热节流才须中止验证环境） | 长跑期间另开终端：`uv run --no-project $T/scripts/tts_progress.py --project $P` |
 | [scripts/tts_bench.py](../scripts/tts_bench.py) | 合成耗时基准与**测量环境体检**（**运行于 index-tts 环境**，同 tts_server.py）：A/A 复现性判定 + 分段计时 + 换页/分配器诊断。本机漂移已定因为热节流，做任何耗时 A/B 前先用它确认环境合格 | 在 `~/tools/index-tts` 内：`./.venv/bin/python $T/scripts/tts_bench.py --check-only`；A/A 见 [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) |
+| [scripts/record_archify.py](../scripts/record_archify.py) | archify 图解录制器：Playwright 驱动系统 Chrome 的**无头**实例，逐章录 mp4/webm + 末帧 PNG + sidecar（单 browser 跨章复用、每章独立 context；生命周期纪律见 §十） | `uv run --with playwright $T/scripts/record_archify.py <图.html> /dev/null <sidecar.json> --mode chapter --all-chapters --out-dir <目录>`（批量重录走下行） |
+| [scripts/record_archify_all.py](../scripts/record_archify_all.py) | archify 逐图批量重录驱动：**逐图独立子进程**——单图崩溃不拖垮整批 + 每图干净浏览器状态（刻意不复用，见 §十）；含产物新鲜度 / 章节集对齐跳过判据与帧率基线比对 | `uv run --with playwright $T/scripts/record_archify_all.py --project $P` |
 
 中心脚本以 `--project <工程根>` 参数化；工程内 `scripts/*.py` 与工作区 `scripts/*.py` 为薄包装（透传参数、保持原 CLI）。改造/迭代只改 `$T/scripts/`，验证门 = 受影响工程的 `narration.json` / `manifest.json` 字节级不变。
 
@@ -248,7 +250,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
    > `esbuild`，勿改回旧字段；缺失该许可会以 `ERR_PNPM_IGNORED_BUILDS` 中断安装并留下半残
    > `node_modules`。
 4. **登记到 `$W/series.json`**（阻塞门：`check_series.py` 规则 4 反向执法——未登记目录一旦写下 `script/narration.md` 即 FAIL；脚手架期为 WARN 分级）：顶层是 `seriesList[]`，新系列追加一个 series 对象（`id` / `title` / `sourceKind` / `rule` / `episodes`），既有系列的新集追加到其 `episodes`。同步 `$W/series.md` 的分节表格。**分级是刻意的**：脚手架期（还没写 `narration.md`）只报 WARN，否则「先登记要先定色板色值、先写要先登记」会把新集夹死在两条门之间；`narration.md` 一落盘即转 FAIL——那一刻规则 1 的反串线扫描才真正需要看见它。`verify_skeleton.py` 也会点名孤儿工程目录，但保持 WARN 不计入未登记漂移（`--strict` 不失败）：漂移门管骨架一致性，登记是清单问题，阻塞执法只放在 `check_series.py` 一处。
-5. 按阶段规格 01→06 顺序走内容层（④ 校验后 ⑤ 成文优化定稿），再进生产层。Stage ① 先判**信源型别**：论文型走 A 型（`paper_extract.py` + `paper-notes.md`），文档/代码/课程站点型走 B 型（`source_ledger.py` + `source-notes.md` + 证据三级），见 [references/01](./01-source-extraction.md)。
+5. 按阶段规格 01→06 顺序走内容层（④ 校验后 ⑤ 成文优化定稿），再进生产层。Stage ① 先判**信源型别**：论文型走 A 型（`paper_extract.py` + `paper-notes.md`），文档/代码/课程站点型走 B 型（`source_ledger.py` + `source-notes.md` + 证据三级），guided-learn 精读产物走 C 型（`gl-notes.md` + 原始信源清单 + 穿透抽查），见 [references/01](./01-source-extraction.md)。
 
 ## 七、工程模式
 
@@ -266,3 +268,19 @@ Remotion 对超过 3 人的公司需商业授权（个人/小团队免费）；e
 - **工具链（uv / pnpm / Node）**：README 前置依赖表是**下限**，始终直接用最新稳定版；模板对 pnpm 行为的耦合点（workspace 自锚、`allowBuilds`）见 [骨架冻结清单](../assets/video-skeleton/skeleton.toml)。
 - **Python 脚本依赖**：刻意不钉版（RSI 不变量 14 的另一面）——`uv run --with <pkg>` 解析时取当时最新；uv 缓存命中会沿用上次解析，需强制刷新时 `uv cache clean <pkg>` 后重跑。
 - 选型与追新的循证依据（Remotion vs HyperFrames 复核、text-to-cad 评估、钉版形式比选）见 [研究文档](../docs/research/dependency-policy-and-asset-tools.md)。
+
+## 十、浏览器进程纪律
+
+流水线会程序化驱动两类**浏览器进程**（操作系统进程；与 08 / skeleton.toml 的「chrome 层」——UI 外壳排版组件——同名不同物）：archify 录制器（Playwright `channel="chrome"` 起系统 Chrome 的无头实例）与 Remotion render/still（Remotion 自带无头浏览器，渲染完自退）。
+
+- **headless 缺省**：程序化浏览器一律 headless——录制器 `headless=True`，Remotion 走自带无头浏览器；确需人工看画面才临时开可见窗口，用完即关。
+- **复用决策（成文，勿反复推翻）**：录制器**跨章单 browser + 每章独立 context**（起停整套 Chrome 是秒级开销、context 是毫秒级，且录制上下文互不污染）；批量器 `record_archify_all.py` **跨图独立子进程**是刻意设计——单图崩溃不拖垮整批 + 每图拿到干净的浏览器状态，不得改成常驻共享 browser。全链路**串行**的理由 = 多实例互抢 **CPU/GPU 资源**会掉帧、`--min-fps` 只告警不失败，掉帧静默污染产物（headless 无前台焦点——旧文档「互抢前台焦点」系错误归因，2026-09 RSI-031 勘误）。
+- **生命周期结构化**（RSI-031）：录制器 `launched_browser` contextmanager 保证 launch/close 成对——`sys.exit`（泵/编码失败）与 Playwright TimeoutError（等待超时）出口一律必关；每章 context 另有 `_close_ctx_quietly` 幂等兜底（正常路径显式关闭的刻意次序不变）。
+- **孤儿两步窄域清理**：孤儿浏览器只可能来自对驱动进程的**不可捕获终止**——`kill -9`（SIGKILL）与裸 `kill`（SIGTERM，无 handler 时同样不执行 finally）（其余出口已由上述 finally 兜住），长批次结束后核对：
+  ```bash
+  # ① 检测（只列不杀）：双特征 = --headless + playwright 临时 user-data-dir
+  ps axo pid,etime,command | grep -E '[Cc]hrome.*--headless' | grep -F playwright
+  # ② 窄杀（确认列表全是录制器残留后执行）：命中的是主进程与其带同款特征的 helper
+  pkill -f '[Cc]hrome.*--headless.*playwright'
+  ```
+  安全论证（2026-09-29 实测 argv，Chrome 154 / macOS）：双特征各自排除一类误伤——日常可见 Chrome 的 argv 不含 `--headless`（第一特征即不匹配）；Remotion 自带浏览器的 user-data-dir 无 `playwright` 字样（第二特征不匹配）；首词写 `[Cc]hrome` 字符类是防命令自身文本进 ps 输出造成自匹配的惯用法。**明令严禁 `pkill -f Chrome` / 全局杀**——会连带杀掉用户在用的可见 Chrome（防误杀纪律同 TTS 域按端口窄杀，先例见 [07「服务生命周期」](./07-tts-voice.md)）。孤儿面窄（仅不可捕获终止残留）、两条命令即闭环，刻意不设清理脚本。

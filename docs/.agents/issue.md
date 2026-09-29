@@ -290,3 +290,33 @@
 **同类问题影响**：同 venv 的 `tts_bench.py` 等直调 infer 的脚本不受本 flag 保护（单进程各自设限），已在 §2.5 注记 env 兜底；webui.py 同理（本管线不用）。8767 上的 A/B 实例是第二个 `tts_server.py`，拉起即应用缺省上限。上限按进程计，多实例并行时总量仍需人工控制。
 
 五轮评审（2026-09-29）：① CPU/CUDA `OutOfMemoryError` 类型兜底仅在实际 `mps` device 下启用，避免非 MPS 部署收到错误的显存排障指引；② 显式 `--mps-mem-limit-gib 0` 在 allocator 初始化前覆盖继承的 `PYTORCH_MPS_HIGH_WATERMARK_RATIO`，并调用 `set_per_process_memory_fraction(0.0)`，保证「不限」不随 shell 环境漂移；③ 只有解析到 `MPS allocated + other allocations + Tried to allocate > max allowed` 才进入不可重试的「MPS 显存上限不足」契约，普通 MPS OOM、系统内存压力、碎片化与解析不完整均保留重试；④ 解析器兼容 PyTorch 的 `MiB/GiB` 及十进制单位，新增 helper、环境覆盖与客户端分流测试，相关测试与全量回归通过。
+
+## RSI-030 guided-learn 精读产物无输入形态：上游《精读与通俗拆解》无法作为一等信源，Stage ① 被迫重复精读
+
+**表因**：用户提出（2026-09-29）——本 Skill 与 guided-learn 配套分工（GL 出《{学习目标} 精读与通俗拆解》文档、to-video 出视频），但 Stage ① 信源分流只有 A 型（论文 PDF）/B 型（活信源）两型：GL 已完成通读、通俗化与循证拆解的冻结本地文档不匹配任何一型——`source_ledger.py` 只吃 URL 且 kind 仅 repo|site、A 型流程假设从原始 PDF 分章重读。同一信源被两套 Skill 各精读一遍，GL 的白话主线/类比/三拍叙事等通俗化成果进不了记忆点原料库。
+
+**根因**：references/01 顶部信源分流表设计先于 GL 产物形态定型，形态枚举封闭；下游 02/03/04/05/PIPELINE.md 十余处硬编码 `paper-notes.md`（B 型 `source-notes.md` 同存命名缺口——02 完全未提），新形态无泛化落点；SKILL.md「先判任务类型」表无 GL 产物入口、description 触发面未枚举该形态、evals 无对应用例。
+
+**定性**：非阻断改进（用户点名启动）。编号自 030 起：018–029 预留给在途 PR #23–#26（其台账编号互撞待消重收敛，本条不参与重排）。
+
+**方案比选**：三案——① `source_ledger.py` 新增 kind="gl" 纳管本地冻结文档（否决：fetch/verify 是「活信源重抓比对」语义，冻结本地文档强挂 kind 制造语义漂移，且违背最小干预）；② 01 新增 C 型规格小节 + 下游指针化泛引（采纳：对齐 A 型「断言回溯到事实源文件小节」地基铁律；穿透抽查复用 paper_extract.py find 与 B 型台账纪律；活源指纹沿用 sources.toml 既有机制，不开第二本笔记；零机制脚本改动）；③ 不设 C 型、仅口头建议先跑 GL（否决：无规格无验收门等于没有，且触发面不含该形态）。
+
+**处理方式**：01 顶部表加 C 行 + 「# C 型信源 · guided-learn 精读产物」大节（冻结快照 / 锚点回溯 / 穿透抽查 / 证据定级 / 补证 / 鲜度登记 / 验收）；02:3/:11/:18/:24、03 头部模板行与素材引用、04 核查表列名、05:17/:145、PIPELINE.md 目录树与脚手架清单的事实源引用泛化为三型指针（顺带修 B 型命名缺口）；SKILL.md 任务表加 GL 产物入口行 + 速查表 ① 行补 C 型（门列不动）+ 相邻技能协作第一条改为输入信源关系 + description 触发面扩充；README 相邻 Skill 行同步；scaffold.py 建集指引补 C 型半句；trigger-evals 追加 1 正 1 负；新增 tests/test_source_types.py 锚定测试。（PR 链接与 commit 待回填）
+
+**后续防范**：① 新增信源形态先查 01 顶部分流表是否可挂，挂不进 = 规格缺口而非绕路理由；② 下游规格提及事实源一律三型泛引（文件名清单只在 01 顶部表一处枚举，防第四型再复制十余处）；③ 触发面变更必须补 trigger-evals 近邻用例（正负各一）防精度回归。
+
+**同类问题影响**：B 型 source-notes.md 在 02 的命名缺口随本次泛化一并修复；04 核查表列名泛化后 A 型既有集不受影响（锚点语义不变）。
+
+## RSI-031 录制器异常路径泄漏整套系统 Chrome：browser.close 是顺序语句非结构保证，全仓无浏览器纪律成文
+
+**表因**：用户提出（2026-09-29）——要求「能用 Headless Chrome 就用 Headless、用完的孤儿浏览器进程及时清理、能复用则复用」。核查：record_archify.py 是全仓唯一程序化驱动浏览器的脚本（Playwright channel="chrome" headless=True，:616-621，跨章复用单 browser——headless 与复用已达标），但 `browser.close()`（:628）只在正常返回路径执行：pump_until 超时 sys.exit（:684）、encode_frames 三处 sys.exit（:226/:230/:292）、wait_for_selector/wait_for_function 15s 超时抛 TimeoutError（:646/:705）、激活失败（:716 仅此一处先关再退）等路径全部跳过——每章 context（new_ctx :643/:698）异常路径同样泄漏；长批次（record_archify_all 逐图独立子进程 ~45 分钟）一次超时即残留整套 headless 系统 Chrome 常驻内存。文档层全仓无「headless 优先/用后清理/复用」任何表述，且 record_archify_all.py:17-19 与 10-final-render.md:88-90 的串行理由「多实例互抢前台焦点会掉帧」与 headless=True 矛盾（真实机理是 CPU/GPU 资源争抢，错误归因会诱导未来错误优化）。
+
+**根因**：浏览器生命周期关闭是顺序语句而非 try/finally 结构不变量；无异常路径兜底；进程生命周期纪律只存在于 TTS 域（07:55-64 按端口 kill + 防误杀）未泛化到浏览器域；PIPELINE.md §三 脚本表漏登 record_archify*.py、README 依赖表漏 playwright/系统 Chrome，浏览器使用面无 SSOT 登记。
+
+**定性**：非阻断改进（用户点名启动；含阻断级缺陷成分——异常路径资源泄漏）。
+
+**方案比选**：清理路径三案——① 全局 pkill -f Chrome（否决：误杀用户在用的可见 Chrome，违背 TTS 域已确立的防误杀纪律）；② try/finally 结构化保证 + 失败时窄域清理指引（采纳：close 成为结构不变量；SIGKILL 级残留给出「headless + playwright 临时 profile 双特征」窄域检测/清理命令、只指引不自动杀）；③ atexit+signal 兜底（否决：finally 已覆盖全部可捕获路径，信号钩子复杂度收益边际）。context 关闭形状两案：统一 contextmanager 替换三处显式 close（否决：:753 编码前关 context 是刻意次序，统一包裹会改变正常路径生命周期语义）vs 显式关闭保留 + finally 幂等兜底（采纳，正常路径行为不变）。
+
+**处理方式**：record_archify.py 提取 launched_browser contextmanager（launch/close 结构化，SystemExit/TimeoutError 路径必关）+ 每章 context try/finally 幂等兜底；新增 tests/test_record_archify_session.py（importorskip playwright + Mock 假 browser/context，断言异常路径 close 仍被调、正常路径恰一次；--with playwright 专项跑入 PR 记录）；record_archify_all.py 失败汇总后补孤儿复核指引 + 串行理由勘误；PIPELINE.md 新增「浏览器进程纪律」小节（headless 缺省 / 复用既定决策 / Remotion 无头自退 / 两步窄域清理与防误杀禁令）+ §三 脚本表补 record_archify*.py 两行；10:88-90 勘误指向新小节；SKILL.md 运行时陷阱加一行指针；README 依赖表补 playwright 与系统 Chrome。（PR 链接与 commit 待回填）
+
+**后续防范**：① 浏览器生命周期一律 contextmanager/finally 结构化，禁止裸 close 顺序语句；② 进程清理必须窄域双特征匹配（headless + 临时 profile），严禁全局 pkill Chrome；③ 文档归因须与代码实况对拍（headless 无前台焦点——错误机理描述会诱导错误优化）。

@@ -5,7 +5,7 @@ to-video Skill 的评测资产（格式遵循 agentskills.io 官方规范），�
 | 文件 | 用途 |
 |---|---|
 | [evals.json](./evals.json) | output eval：3 个真实 prompt + expected_output + assertions，衡量 Skill 带来的产出质量增益 |
-| [trigger-evals.json](./trigger-evals.json) | trigger eval：20 条 query（10 正例 / 10 近邻负例），衡量 description 的触发准确率 |
+| [trigger-evals.json](./trigger-evals.json) | trigger eval：正负各半的 query 集（正例 / 近邻负例，计数以文件为准），衡量 description 的触发准确率 |
 
 ## Output eval
 
