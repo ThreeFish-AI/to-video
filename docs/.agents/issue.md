@@ -288,3 +288,5 @@
 **后续防范**：平台分配器默认值不可默认信任为安全值（CUDA 默认也允许接近全部显存）——新增长跑型 GPU 服务（渲染、whisper、whisperX 等）上线前先查其内存上限语义并设进程级水位线；MPS 侧优先进程级 setter 而非全局 `iogpu.wired_limit_mb`（后者全局影响所有 Metal 应用，仅应急）。同 venv 无 flag 的 ad-hoc 脚本用 `PYTORCH_MPS_HIGH_WATERMARK_RATIO` env 兜底，**须配** `PYTORCH_MPS_LOW_WATERMARK_RATIO`（默认 low=1.4 > 所设 high 即初始化崩溃）。
 
 **同类问题影响**：同 venv 的 `tts_bench.py` 等直调 infer 的脚本不受本 flag 保护（单进程各自设限），已在 §2.5 注记 env 兜底；webui.py 同理（本管线不用）。8767 上的 A/B 实例是第二个 `tts_server.py`，拉起即应用缺省上限。上限按进程计，多实例并行时总量仍需人工控制。
+
+五轮评审（2026-09-29）：① CPU/CUDA `OutOfMemoryError` 类型兜底仅在实际 `mps` device 下启用，避免非 MPS 部署收到错误的显存排障指引；② 显式 `--mps-mem-limit-gib 0` 在 allocator 初始化前覆盖继承的 `PYTORCH_MPS_HIGH_WATERMARK_RATIO`，并调用 `set_per_process_memory_fraction(0.0)`，保证「不限」不随 shell 环境漂移；③ 只有解析到 `MPS allocated + other allocations + Tried to allocate > max allowed` 才进入不可重试的「MPS 显存上限不足」契约，普通 MPS OOM、系统内存压力、碎片化与解析不完整均保留重试；④ 解析器兼容 PyTorch 的 `MiB/GiB` 及十进制单位，新增 helper、环境覆盖与客户端分流测试，相关测试与全量回归通过。

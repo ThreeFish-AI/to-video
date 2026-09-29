@@ -36,6 +36,8 @@ import asyncio
 import base64
 import io
 import math
+import os
+import re
 import sys
 import tempfile
 import traceback
@@ -518,6 +520,64 @@ def _mps_empty_cache() -> None:
         pass
 
 
+def _is_mps_oom(exc: BaseException) -> bool:
+    """只把实际运行在 MPS 上的 OOM 交给本服务的 MPS 诊断分流。"""
+    if not str(STATE.get("device", "")).lower().startswith("mps"):
+        return False
+    # OutOfMemoryError 也可能来自 CPU/CUDA，故类型兜底只能在 MPS device 下启用。
+    return (
+        "MPS backend out of memory" in str(exc)
+        or type(exc).__name__ == "OutOfMemoryError"
+    )
+
+
+_MPS_SIZE_RE = re.compile(
+    r"(?P<label>MPS allocated|other allocations|max allowed|Tried to allocate):?\s*"
+    r"(?P<value>[0-9]+(?:\.[0-9]+)?)\s*(?P<unit>[KMGT](?:i?B)|B|bytes?)",
+    re.IGNORECASE,
+)
+
+
+def _mps_limit_exceeded(detail: str) -> bool:
+    """仅将明确超过 high watermark 的 MPS OOM 视为确定性上限失败。
+
+    同一 PyTorch 异常也可能表示系统内存不足或碎片化；解析失败时保守地返回 False，
+    让客户端保留重试路径。
+    """
+    values: dict[str, float] = {}
+    factors = {
+        "b": 1.0,
+        "byte": 1.0,
+        "bytes": 1.0,
+        "kb": 1000.0,
+        "kib": 1024**1,
+        "mb": 1000.0**2,
+        "mib": 1024**2,
+        "gb": 1000.0**3,
+        "gib": 1024**3,
+        "tb": 1000.0**4,
+        "tib": 1024**4,
+    }
+    for match in _MPS_SIZE_RE.finditer(detail):
+        unit = match.group("unit").lower()
+        label = match.group("label").lower()
+        values[label] = float(match.group("value")) * factors[unit]
+    required = {
+        "mps allocated",
+        "other allocations",
+        "max allowed",
+        "tried to allocate",
+    }
+    if not required.issubset(values):
+        return False
+    return (
+        values["mps allocated"]
+        + values["other allocations"]
+        + values["tried to allocate"]
+        > values["max allowed"]
+    )
+
+
 def _apply_mps_limit(
     limit_gib: float | None, device: str, use_qwen_emo: bool = False
 ) -> float | None:
@@ -534,7 +594,8 @@ def _apply_mps_limit(
     外部持 1.5 GiB 不影响本进程 1 GiB 水位判定），未设上限时的 OOM 为本进程缓存累积
     或单次峰值触默认水位，finally 归还缓存后重试可自愈，客户端只对「上限在场」分支
     短路重试）。
-    torch 语义 fraction=0 是 unlimited 而非恢复默认，故 limit<=0 一律不调 setter。
+    torch 语义 fraction=0 是 unlimited 而非恢复默认；显式 limit=0 需同时覆盖继承的
+    PYTORCH_MPS_HIGH_WATERMARK_RATIO，并调用 setter 使 allocator 采用 unlimited。
     """
     if device == "cpu":
         # 显式 cpu 部署全程不经 MPS 分配器：不设不上报（/health 如实回 null）
@@ -544,6 +605,10 @@ def _apply_mps_limit(
 
         if not (hasattr(torch, "mps") and torch.backends.mps.is_available()):
             return None
+        if limit_gib is not None and limit_gib <= 0:
+            # 在首次访问 recommended memory 前覆盖继承的 HIGH env，避免 allocator 初始化
+            # 时已锁定旧水位；setter 再次显式设 0，保证 Python API 与环境口径一致。
+            os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
         rec_gib = torch.mps.recommended_max_memory() / (1024**3)
         if rec_gib <= 0:
             print(
@@ -570,7 +635,10 @@ def _apply_mps_limit(
                 )
                 return None
         if limit_gib <= 0:
-            print(">> MPS 显存上限未设置（--mps-mem-limit-gib 0），沿用 torch 默认水位")
+            torch.mps.set_per_process_memory_fraction(0.0)
+            print(
+                ">> MPS 显存上限未设置（--mps-mem-limit-gib 0），已关闭 high watermark"
+            )
             return None
         if limit_gib < residency_gib:
             print(
@@ -748,24 +816,26 @@ async def synthesize(req: SynthesizeRequest):
                     audio, fmt = await asyncio.to_thread(encode_mp3, data, sr)
         except Exception as exc:
             # 水位线 OOM 转可操作 500：未捕获异常只会得到无信息的 "Internal Server Error"。
-            # 上限在场时≈确定性 OOM（该句/块内在需求超上限，重试难自愈，客户端按「上限不足」
-            # 分支签名转 NonRetryableError 跳过重试）；未设上限时 OOM 为本进程缓存累积或
-            # 单次峰值触默认水位（超限只计本进程，finally 归还缓存后重试可自愈），客户端
-            # 保持重试。detail 带上限值与出路（未设上限时改述实际状态），经客户端
+            # 仅在错误详情确认 allocated + other + tried 超过 max allowed 时认定为确定性
+            # high watermark OOM，客户端按「上限不足」分支签名转 NonRetryableError 跳过重试；
+            # 其余 MPS OOM 可能来自系统内存压力或碎片化，客户端保持重试。detail 带上限值与出路，
+            # 经客户端
             # _http_error_detail 透传到最终报错。签名匹配为主判据
             # （MPS OOM 是 RuntimeError 文本，torch 2.8.0 实测 "MPS backend out of memory"）；
             # 类型名兜底 torch.OutOfMemoryError 子类（不 import torch）。其余异常原样放行
             # （NaN 已在 _read_audio 单独 500）。
-            if (
-                "MPS backend out of memory" in str(exc)
-                or type(exc).__name__ == "OutOfMemoryError"
-            ):
+            if _is_mps_oom(exc):
                 limit = STATE.get("mps_mem_limit_gib")
-                if limit is not None:
+                if limit is not None and _mps_limit_exceeded(str(exc)):
                     remedy = (
                         f"MPS 显存上限不足（当前上限 {limit} GiB）："
                         f"上调 --mps-mem-limit-gib 重启、拆短该句/块，"
                         f"或 --mps-mem-limit-gib 0 关闭（回退旧行为）。"
+                    )
+                elif limit is not None:
+                    remedy = (
+                        f"MPS 显存耗尽（已配置上限 {limit} GiB，但本次未确认触顶，"
+                        "可能是系统内存压力或碎片化）：拆短该句/块，或重启服务端后重试。"
                     )
                 else:  # 未设上限的三种成因：--mps-mem-limit-gib 0 / setter 失败 / 小机型缺省保底
                     # 劝「显式设上限」不攻自破：设更低的进程水位不会凭空多出内存，反让本进程
