@@ -8,9 +8,9 @@
     uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --with lameenc \
         python $T/scripts/tts_server.py --model-dir checkpoints --port 8766
 - MPS 显存上限（--mps-mem-limit-gib，缺省 min(0.90×recommended, 16) GiB，缺省额度不足
-  ~11 GiB 的小机型自动不设限）：进程级水位线，防 torch 默认 1.7×recommended（本机 ≈30 GiB，
-  超 24 GB 物理统一内存）把系统内存拉爆致卡顿（RSI-017，机制循证见 INDEXTTS-2.5-ADVANCED
-  §6.8）；0=不限；--device cpu 不设不上报。
+  ~11 GiB 的小机型自动不设限，--use-qwen-emo 时随常驻上移至 ~12.5）：进程级水位线，防 torch
+  默认 1.7×recommended（本机 ≈30 GiB，超 24 GB 物理统一内存）把系统内存拉爆致卡顿（RSI-017，
+  机制循证见 INDEXTTS-2.5-ADVANCED §6.8）；0=不限；--device cpu 不设不上报。
 - 端点：
     GET  /health     —— 服务与模型元信息（version/device/dtype/encoder + 四个 supports_* 能力位）
     POST /synthesize —— JSON 请求合成，返回 MP3 bytes（X-Audio-Format 头）
@@ -823,7 +823,7 @@ def main() -> None:
         type=float,
         default=None,
         help="MPS 进程显存上限（GiB）：缺省 min(0.90×recommended, 16)（本机 ≈16；"
-        "缺省额度不足 ~11 GiB 的小机型自动不设限）；0=不限（torch 默认水位 1.7×recommended，"
+        "缺省额度不足 ~11 GiB 的小机型自动不设限，--use-qwen-emo 时随常驻上移至 ~12.5）；0=不限（torch 默认水位 1.7×recommended，"
         "24GB 机型 ≈30 GiB 超物理内存，长跑易拉爆系统内存）",
     )
     args = parser.parse_args()
