@@ -290,3 +290,19 @@
 **同类问题影响**：同 venv 的 `tts_bench.py` 等直调 infer 的脚本不受本 flag 保护（单进程各自设限），已在 §2.5 注记 env 兜底；webui.py 同理（本管线不用）。8767 上的 A/B 实例是第二个 `tts_server.py`，拉起即应用缺省上限。上限按进程计，多实例并行时总量仍需人工控制。
 
 五轮评审（2026-09-29）：① CPU/CUDA `OutOfMemoryError` 类型兜底仅在实际 `mps` device 下启用，避免非 MPS 部署收到错误的显存排障指引；② 显式 `--mps-mem-limit-gib 0` 在 allocator 初始化前覆盖继承的 `PYTORCH_MPS_HIGH_WATERMARK_RATIO`，并调用 `set_per_process_memory_fraction(0.0)`，保证「不限」不随 shell 环境漂移；③ 只有解析到 `MPS allocated + other allocations + Tried to allocate > max allowed` 才进入不可重试的「MPS 显存上限不足」契约，普通 MPS OOM、系统内存压力、碎片化与解析不完整均保留重试；④ 解析器兼容 PyTorch 的 `MiB/GiB` 及十进制单位，新增 helper、环境覆盖与客户端分流测试，相关测试与全量回归通过。
+
+## RSI-022 TTS 长跑自愈缺官方载体：服务掉线/客户端依赖缺失/退出码误读三坑无脚本兜底
+
+**表因（上游实证）**：五集系列 TTS 长跑（每集 149-170 句）反复遇到：①IndexTTS 服务掉线或 MPS 挂死（需按端口冷重启 + `PYTORCH_MPS_HIGH_WATERMARK_RATIO` 参数，与本仓 RSI-017 同族——长跑显存击穿后合成全 500 而 `/health` 假绿、自愈循环须含「连续失败→按端口重启服务」）；②客户端 mutagen 依赖缺失在**首句合成成功后**才崩（uv --no-project 裸调形态：tts.py 的 mutagen 是惰性 import，只在写完 mp3 测时长时才 ModuleNotFoundError）；③自制自愈脚本踩 `cmd | tail; $?` 陷阱（取的是 tail 退出码 → 失败检测恒失效）。上游已验证一套 .sh 形态自愈循环（连续失败→按端口冷重启服务→客户端续跑，五集全部跑通），但只存在于用户内容仓的未跟踪文件（`negentropy 工作区 .context/tts-run/resume.sh`，未入 git 无 URL，已原文核对：`kill $(lsof -tnP -iTCP:8766 -sTCP:LISTEN)` + `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` nohup 拉起 + 子 shell 取 rc + 60×5s 健康轮询 grep `'"ok": *true'`），未回流机制仓。工单草稿曾引「上游 ISSUE-202」为同族——核对为 remotion lottie headless 挂死条目、非 TTS 族，此引用不成立已弃（同族依据改为 RSI-017 与上游脚本原文）。
+
+**根因**：`scripts/tts.py` 只管单轮合成；服务生命周期管理与长跑续跑编排无官方载体；`pipeline.py` doctor 不预检客户端依赖。
+
+**定性**：非阻断改进（上游有 .sh 兜底、五集已跑通；但每次新长跑都要重搓 shell——正是陷阱③的来源，且该 .sh 未入版本控制、一次 clean 即失传）。
+
+**方案比选**：A 原样回流 .sh——零改动已验证，但 shell 里退出码/健康检查靠 curl+grep 且无法做状态机单测（G3 缺载体），`$?` 类陷阱是类型系统级缺陷；B 新增 `scripts/tts_resume.py`（**采纳**，纯标准库对齐不变量 14）——`subprocess.run(...).returncode` 结构性消除管道尾食、urllib 健康检查、状态机可单测；对 .sh 的两处刻意微调：首轮健康即不重启（省 1–2 分钟冷启动；失败后仍无条件重启，覆盖 /health 假绿）、放弃上限缺省 3 轮（工单口径，`--max-restarts` 可调回上游实证的 12）；C 并入 tts.py（--resume flag）——超出白名单，且把服务编排塞进单轮合成器、破坏其「可拷进 index-tts venv 单独运行」的导入边界（test_tts_lang_mirror 钉死）；D 只改 doctor+文档记录 .sh 形态——不解决载体缺位。启动命令不另立第二事实源：从 `tts.server_launch_hint` 同构派生并由回归测试钉住 `--with` 集合（hint 仍是人贴终端的 SSOT）。doctor 预检形态：⚠️ 不计失败（对齐「服务离线不计失败」先例——doctor 规范调用本就不带 `--with`，计入失败会让正常态恒红）；**硬门禁放 tts_resume 入口**（它以 sys.executable 跑 tts.py，同解释器依赖在场是硬前提——这才是结构性堵住「首句合成后才崩」的位置）。MPS env 兜底执行 RSI-017 配对纪律：单设正 high 必配 low（默认 low=1.4，high<1.4 首个 MPS 分配即崩），0.0（禁用水位线）为唯一免配对特例。
+
+**处理方式**：新增 `scripts/tts_resume.py`（健康检查 `ok` 判据同上游 .sh → 不健康或客户端失败后按端口冷重启——SIGTERM→等待→SIGKILL，只杀该端口 LISTEN、绝不 `pkill -f`（07「服务生命周期」第 2 步判据面=作用面纪律）→ `subprocess.run` 真实退出码续跑 tts.py（`--` 后参数原样转发，幂等缓存断点续）→ 超上限非零退出；入口门禁 `--engine=indextts` 与 mutagen 在场；服务命令/根/日志/MPS env 全参数化）；`pipeline.py` doctor 的 indextts 节加 mutagen 预检（⚠️ + `--with mutagen` 可操作提示）；[references/PIPELINE.md](../../references/PIPELINE.md) §三脚本表登记（用法定义 SSOT）与 [references/07-tts-voice.md](../../references/07-tts-voice.md) 调用形态指针行；回归测试 [tests/test_tts_resume.py](../../tests/test_tts_resume.py)：退出码管道尾食负例文档化（`/bin/sh` 实测 `(exit 7) | cat; echo $?` → 0）、重启计数状态机（瞬时失败两轮后成功/达上限放弃/首轮不健康先重启/冷启动超时 exit 3）、健康检查 payload 与传输异常分支、启动命令对 hint 的 `--with` 防漂移、MPS 配对、端口纪律（无 pkill、SIGTERM→SIGKILL）、doctor 预检两分支（缺失 ⚠️ 不计失败 / 在场静默）。
+
+**后续防范**：①长跑编排类脚本禁止 `cmd | tail` 后取 `$?`——一律 `subprocess.run` 直取 returncode（shell 管道退出码陷阱在 Python 侧结构性不可达）；②杀服务按端口不按 argv 模式（判据面=作用面）；③客户端依赖预检要在**编排入口**做（同解释器前提），诊断命令里的预检只报不计失败；④MPS 水位线 env 单设正 high 必配 low（RSI-017）；⑤用户侧验证过的运维脚本须回流机制仓——留在内容仓未跟踪路径等于零版本控制。
+
+**同类问题影响**：上游五集长跑的 .sh 可由本脚本替代（`.context/tts-run/resume.sh` 可退役）；edge 引擎无服务端不适用；tts_bench/tts_sample 短调用仍走 tts.py 自动打印的启动命令（server_launch_hint SSOT 不变）。
