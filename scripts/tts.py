@@ -588,9 +588,9 @@ def _http_error_detail(e: urllib.error.HTTPError) -> str:
 def _deterministic_mps_oom(detail: str) -> bool:
     """上限在场时的确定性 MPS 水位线 OOM（服务端 tts_server remedy 的「上限不足」分支
     以「MPS 显存上限不足」开头）：该句/块内在需求超上限，重试只是分钟级空跑（手册 §七）
-    ——转 NonRetryableError 短路。**只匹配该分支**：超限判定含其它进程的 GPU 占用
-    （torch 消息的 other allocations 项），未设上限时的 OOM 多为外部挤压、释放后重试
-    可救，须留在 5xx 重试桶；文案失配时自然回退可重试（fail-safe 方向）。"""
+    ——转 NonRetryableError 短路。**只匹配该分支**：未设上限时默认水位 1.7×recommended
+    极高，OOM 为本进程缓存累积或极端峰值（超限只计本进程分配，服务端 finally 已归还
+    缓存），重试仍可能自愈，须留在 5xx 重试桶；文案失配时自然回退可重试（fail-safe 方向）。"""
     return detail.startswith("MPS 显存上限不足")
 
 
@@ -913,8 +913,10 @@ async def synth_indextts(
                     meta.write_text(digest)
                     store_deposit(mp3, sid, digest, store, slug)
                     break
-                except NonRetryableError:
-                    raise
+                except NonRetryableError as e:
+                    # 与重试耗尽分支同款包装：确定性失败（4xx / MPS 上限 OOM）也带句 id，
+                    # remedy 的「拆短该句」才有定位锚点
+                    raise NonRetryableError(f"{sid} 合成失败: {e}") from e
                 except Exception as e:  # noqa: BLE001 - 推理服务需要整体重试
                     last_err = e
                     await asyncio.sleep(1.5 * (attempt + 1))
@@ -1156,8 +1158,9 @@ async def synth_block_indextts(
                         pad,
                         sampling,
                     )
-                except NonRetryableError:
-                    raise
+                except NonRetryableError as e:
+                    # 同逐句路径：确定性失败也带块 label，供「拆短该块」定位
+                    raise NonRetryableError(f"块合成失败（{label}）: {e}") from e
                 except Exception as e:  # noqa: BLE001 - 推理服务需要整体重试
                     last_err = e
                     await asyncio.sleep(1.5 * (attempt + 1))

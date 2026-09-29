@@ -648,10 +648,13 @@ TensorRT-LLM）。仓库内**无 vLLM 后端**，README 只给外链 recipe。
    = **17.76 GiB**（约为物理内存的 74%，不是全部）；
 2. torch MPS 分配器默认高水位 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=1.7` → 允许分配
    **1.7×17.76 ≈ 30.2 GiB > 24 GB 物理统一内存**——分配器放行一切，直到系统级换页/压缩才
-   表现为整机卡顿，torch 全程不报 OOM（libtorch 内置警告字符串自证该机制的存在：
-   *"Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit (may cause system
-   failure)"*）。tts_server.py finally 注释与 VOICE-CLONING §七 记录的「~40 分钟击穿
-   30 GiB」即此水位线，非巧合而是 1.7×recommended 的必然；
+   表现为整机卡顿，水位 OOM **来不及先触发**（torch 确有超水位 OOM 路径——
+   "MPS backend out of memory (…)" 报错的尾句即是：*"Use
+   PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit for memory allocations
+   (may cause system failure)"*（libtorch 二进制实串）；但默认水位高于物理内存，系统
+   换页先于水位 OOM，故表现为卡顿而非报错）。tts_server.py finally 注释与
+   VOICE-CLONING §七 记录的「~40 分钟击穿 30 GiB」即此水位线，非巧合而是
+   1.7×recommended 的必然；
 3. 上游 indextts 全仓**无任何** MPS 内存限制（`set_per_process_memory_fraction` 0 命中；
    `torch.cuda.empty_cache()` 全仓 16 处——indextts/ 包 12 + backends/trt/export 4，
    `infer_v2_5.py` 占 2——在 MPS 上全是 no-op），low_vram 自动降载只查

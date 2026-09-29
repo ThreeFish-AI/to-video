@@ -52,7 +52,7 @@ from paths import PROJECT  # noqa: E402 - 必须在 sys.path 注入之后导入�
 
 DEFAULT_OUT_DIR = PROJECT / ".temp" / "voice-samples"
 DEFAULT_TEXT = "自进化编码智能体的核心不是写代码，而是让 AI 学会修改自己写代码的方式。"
-ATTEMPTS = 2  # 可重试错误（如 MPS 数值问题致的 500、未设上限时的外部挤压 OOM）再试一次；4xx 与确定性 OOM 立即失败
+ATTEMPTS = 2  # 可重试错误（如 MPS 数值问题致的 500、未设上限时的缓存累积 OOM）再试一次；4xx 与确定性 OOM 立即失败
 
 
 def build_jobs(

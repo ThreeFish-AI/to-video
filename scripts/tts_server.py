@@ -529,8 +529,11 @@ def _apply_mps_limit(
     上限经 set_per_process_memory_fraction（fraction = limit / recommended）设置；超限路径：
     分配器先自动归还缓存，仍不足抛 RuntimeError "MPS backend out of memory (...)"
     （torch 2.8.0 实测签名，消息含 other/max allowed 与 PYTORCH_MPS_HIGH_WATERMARK_RATIO
-    提示；超限计数取 MTLDevice currentAllocatedSize——**含其它进程占用**，故未设上限时的
-    OOM 可能是外部挤压、释放后重试可救，客户端只对「上限在场」分支短路重试）。
+    提示；超限计数取 MTLDevice currentAllocatedSize——**只计本进程**分配（torch 注释
+    "allocated in the process"，含 MPS/MPSGraph 隐式分配，不含其它进程，双进程实测：
+    外部持 1.5 GiB 不影响本进程 1 GiB 水位判定），未设上限时的 OOM 为本进程缓存累积
+    或单次峰值触默认水位，finally 归还缓存后重试可自愈，客户端只对「上限在场」分支
+    短路重试）。
     torch 语义 fraction=0 是 unlimited 而非恢复默认，故 limit<=0 一律不调 setter。
     """
     if device == "cpu":
@@ -548,7 +551,9 @@ def _apply_mps_limit(
             )
             return None
         # 模型常驻口径：v2.5 MPS 强制 fp32 权重 ~10 GiB（INDEXTTS-2.5-ADVANCED §6.5 实测
-        # 稳态 driver_allocated 10.00 GB；v2 fp16 常驻减半，此线对其偏保守）+ QwenEmotion 1.5
+        # 稳态 driver_allocated 10.00 GB；v2 在 MPS 上同样 fp32 常驻——infer_v2.py MPS
+        # 分支强制 use_fp16=False，显式 --device mps 也仅 GPT .half() ~1.9 GB，两版本
+        # 常驻同量级）+ QwenEmotion 1.5
         residency_gib = 10.0 + (1.5 if use_qwen_emo else 0.0)
         if limit_gib is None:
             # 策略默认：90% 推荐值与 16 GiB 取小——防 16 GB 小机型上固定值直接越界超发。
@@ -744,9 +749,10 @@ async def synthesize(req: SynthesizeRequest):
         except Exception as exc:
             # 水位线 OOM 转可操作 500：未捕获异常只会得到无信息的 "Internal Server Error"。
             # 上限在场时≈确定性 OOM（该句/块内在需求超上限，重试难自愈，客户端按「上限不足」
-            # 分支签名转 NonRetryableError 跳过重试）；未设上限时多为外部挤压（其它进程占用
-            # 计入超限判定）或长跑累积，客户端保持重试。detail 带上限值与出路（未设上限时
-            # 改述实际状态），经客户端 _http_error_detail 透传到最终报错。签名匹配为主判据
+            # 分支签名转 NonRetryableError 跳过重试）；未设上限时 OOM 为本进程缓存累积或
+            # 单次峰值触默认水位（超限只计本进程，finally 归还缓存后重试可自愈），客户端
+            # 保持重试。detail 带上限值与出路（未设上限时改述实际状态），经客户端
+            # _http_error_detail 透传到最终报错。签名匹配为主判据
             # （MPS OOM 是 RuntimeError 文本，torch 2.8.0 实测 "MPS backend out of memory"）；
             # 类型名兜底 torch.OutOfMemoryError 子类（不 import torch）。其余异常原样放行
             # （NaN 已在 _read_audio 单独 500）。
@@ -763,12 +769,12 @@ async def synthesize(req: SynthesizeRequest):
                     )
                 else:  # 未设上限的三种成因：--mps-mem-limit-gib 0 / setter 失败 / 小机型缺省保底
                     # 劝「显式设上限」不攻自破：设更低的进程水位不会凭空多出内存，反让本进程
-                    # 更早触顶；此处 OOM 多为外部挤压（其它进程占用计入超限判定）或长跑累积，
-                    # 归还缓存/释放外部/重启才对症，且客户端对该分支保持重试。
+                    # 更早触顶；此处 OOM 为本进程缓存累积或单次峰值触默认水位（超限只计
+                    # 本进程分配，不含其它进程），归还缓存/重启才对症，客户端对该分支保持重试。
                     remedy = (
                         "MPS 显存耗尽（未设上限，torch 默认水位 ≈1.7×recommended，"
-                        "其它 GPU 进程占用亦计入超限判定）："
-                        "拆短该句/块、释放其它 GPU 进程，或重启服务端复位分配器状态。"
+                        "超限只计本进程分配，常为缓存累积或单次峰值）："
+                        "拆短该句/块，或重启服务端复位分配器状态。"
                     )
                 traceback.print_exc()  # HTTPException 不再经 uvicorn 落栈，控制台补记全量
                 raise HTTPException(500, f"{remedy} 原始错误: {exc}") from exc
