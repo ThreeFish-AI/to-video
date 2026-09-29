@@ -705,3 +705,94 @@ def test_tts_lang_override_warns(tmp_path: Path):
     cfg2, _o2 = config.resolve(raw2)
     _f2, w2 = config.validate(cfg2, raw2, root)
     assert not any("tts.lang" in w for w in w2)
+
+
+# ---------------- chars_per_min 按 tts.style 分档（RSI-021） ----------------
+
+
+def _raw_with_style(style, chars=None):
+    narr = {"target_minutes": [1.0, 2.0]}
+    if chars is not None:
+        narr["chars_per_min"] = chars
+    return {
+        "episode": {"slug": "x-video"},
+        "narration": narr,
+        "tts": {
+            "engine": "indextts",
+            "ref": "voices/a.wav",
+            "ref_sha1": "54b699cce97f",
+            "style": style,
+        },
+    }
+
+
+def test_chars_per_min_default_tiers_by_tts_style():
+    """RSI-021：story → 254（块级演绎含停顿整集实测）；其余档 → 280 基础默认。
+
+    分档表住 SCHEMA 侧（不变量 7：默认值唯一来源），origin 仍是 default 层。
+    """
+    cfg, origin = config.resolve(_raw_with_style("story"))
+    assert get(cfg, "narration.chars_per_min") == 254
+    assert origin["narration.chars_per_min"] == "default"
+    cfg, _o = config.resolve(_raw_with_style("sunny-steady"))
+    assert get(cfg, "narration.chars_per_min") == 280
+    assert config.default("narration.chars_per_min") == 280  # 基础默认不动
+    assert config.STYLE_CHARS_PER_MIN == {"story": 254}
+
+
+def test_chars_per_min_toml_override_beats_style_tier():
+    """显式 toml 覆写恒优先——本集实测校准走这条路（上游五集系列 ep1 校准后，
+    ep2–ep5 的 toml 均显式写 254，正是该路径的存量形态）。"""
+    cfg, origin = config.resolve(_raw_with_style("story", chars=248))
+    assert get(cfg, "narration.chars_per_min") == 248
+    assert origin["narration.chars_per_min"] == "pipeline.toml"
+
+
+def test_chars_per_min_tier_via_toml_load(tmp_path):
+    """端到端：真实 toml 文件经 load → story 集预算门拿到 254（check_script/
+    build_narration 的 scope 加载同样过 resolve，消费者零改动即生效）。"""
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        "target_minutes = [1.0, 2.0]\n"
+        '[tts]\nengine = "indextts"\nref = "voices/a.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\n',
+    )
+    cfg, _o, fails, _w = config.load(root, required=True)
+    assert not fails, fails
+    assert cfg["narration"]["chars_per_min"] == 254
+
+
+def test_chars_per_min_tier_ignores_non_string_style():
+    """tts.style 写成数组（toml 合法形态）不得让 resolve 崩溃——类型执法归
+    validate 的 FAIL，resolve 对「配置有病也必须能跑」的诊断路径负责。"""
+    raw = _raw_with_style("story")
+    raw["tts"]["style"] = ["story"]
+    cfg, _o = config.resolve(raw)
+    assert get(cfg, "narration.chars_per_min") == 280
+
+
+# ---------------- qa.max_dark_sec（RSI-020 纯底色段门阈值） ----------------
+
+
+def test_max_dark_sec_schema_default_and_toml_override(tmp_path):
+    """SCHEMA 默认 8.0；toml 覆写生效；负值 FAIL（0 = 关门是合法偏离）。"""
+    assert config.default("qa.max_dark_sec") == 8.0
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        'target_minutes = [1.0, 2.0]\n[tts]\nengine = "edge"\n'
+        "[qa]\nmax_dark_sec = 12\n",
+    )
+    cfg, _o, fails, _w = config.load(root, required=True)
+    assert not fails, fails
+    assert cfg["qa"]["max_dark_sec"] == 12.0  # int 被浮点键收编
+
+    (root / "pipeline.toml").write_text(
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        'target_minutes = [1.0, 2.0]\n[tts]\nengine = "edge"\n'
+        "[qa]\nmax_dark_sec = -1\n",
+        encoding="utf-8",
+    )
+    _cfg, _o, fails2, _w = config.load(root, required=True)
+    assert any("qa.max_dark_sec" in f for f in fails2), fails2

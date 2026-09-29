@@ -33,6 +33,15 @@ uv run --no-project $T/scripts/verify_skeleton.py --strict  # 有未登记漂移
 - 幕间转场**不用** `@remotion/transitions` 的 TransitionSeries：其总时长 = Σ序列 − Σ转场，会把视觉层整体左移而旁白（manifest 帧号绝对定位的独立层）不动 → 逐幕递增失同步。用 `SceneFade`（只花幕间既有静默，from/总时长零改动；不变式 `2×sceneCrossFadeSec ≤ sentenceGap+sceneGap` 由 check_script.py 强制）。
 - 字体可复现性：三集用 macOS 系统字体栈（PingFang SC/Songti SC/SF Mono），未内嵌 CJK 字体——**渲染仅限 macOS 主机**。重启触发器：渲染迁 Linux/CI；**Remotion 5.0（跨 major，走 RSI，见 [PIPELINE.md §九](./PIPELINE.md)）**——fitText 的 validateFontIsLoaded 默认翻 true（届时须内嵌子集字体，注意 pre-commit --maxkb=1024）、numberOfSharedAudioTags 默认将改 0（涉 NarrationAudio，4.0.527 changelog 预告）、license 条款微调（升级窗口复读 LICENSE）。
 - 路径描画优先 `@remotion/paths`（evolvePath/getPointAtLength）——它是「pathLength 与 px 版 strokeDasharray 互斥」红线的官方正解；线型样式（虚线/点线）另置静态叠加路径，勿与描画动画挤在同一元素。
+- **Lottie 资产渲染边界（`@remotion/lottie`）**：chrome-headless-shell + ANGLE 后端下，
+  fetch + `delayRender` + `@remotion/lottie` 的组合（上游 LottieEmphasis 形态）对**特定 JSON**
+  初始化挂死——`Waiting for Lottie animation to load` 的 delayRender 永不解除，表象为
+  Target closed / 静默死且崩点漂移、常伴系统内存压力；结构等价的另一 JSON 同环境可用
+  （**按资产触发、非全量失效**，上游 ISSUE-202 双集实证，`--check`/tsc 全绿挡不住）。**新
+  Lottie 资产入片前必须先过 100 帧段渲冒烟**：`cd video && ./node_modules/.bin/remotion render
+  Main /tmp/smoke.mp4 --frames=<起点>-<起点+100> --concurrency=1`（起点取该资产出场的帧位）——
+  挂死即弃用该 JSON，换原生 SVG / 运动层实现（上游以原生组件替换实证）；崩溃分诊手法
+  （分段定位 + 禁用法二分）见 [09 修复回路](./09-render-qa.md)。
 
 复用边界的原则（见 [PIPELINE.md](./PIPELINE.md) 第四节）：Python 脚本集中 SSOT；**Remotion 原语复制适配不共享**——共享 TS 包会把一集的视觉改动泄漏进其他集。
 
