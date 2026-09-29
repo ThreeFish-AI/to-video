@@ -137,7 +137,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | [scripts/check_series.py](../scripts/check_series.py) | 系列一致性规则（口播反串线 / 多标题顺序 / 序号绑定 / 清单完整性 / 死链 / 可渲染性 / 去站点化 / 下期卡同步），执法 `$W/series.json`；**工程级受检面（project_globs）与课程/下期卡系列 id 集由工作区 to-video.toml 声明** | 工作区内任意目录：`uv run --no-project $T/scripts/check_series.py`（工作区侧可挂 pre-commit） |
 | [scripts/captions.py](../scripts/captions.py) | 导出 srt/vtt（cue 终点不含句间停顿——外挂字幕静默期不留字） | `uv run --no-project scripts/captions.py` |
 | [scripts/deliver.py](../scripts/deliver.py) | ⑩ 交付归档：out/final.mp4 → `<根>/<系列id>/<集标题> vN.mp4`（版本扫目录自增、同字节跳过；根路径两渠道见下方「交付归档」节） | `uv run --no-project $T/scripts/pipeline.py --project $P deliver` |
-| [scripts/qa_frames.py](../scripts/qa_frames.py) | 抽帧 QA（幕/句/`--last-n` 末 N 句）+ `--check` 四项自动体检 + `--check-theme` WCAG 对比度 | `uv run --no-project --with pillow --with numpy scripts/qa_frames.py out/draft.mp4 --last-n 6 --check`（工程根；视频路径按 CWD 解析，$T 直调须写全 `$P/out/draft.mp4`） |
+| [scripts/qa_frames.py](../scripts/qa_frames.py) | 抽帧 QA（幕/句/`--last-n` 末 N 句）+ `--check` 五项自动体检（黑帧/字幕带侵入/冻帧/字幕缺失/纯底色段）+ `--check-theme` WCAG 对比度 | `uv run --no-project --with pillow --with numpy scripts/qa_frames.py out/draft.mp4 --last-n 6 --check`（工程根；视频路径按 CWD 解析，$T 直调须写全 `$P/out/draft.mp4`） |
 | [scripts/paper_extract.py](../scripts/paper_extract.py) | Stage ① 取证工具箱（§→页映射 / 分栏取文 / caption 收割 / 定点 find / 页面光栅化） | `uv run --no-project --with pymupdf $T/scripts/paper_extract.py "<PDF>" find "原文措辞"` |
 | [scripts/refs.py](../scripts/refs.py) | 参考样本可复现清单（verify/rebuild；指纹在 `$W/voices/refs.toml`——工作区内容，只存哈希不存音频） | `uv run --no-project $T/scripts/refs.py verify` |
 | [scripts/source_ledger.py](../scripts/source_ledger.py) | Stage ① **B 型信源**可复现清单（fetch/list/verify + sync/audit——后两者消费系列级 `$W/source-map/` 地图，幂等批量建台账 + 离线三断言；`repo` 类固定提交 raw 指纹漂移即 FAIL，`site` 类只比归一正文、漂移报 WARN） | `uv run --no-project $T/scripts/source_ledger.py --project $P verify`；`sync --map <map.toml> --episode N` / `audit --map <map.toml> --episode N` |
@@ -156,7 +156,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | ------------------------------- | --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `episode.slug`                  | ✅               | —                       | 须等于工程目录名（拦手抄来的陈旧 toml）；**是否登记进 series.json 不在此校验**，那归 `verify_skeleton.py` 的孤儿警告（非阻塞） |
 | `narration.target_minutes`      | ✅               | —                       | `[下限, 上限]` 分钟；缺失会让时长预算门**点名跳过**                                                                            |
-| `narration.chars_per_min`       |                 | `280`                   | 机制常数                                                                                                                       |
+| `narration.chars_per_min`       |                 | `280`（story 档默认层 `254`） | 机制常数：含停顿等效语速，**默认层按 `tts.style` 分档**（`config.STYLE_CHARS_PER_MIN`，仅 story 有整集实测）；本集实测校准写 toml 覆写（references/07 完成门）                                             |
 | `tts.engine`                    |                 | `indextts`              | **策略声明**（有替代项 edge，且受 `.engine` 签名护栏约束），故保留在 toml                                                      |
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
@@ -169,6 +169,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | `tts.server`                    |                 | `http://127.0.0.1:8766` | **机器属性**：可用 `INDEXTTS_SERVER` 覆盖，永不写进 toml                                                                       |
 | `render.draft_scale`            |                 | `0.5`                   | 机制常数（`qa --scale` 推断依赖它）                                                                                            |
 | `render.draft_jpeg_quality`     |                 | `60`                    | 机制常数                                                                                                                       |
+| `qa.max_dark_sec`               |                 | `8.0`                   | 机制常数（RSI-020 纯底色段门：qa_frames `--check` 内容区无内容像素持续 ≥ 此秒数 FAIL；0 = 关闭）                                                              |
 | `archify.min_diagrams`          |                 | `1`                     | 丰富度地板：views 图数下限；目标值由本集 toml 覆写（策略声明）                                                                 |
 | `archify.min_cues`              |                 | `2`                     | cue 总数下限；同上                                                                                                             |
 | `archify.min_anchor_ratio`      |                 | `0.10`                  | 句级锚定率下限 ∈ [0,1]（ISSUE-188：按句统计）                                                                                  |

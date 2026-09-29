@@ -68,5 +68,6 @@ IndexTTS 服务端（端口取自 `tts.server`，默认 8766，下文命令以�
 ## 完成门（交给 Stage ⑨ 前）
 
 - manifest 句数 = narration 句数；`pipeline.py check` 的实测时长口径落在预算窗内；
+- **首轮 TTS 完成后校准本集语速**（RSI-021）：写稿预算门的 `narration.chars_per_min` 默认层按 `tts.style` 分档（story=254、其余=280，档位表住 `scripts/config.py` 的 `STYLE_CHARS_PER_MIN`——**仅 story 有整集实测**，新档位首轮后按下述回写）；首轮完成后用 manifest 实测秒数复算 `本集字数 ÷ 实测分钟数`，与生效默认偏差 >3% 就把实测值写进本集 toml 的 `narration.chars_per_min`（显式覆写恒优先，下一集写稿即按本集实测口径执法）。上游教训：五集系列 ep1 首轮按 280 写 3961 字 → 实测外推 15.62 分超 [13.0, 14.6] 硬窗 → 回 ③ 减脂 317 字 → story 块缓存整失效全量重合成 ~40 分钟；后续四集按 254 直写全部一次过窗零返工；
 - sidecar `{id}.sha` 逐句齐备（断点续跑的依据）；`.engine` 标记已更新；
 - 句尾英文产品名收尾的句子跑无偏 ASR-与逐字稿 diff（**禁 `initial_prompt`**，判据组合见 [VOICE-CLONING §5.4](VOICE-CLONING.md)；候选管线门——自动化前人工执行）。
