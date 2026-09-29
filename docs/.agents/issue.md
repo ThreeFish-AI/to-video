@@ -372,3 +372,94 @@
 **后续防范**：①长跑编排类脚本禁止 `cmd | tail` 后取 `$?`——一律 `subprocess.run` 直取 returncode（shell 管道退出码陷阱在 Python 侧结构性不可达）；②杀服务按端口不按 argv 模式（判据面=作用面）；③客户端依赖预检要在**编排入口**做（同解释器前提），诊断命令里的预检只报不计失败；④MPS 水位线 env 单设正 high 必配 low（RSI-017）；⑤用户侧验证过的运维脚本须回流机制仓——留在内容仓未跟踪路径等于零版本控制；⑥urllib 的 `except (URLError, OSError)` 窄口径对「读响应体」路径漏 HTTPException 族——凡健康探测类代码须把 `http.client.HTTPException` 计入按不健康处理的异常面。
 
 **同类问题影响**：上游五集长跑的 .sh 可由本脚本替代（`.context/tts-run/resume.sh` 可退役）；edge 引擎无服务端不适用；tts_bench/tts_sample 短调用仍走 tts.py 自动打印的启动命令（server_launch_hint SSOT 不变）。
+## RSI-023 覆盖门只认单参 dur 拼写，FAIL 文案未给合规扩窗改法——空窗回填用了门读不到的写法且登记口径失效
+
+**表因**：上游内容仓 E2 第 4 轮评审（2026-09-29）发现：空窗回填提交把 6 处 cue 时长写成双参 `durationInFrames: dur('a','b')`（P1Hangar×3/P5Tarmac×3），`CUE_DUR_RE` 只识别单参对象字面量形态——门一跑即 SystemExit，且该提交未重跑门，series.json/CHANGELOG 里「覆盖门 FAIL 0」的登记口径就此失效（门炸与登记绿并存）。
+
+**根因**：机制层两面——① 双参形态与「求和形态 `dur('a') + dur('b')`（帧数等价、正则可命中首段并与 at 锚对账）」语义完全等价，写法差异纯靠记忆约定；② FAIL 文案只解释了双参为何禁止（与邻句 cue 重叠）并指示「一章锚一句」，未给已定实践（空窗回填求和扩窗，多集在用）的可复制合法拼写——对照 at 分支文案给了具体拼写，dur 分支没有。
+
+**定性**：非阻断文档缺陷（门本身判对了，是文案引导缺位 + 上游流程未重跑门；后者属内容仓纪律不进本台账）。
+
+**处理方式**：`check_archify_coverage.py` FAIL 文案补「确需跨句扩窗（空窗回填）改拼写为 `dur('a') + dur('b')` 求和形态（帧数等价、本门可识别对账，首段句 id 须与 at 锚一致）」；`tests/test_check_archify_coverage.py` 补正反控：求和形态可被识别计数、双参形态触发本 FAIL（若既有测试已覆盖则只钉文案片段）。实施：[PR #26](https://github.com/ThreeFish-AI/to-video/pull/26)。
+
+**后续防范**：扩窗一律求和拼写；改 cue 拼写后必须重跑 `check --check-scenes` 再回写登记口径（登记数字是门的输出快照，不是手填常数）。已知留白：求和形态第二段及以后的句 id 不在门的存在性/重叠审计内（正则只取首段对账 at 锚）——文案已限定「空窗回填」用途（被跨句按定义无邻句 cue），越界使用须自查。
+
+**同类问题影响**：Sequence 级 JSX 等号形态（`durationInFrames={dur('a','b')}`）不在此门管辖（正则只查对象字面量冒号形态），该形态合法勿误改。
+
+## RSI-024 zh 字幕单行宽度无门：超限句横向溢出画布只靠稿风纪律
+
+**表因**：上游内容仓两起实测——E3 曾 81 字散文句在 30px 最小字号下两侧各溢出 1920 画布 ~255px；E2 重制评审（2026-09-29）确认构造仍在（当时最长 39 字不触发，复活门槛 ≈51 全角字）。
+
+**根因**：frozen 模板 `Subtitle.tsx` 对 zh 恒单行（`twoLine = !isZh && fitted < MIN_FONT_SIZE`——两行回退仅 en）、字号下限钳 30px、`nowrap` 不折行——「不溢出」⇔ 全角当量 ≤ floor(1528/30) = 50，但该物理上限只存在于渲染层，build/check 期无门；「超宽句压短」的稿风纪律不执法。zh 组件层加两行回退属 frozen 整组同步（见 RSI-028），门是独立于模板的最小干预。
+
+**定性**：阻断性缺陷缺门（缺陷复活门槛低：一次成文放宽即触发，且 qa 帧级检查对字幕盒内文字溢出不敏感）。
+
+**处理方式**：`check_script.py` 新增 `check_subtitle_width`（zh-only，挂 `--pre-tts` 与 zh 完整门两路；en 有两行回退不适用）：全角当量（宽/全角字符 1.0、半角 ~0.55，即模板注释记载的历史估宽口径；比较前 round(·,2) 消半角浮点累积噪声）> 50 即 FAIL，附句 id 与当量值；常量推导链注释钉住渲染侧 SSOT 归属（骨架指纹把守漂移）。**代际感知**：单行前提是当前模板的 `twoLine = !isZh && …` 守卫——旧代 Subtitle（cacb/7faa 指纹代）zh 可折行，门对其点名跳过不误报（拷齐当前模板自动生效）。`tests/test_check_script.py` 正反控五条（51 全角 FAIL / 恰 50 过 / 混排超限 FAIL / --pre-tts 路径 / 旧代跳过）。实施：[PR #26](https://github.com/ThreeFish-AI/to-video/pull/26)。
+
+15 集实测校准（2026-09-29）：25cf 代抓到 2 集 4 句**真溢出**（agent-skills p3-08a=51.1；jev p4-19=54.1/p5-29=57.3/p6-27=50.1——已上线集的真实存量，内容侧待修）；cacb 代 skills-supply-chain 27 句（50.0-80.1）与 7faa 代 openviking 2 句为旧代折行非溢出，跳过后零误报。
+
+**后续防范**：字幕物理类上限钉进门里不钉在稿风里；新增句级门须同时想清 zh/en 归属并在两条分发路径挂载（漏挂即静默缺门）。
+
+## RSI-025 台本 [say] 与正文逐字相同时零告警：no-op 表演标点静默攒批
+
+**表因**：上游 E2 重制（2026-09-29 清理）实测 cues.toml 攒了 8 条 `[say]` 与句原文逐字相同——三处逐字一致（say == text == ttsText），纯假动作；build 只在 say 与正文**改字**时报 FAIL，零改动无任何提示。
+
+**根因**：`apply_cues` 的校验只拦「不一致」（改字/标注漂移），「完全一致」是合法边界但零效果——写的人以为做了句读表演，实际送合成的 ttsText 与不写该条完全一样。
+
+**定性**：非阻断改进（合法但 noisy，攒批只会让台本看起来做了没做的事）。
+
+**处理方式**：`build_narration.py` `apply_cues` 增可选 out-param `warnings`（say == src 逐字相同即记，附「改出真句读或删除该条」出路；不传则丢弃——只影响提醒不影响校验），三元组返回契约不变（既有 14 处调用点零波及：build_narration 生产 1 + 既有测试 13），main 仿 `mark_warnings` 先例输出（`WARN  ` 前缀、stderr）；无 cues 文件零输出契约不变。`tests/test_tts_blocks.py` 正反控（no-op 报 WARN / 真句读不报 / 旧调用面三元组契约回归）。实施：[PR #26](https://github.com/ThreeFish-AI/to-video/pull/26)。
+
+**后续防范**：表演层输入的「零效果边界」与「非法边界」都要有声音——只拦非法会把「写了等于没写」留成静默债。
+
+## RSI-026 选色判据缺「色相距离」维度与未登记色盲区：撞值门全绿仍可同色相撞车
+
+**表因**：上游 E2 流光五色选色（2026-09-29）初选玫红 #E85D75（350°，colorsys 口径），与同系列既有 E3 玫红 #FF6F91（346°）色相仅差 4°——`check_series` 规则 4 只拦精确同值，门全绿、视觉同色相；两次改向后落品红 #D65DB1（318°，全系列空槽；最近占用 E1 紫 #C9A0FF 266° 差 52°）。另发现材料色数组 token（`sourceFlows`）不进 series.json `accents` 清单，机器完全不看见。
+
+**根因**：规则 4 明文「不做色相邻近 WARN」是校准过的决策（ISSUE-167：蓝 #4A9EFF 与青 #2DD4BF 相邻共存是接受态，假报一多门被关掉）——但「机器不判」被读成了「无需人核」，色相错开这一半契约没有承接面；且 occupied 清单数据源只认 accents 声明，未登记色的盲区无人知晓。
+
+**定性**：非阻断改进（不改门——推翻已校准决策需判据级新证据；补人工判据承接面）。
+
+**处理方式**：`references/08-remotion-implementation.md` 色彩契约增第 6 条：新选色对着 INFO 行人工核色相距离（附 6° 撞车实例与换槽解法）；未登记进 accents 的色（材料色数组 token）在 theme.ts 注释自证色相距离、必要时临时并进 accents 比对。check_series 零改动。实施：[PR #26](https://github.com/ThreeFish-AI/to-video/pull/26)。
+
+**后续防范**：「机器不判」的判据必须写明人工承接面在哪，否则契约只有被执法的那一半活着。
+
+## RSI-027 派生产物确定性无门：提交的 narration.json 可相对钉定生成器陈旧
+
+**表因**：上游 E2 第 4 轮（2026-09-29）rebuild 发现提交版 narration.json 与当前生成器输出不一致——生成器在 RSI-015 起派生 `beatStart` 键，提交版是旧生成器产物（0 个 beatStart vs 新 31 个）；无任何门报告这一漂移，语义对账（ids/text/scene/blockStart/cue 五维全等）只能靠人手写脚本。
+
+**根因**：narration.json 是「源（narration.md + cues.toml）× 生成器版本」的二元派生物，生成器演进出新键时存量 json 陈旧但合法可渲染——缺一个「提交的派生物 == 当前生成器重跑结果」的确定性门（类似 lockfile 校验）。
+
+**定性**：非阻断缺门（登记待办；实现面在 `check` 里加 rebuild-diff 子检查，涉及临时输出与耗时预算，攒 RSI 批次后统一定方案）。
+
+**处理方式**：登记待办。落地形状候选：`pipeline.py check` 附 `--determinism`——build_narration 重跑到临时目录与在库 json 做规范化 diff（键序/新增键白名单化），漂移即 FAIL 并提示重跑 build。
+
+**后续防范**：凡「源×生成器」型派生物进 git，都应有确定性门；生成器新增输出键的 RSI（如 RSI-015 之于 beatStart）须在 PR 里点名「存量集 json 将报陈旧，重跑 build 自适配」。
+
+**同类问题影响**：chapters.json/series-layers.json 等同型派生物。
+
+## RSI-028 冻结件整组同步积压六项：单改一集即破 skeleton 字节契约
+
+**表因**：上游 E2 第 4 轮评审（2026-09-29）判「明确不动」清单六项——frozen `Subtitle.tsx` 的 zh 两行回退与 scrim 色值 `rgba(6,8,12,0.68)`（四集共享规范值）、`ArchifyClip.tsx` 内衬色 `#0B0E13` 与注释里指向集内 `scripts/` 的悬空路径、`ArchifyRecap.tsx` 手抄匿名类型断言（应引用导出的 `ArchifyChapter`）、`ArchifyYield.tsx` 零挂载死件、`i18n.tsx` `useL`/`L` 零消费导出（四集字节一致）、`build_narration.py` 侧 zh 句长防线（episode 薄包装受 frozen 字节执法）。
+
+**根因**：这些件的修复面在模板层，但模板改动 = 全集 md5 漂移 + 既有集 generation/drift 登记义务（CHANGELOG Breaking 节的既有口径），单集顺手改即破契约——正确做法是「改模板 + 集中同步批次」。
+
+**定性**：非阻断积压（登记待批；六项均已在上游内容仓经 md5 跨集指纹实证为共享件）。
+
+**处理方式**：登记待办。建议攒一个集中 generation 批次：模板侧六项一次改齐（Subtitle zh 两行回退落地后 RSI-024 的代际守卫消失、门自动退位点名跳过——双保险仅在过渡期成立；scrim/内衬色走 theme 派生；ArchifyYield 删或给活例；类型断言改引用；i18n 死导出删；薄包装注释限定 skill 路径），同步 CHANGELOG Breaking 自适配指引与各集 `[[skeleton.generation]]` 登记。
+
+**后续防范**：跨集共享件的缺陷一律先 md5 抽跨集指纹定性再动手；「本集不修」必须像本条一样落到台账而不是只留在当轮 commit message 里。
+
+## RSI-029 草渲半分辨率下「帧指纹相同」WARN 可假阳：冻帧误报无像素级复核通道
+
+**表因**：上游 E2 v2 草渲 QA（2026-09-29）四条「帧指纹相同（疑似冻帧）」WARN（p1-21b/p1-24、p3-10/p3-11c、p4-01/p4-04、p6-26/p6-27），像素级对账全部证伪——变更像素 3.5–7.7%、diff bbox 非空，是 `--scale 0.5 --jpeg-quality 60` 草渲下指纹分辨率不足的假阳。
+
+**根因**：草渲指纹在小面积/低对比变化上会碰撞（同族既有 ISSUE-181 索引损坏伪冻帧、ISSUE-167 侵入假报，此为第三种假阳形态：分辨率致假阳）；WARN 文案没有给「如何一票证伪」的指引，复核靠人自造脚本。
+
+**定性**：非阻断改进（登记待办）。
+
+**处理方式**：登记待办。候选：WARN 文案附一行像素级对账指引（PIL ImageChops.difference + 变更像素占比，本地秒级）；或指纹改在原分辨率灰度图上取（成本权衡待定）。
+
+**后续防范**：数值/指纹类 WARN 上线时想好「假阳时如何一票证伪」并把证伪命令写进文案——不能复核的告警等于噪声。
+
+合并前评审（2026-09-29）：①编号与并行创建的 RSI-018..022（PR #23/#24/#25，首创在前）撞号，本批七条目整体重编号 018..024 → 023..029（条目内互引同步：024 宽度门 ↔ 028 冻结件）；②文档漂移修复——check_script.py 模块头机制清单/--pre-tts 枚举/--help 三面与 references/05 第九节第 5 条补收 zh 字幕宽度门（门已挂 --pre-tts 与 zh 完整门两路，枚举面漏同步）；③say 条目「既有 15 处调用点」订正为 14 处（build_narration 生产 1 + 既有测试 13，可 grep 复核）。
