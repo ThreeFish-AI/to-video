@@ -375,6 +375,54 @@ EN_SUBTITLE_MAX_CHARS = 170
 LATIN_RE = re.compile(r"[A-Za-z]")
 #: 引号内夹汉字的字符串字面量（近似正则：一行内引号对之间含汉字即命中）
 HAN_LITERAL_RE = re.compile(r"['\"][^'\"]*[一-鿿][^'\"]*['\"]")
+#: zh 字幕单行宽度物理上限（渲染侧 SSOT = frozen 模板 Subtitle.tsx，骨架指纹把守漂移）：
+#: 内容预算 CONTENT_WIDTH = 1528px（MAX_WIDTH 1600 − PADDING_X 36×2），字号下限
+#: MIN_FONT_SIZE = 30px 且 zh 恒单行（twoLine 仅 en 开启）+ nowrap 不折行——CJK
+#: 全角字符 advance ≈ 1.0em，故「不溢出 1920 画布」⇔ 全角当量 ≤ floor(1528/30)=50；
+#: 半角按 ~0.55em 折算（模板注释记载的历史估宽口径）。en 有两行回退不受此限。
+SUBTITLE_CJK_UNITS_MAX = 50
+_HALFWIDTH_UNIT = 0.55
+
+
+def _cjk_units(text: str) -> float:
+    """全角当量：宽/全角字符计 1.0，其余（含半角与合并符）计 ~0.55。"""
+    return sum(
+        1.0 if unicodedata.east_asian_width(ch) in "WF" else _HALFWIDTH_UNIT
+        for ch in text
+    )
+
+
+def check_subtitle_width(root: Path, items: list[dict], msgs: list[str]) -> None:
+    """zh 字幕单行宽度门：句全角当量超渲染物理上限即 FAIL。
+
+    历史事故两起（E3 81 字散文句两侧各溢出画布 ~255px；E2 重制评审确认构造仍在、
+    当时最长 39 字不触发，复活门槛 ≈51 全角字）——frozen 模板对 zh 没有两行回退，
+    稿风纪律（超宽句压短）不执法，把物理上限钉进门里而不是钉在稿风里。
+
+    代际感知：单行前提 = 当前模板的 `twoLine = !isZh && …` 守卫。旧代 Subtitle
+    的 zh 可折行（无守卫），本门对其是假阳——点名跳过，拷齐当前模板即自动生效
+    （15 集实测校准：25cf 代 2 集 4 句真溢出；cacb/7faa 旧代跳过后零误报）。"""
+    sub = root / "video" / "src" / "components" / "Subtitle.tsx"
+    if not (sub.is_file() and "twoLine = !isZh" in sub.read_text(encoding="utf-8")):
+        print(
+            "  字幕宽度：本集 Subtitle 为旧代（zh 可折行）——门不适用，点名跳过（拷齐当前模板后自动生效）"
+        )
+        return
+    hits = 0
+    for it in items:
+        units = _cjk_units(it["text"])
+        # round 消半角 0.55 的浮点累积噪声（实测恰 50.0 当量句被 1e-14 顶过界）
+        if round(units, 2) > SUBTITLE_CJK_UNITS_MAX:
+            hits += 1
+            fail(
+                msgs,
+                f"句 {it['id']} 全角当量 {units:.1f} 超字幕单行上限 "
+                f"{SUBTITLE_CJK_UNITS_MAX}（zh 恒单行，30px×1528px 物理预算）"
+                "——拆句或压缩该句，勿赌字号缩放",
+            )
+    print(f"  字幕宽度：{len(items)} 句扫描，超限 {hits} 处")
+
+
 #: 已走 i18n 通道的片段（扫描前剥除，其余字面量照常判定）：带 en 属性的 <L …>
 #: 标签（`<L zh=… />` 缺 en 会回落中文，不剥）；同行含 en 键时 `zh: '…'` 的值
 #: （`t({zh: '…', en: '…'})` 字面对）。`<Label`/`<Loop` 等不以 `<L\s` 开头，不剥。
@@ -1049,6 +1097,7 @@ def main() -> None:
         check_budget(root, items, cfg, msgs, lang)
         if lang == langs.PRIMARY:
             check_reading_traps(items, msgs)
+            check_subtitle_width(root, items, msgs)
         check_pron_marks(items, msgs)
         if args.term_density:
             check_term_density(items, args.terms.split(","), msgs)
@@ -1070,6 +1119,7 @@ def main() -> None:
         check_coverage(items, beats, msgs)
         check_budget(root, items, cfg, msgs)
         check_reading_traps(items, msgs)
+        check_subtitle_width(root, items, msgs)
         check_fade_invariant(root, msgs)
         check_caption_duplication(root, items, msgs)
         if args.term_density:

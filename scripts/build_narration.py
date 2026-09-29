@@ -190,11 +190,17 @@ def _strip_punct(s: str) -> str:
     return CUES_PUNCT_RE.sub(repl, s)
 
 
-def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
-    """读 cues.toml 并落进 items → (块数, say 句数, 错误列表)。无文件 → (0,0,[])。"""
+def apply_cues(
+    root: Path, items: list[dict], warnings: list[str] | None = None
+) -> tuple[int, int, list[str]]:
+    """读 cues.toml 并落进 items → (块数, say 句数, 错误列表)。无文件 → (0,0,[])。
+
+    say 与正文**逐字相同**的 no-op 表演标点（合法但零效果）不进错误列表，追加进
+    可选 out-param `warnings`（不传则丢弃——只影响提醒不影响校验与返回契约）。"""
     cues_path = root / "script" / "narration.cues.toml"
     if not cues_path.is_file():
         return 0, 0, []
+    warn_out: list[str] = [] if warnings is None else warnings
     import tomllib
 
     from tts import parse_emo_vector  # noqa: E402 - 兄弟模块 SSOT 复用（语法校验单一口径）
@@ -284,6 +290,13 @@ def apply_cues(root: Path, items: list[dict]) -> tuple[int, int, list[str]]:
                 f"{cues_path.name}: say.{sid} 发音标注与正文不一致（须原样携带 <字|读音>）"
             )
             continue
+        if say == src:
+            # no-op 表演标点：送合成的 ttsText 与不写这条 say 完全一致——要么改出
+            # 真句读（顿逗/重音/破折号），要么删条目少留假动作（实测一集攒过 8 条）
+            warn_out.append(
+                f"{cues_path.name}: say.{sid} 与正文逐字相同（no-op 表演标点）——"
+                "改出真句读或删除该条"
+            )
         base["ttsText"] = say
         n_say += 1
     for sid, n in tables["take"].items():
@@ -503,13 +516,16 @@ def main() -> None:
     # 配音台本（story 档，主稿专属）：块起点/块情绪/表演标点落进 items；无文件零波及
     n_block = n_say = 0
     if lang == langs.PRIMARY:
-        n_block, n_say, cue_errors = apply_cues(root, items)
+        cue_noops: list[str] = []
+        n_block, n_say, cue_errors = apply_cues(root, items, warnings=cue_noops)
         for e in cue_errors:
             print(f"FAIL  {e}", file=sys.stderr)
         if cue_errors:
             sys.exit(
                 f"配音台本校验失败（{len(cue_errors)} 处）—— 语法见 $T/references/VOICE-CLONING.md §4.5"
             )
+        for w in cue_noops:
+            print(f"WARN  {w}", file=sys.stderr)
 
     # 译稿构建以主稿为基准：对齐门 + 基线锁 + chapters 的 zh 标题底稿
     zh_titles = scene_titles

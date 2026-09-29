@@ -515,6 +515,51 @@ def test_apply_cues_emits_block_and_say(tmp_path):
     assert items[0]["text"] == "想让 AI 自己改进自己，先得让它大量试错。"  # 字幕不动
 
 
+def test_apply_cues_noop_say_collects_warning(tmp_path):
+    """say 与正文逐字相同 = 零效果假动作：合法（不进 errs）但 WARN 可收集（RSI-020）。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    items = [
+        {
+            "id": "p0-01",
+            "scene": "P0",
+            "text": "想让 AI 自己改进自己，先得让它大量试错。",
+        }
+    ]
+    (tmp_path / "script" / "narration.cues.toml").write_text(
+        '[say]\np0-01 = "想让 AI 自己改进自己，先得让它大量试错。"\n',
+        encoding="utf-8",
+    )
+    warns: list[str] = []
+    n_block, n_say, errs = bn.apply_cues(tmp_path, items, warnings=warns)
+    assert errs == [] and (n_block, n_say) == (0, 1)  # no-op 仍计数、不判死
+    assert len(warns) == 1 and "no-op 表演标点" in warns[0] and "p0-01" in warns[0]
+    # 不传 warnings 的旧调用面契约不变：静默丢弃提醒、返回三元组
+    assert bn.apply_cues(tmp_path, [dict(i) for i in items]) == (0, 1, [])
+
+
+def test_apply_cues_real_performance_say_warns_nothing(tmp_path):
+    """反控：真句读表演（标点与正文不同）不产生 no-op WARN（RSI-020 假阳方向钉子）。"""
+    import build_narration as bn
+
+    _write_md(tmp_path)
+    items = [
+        {
+            "id": "p0-01",
+            "scene": "P0",
+            "text": "想让 AI 自己改进自己，先得让它大量试错。",
+        }
+    ]
+    (tmp_path / "script" / "narration.cues.toml").write_text(
+        '[say]\np0-01 = "想让 AI 自己改进自己？先得让它，大量试错！"\n',
+        encoding="utf-8",
+    )
+    warns: list[str] = []
+    _, _, errs = bn.apply_cues(tmp_path, items, warnings=warns)
+    assert errs == [] and warns == []
+
+
 def test_apply_cues_rejects_word_changes(tmp_path):
     import build_narration as bn
 
