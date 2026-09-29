@@ -35,6 +35,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **archify 录制前置预检三合一**（RSI-018）：`record_archify_all.py` 的预检循环（dry-run 与真录共用）新增两查——源 HTML 缺/空 `archify-guided-views-data` 容器即 FAIL（提示产物可能出自删除该模块的 archify 全局 CLI 3.0.0）；sidecar `type` 越出录制器词表即 FAIL（报全词表 + state→lifecycle 映射指路）。病理（上游 negentropy ISSUE-201）：三重静默缺陷（缺 guided-views 嵌入录制空转、html_pattern 失配、type=state 被 argparse 拒绝退出码 2）全部拖到录制中段或覆盖门才红。图型词表提升为 `record_archify.DIAGRAM_TYPES` 模块常量（argparse choices 同源引用、驱动 import——词表只此一份）；references/06 archify 资产标注规范补词表脚注。回归测试 5 条（CLI 级）：三种病理形态 exit 1、真录同样在起浏览器前被拦、健康现场过；前四条修复前全红。
+- **Lottie 资产渲染边界成文**（RSI-019，纯文档）：references/08 事实条新增「Lottie 资产渲染边界」——`@remotion/lottie`（fetch + delayRender）在 chrome-headless-shell + ANGLE 下对特定 JSON 初始化挂死（delayRender 永不解除；按资产触发非全量失效，上游 negentropy ISSUE-202 双集实证）；新 Lottie 资产入片前必须先过 100 帧段渲冒烟（`--frames=<起点>-<起点+100> --concurrency=1`），挂死即弃用该 JSON、换原生 SVG / 运动层实现。references/09 修复回路新增「渲染崩溃分诊」：崩点漂移 + 内存压力表象先按确定性崩点处理——分段 100 帧窗定位 + 禁用法二分，勿先降并发 / 换机器 / 清缓存。
 - story 块合成评审回归二（RSI-011）：自动分块的块数下界不可行时整段退化逐句（14 集语料单句块 619→3，旧可行划分零改写）；台本段超限拆开后子块丢失台本情绪；`，：、——` 结尾被补成 `，。` 双标点（块后缀 `split=v2` 换键）；`--plan` 块口径 ETA 未扣版本库可回收块；整块本地命中不回填版本库；`tts_sample --all-styles` 丢失 story 预设 seed。
 - story 块合成评审回归三（RSI-011）：台本 `[say]` 可悄悄删改发音标注（改为保留标注比对，逐个钉死）；切分失败逐句兜底时每句都补尾垫（改为仅末句）；收引号结尾拼出 `！”。` 双标点（语料 3/2303 句）——后两项块后缀 `split=v3` 换键；`pipeline.py status` 未把 `narration.cues.toml` 计入 narration.json 新鲜度。
 - story 块合成评审回归四（RSI-011）：无台本段自动分块为整段全局 DP，改一个字即可让整段块界平移、整幕重录——改为 6 句定长窗内 DP（1 句尾窗并入前窗），14 集对拍改字爆炸半径 max 34→7 句、p95 11→3，块数 836→858（+2.6%）；台本 `[say]` 去标点比对把数字里的 `.`/`,`/`:` 也当标点剥掉，删小数点（3.5%→35%）能过校验——改为夹在两数字之间的不剥；`[block]` 值写成字符串、`alpha` 非数值时 build 抛 traceback——改为汇入 FAIL 清单。

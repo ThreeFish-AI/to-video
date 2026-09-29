@@ -37,6 +37,11 @@ slug 或该图任一章 label）与场景代码 cue 构成**双向对账**的两
 - **引用句 id 前先对照 narration 实存句集**：跳号句（id 不存在）上建的嵌套窗，tsc 与覆盖门
   全放行、渲染期才抛「未找到句 id」（ISSUE-190 的 p1-23 即此形态）。非 cue 的 `at()`/`dur()`
   句引用现由 `pipeline.py check --check-scenes` 做存在性 FAIL——该门需显式带 flag，不带即不查。
+- **sidecar 图型词表以录制器 `--type` 为准**：`architecture / workflow / sequence /
+  dataflow / lifecycle`——archify 出图词汇里的 **state 型在本管线映射为 lifecycle**。回填
+  `video/public/archify/<slug>.json` 顶层 `type` 时按此词表写：越表值会在录制前置预检
+  （`record_archify_all.py`，dry-run 与真录共用）直接 FAIL（上游 ISSUE-201 实证：type=state
+  曾拖到建图完成数小时后的录制中段才被 argparse 拒绝、退出码 2）。
 
 完整判据（覆盖度 / 丰富度 / 匹配度三维 + 防少算计数断言）以该脚本模块 docstring 为 SSOT，
 本节是分镜侧摘要——改判据先改 docstring，再同步这里，两处表述须同构。
