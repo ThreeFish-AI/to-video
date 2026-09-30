@@ -86,8 +86,9 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
    并过 `refs.py verify`（参考音频不随 git 走）；换机则随行拷贝 tts-store 目录（或以
    `TO_VIDEO_TTS_STORE` 指位），否则此步退化为 2 小时量级整集重合成。
 4. **archify 全量重录（~45 分钟）**：`uv run --with playwright python
-   $T/scripts/record_archify_all.py --project $P`（串行是刻意的：多实例互抢前台焦点会掉帧、
-   静默污染产物）。驱动录后自动对录前 sidecar 的 `capture_fps` 基线逐章比对，**退化超 10%
+   $T/scripts/record_archify_all.py --project $P`（串行是刻意的：多实例互抢 CPU/GPU 资源
+   会掉帧——headless 无前台焦点——静默污染产物；浏览器进程纪律见
+   [PIPELINE.md §十](./PIPELINE.md)）。驱动录后自动对录前 sidecar 的 `capture_fps` 基线逐章比对，**退化超 10%
    即 WARN 点名**，按点名 `--only <slug> --force` 补录——`--min-fps` 与该 WARN 都只告警不失败，
    不处理的降质素材会绿着门进片。录完跑 `$T/scripts/archify_lead.py --project $P`
    （漏跑 = 白闪进片；覆盖门会按图点名 lead 全 0 的图，但只是 WARN）与

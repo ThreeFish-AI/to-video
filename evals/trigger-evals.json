@@ -78,5 +78,13 @@
   {
     "query": "写个脚本批量下载这个 youtube 播放列表里的视频，用 yt-dlp 也行",
     "should_trigger": false
+  },
+  {
+    "query": "guided-learn 刚给我产出了《Mamba 精读与通俗拆解》，直接照这份文档做一支 6 分钟科普视频",
+    "should_trigger": true
+  },
+  {
+    "query": "把这份《Mamba 精读与通俗拆解》再补一节核心争议，改完存回 docs/",
+    "should_trigger": false
   }
 ]

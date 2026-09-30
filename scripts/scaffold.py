@@ -183,7 +183,8 @@ def main() -> int:
     print(f">> 已实例化 {dest}：复制 {copied} 文件 / 渲染 {rendered} 模板\n")
     print("接下来**必须**人工完成的（脚手架刻意不代做）：")
     print(
-        "  1. research/ 取证：Stage ① —— A 型论文走 paper_extract.py，B 型走 source_ledger.py"
+        "  1. research/ 取证：Stage ① —— A 型论文走 paper_extract.py，B 型走 source_ledger.py，"
+        "guided-learn 精读产物走 C 型（research/gl-notes.md，见 01）"
     )
     print("  2. script/planning.md：Stage ② 六节齐，含本集视觉契约（色彩语义）")
     print(

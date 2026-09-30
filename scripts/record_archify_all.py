@@ -14,8 +14,9 @@ sidecar json 入库」），所以**换一个 worktree 就要全量重录一次*
 职责边界（正交分解）：record_archify.py = 机制（怎么录一张图），本驱动 = 策略
 （录哪些、跳过谁、失败了怎么报）。不把 --all 塞进录制器，两者各自单一职责。
 
-为什么串行：录制走 channel="chrome" 起真实浏览器，多实例互抢前台焦点会掉帧；而
---min-fps 只告警不失败，掉帧会**静默**污染产物。本机另有过热导致时序漂移的先例。
+为什么串行：录制走 channel="chrome" 起真实浏览器（headless），多实例互抢 CPU/GPU
+资源会掉帧（headless 无前台焦点，机理见 references/PIPELINE.md §十）；而 --min-fps
+只告警不失败，掉帧会**静默**污染产物。本机另有过热导致时序漂移的先例。
 宁可慢，不要一批悄悄降质的素材。
 """
 
@@ -306,6 +307,11 @@ def main() -> None:
         print(f"  跳过（产物已齐，--force 可强制重录）：{', '.join(skipped)}")
     if failed:
         print(f"  失败：{', '.join(failed)}")
+        print(
+            "  失败图的浏览器已由录制器 finally 兜底关闭；若曾 kill -9 / 裸 kill "
+            "强杀驱动（SIGKILL/SIGTERM 均绕过 finally），按 references/PIPELINE.md"
+            " §十 的检测命令复核无孤儿。"
+        )
 
     lost: set[str] = set()
     if not a.dry_run:
