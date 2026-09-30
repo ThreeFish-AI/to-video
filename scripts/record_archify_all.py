@@ -308,7 +308,7 @@ def main() -> None:
     if failed:
         print(f"  失败：{', '.join(failed)}")
         print(
-            "  失败图的浏览器已由录制器 finally 兜底关闭；若曾 kill -9 / 裸 kill"
+            "  失败图的浏览器已由录制器 finally 兜底关闭；若曾 kill -9 / 裸 kill "
             "强杀驱动（SIGKILL/SIGTERM 均绕过 finally），按 references/PIPELINE.md"
             " §十 的检测命令复核无孤儿。"
         )

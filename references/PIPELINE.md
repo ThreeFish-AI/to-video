@@ -75,7 +75,7 @@ $W/
 ```
 $P/
 ├── README.md               # 本集说明（目录表/复现流水线/视觉契约/许可）
-├── research/<notes>.md   # 事实源（A/B/C 型文件名见 01）：全部口播断言须可回溯至此
+├── research/<notes>.md     # 事实源（A/B/C 型文件名见 01）：全部口播断言须可回溯至此
 ├── script/
 │   ├── planning.md         # 策划案
 │   ├── narration.md        # 逐字稿（唯一维护处，勿改 narration.json）
