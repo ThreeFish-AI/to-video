@@ -116,7 +116,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | ⑨     | `render` + `qa`  | src + audio → draft.mp4 + 抽帧体检                  | 渲染否 / 抽帧是         |
 | ⑩     | `render --final` + `deliver` | 同上 → final.mp4 + 归档副本（前置：⑨ 零 FAIL）  | 否                      |
 
-`status` 为派生式新鲜度表（无状态文件——幂等已由内容摘要提供，再存阶段状态即第二事实源）；`doctor` 自检配置/时序 SSOT/样本指纹/IndexTTS 服务。
+`status` 为派生式新鲜度表（无状态文件——幂等已由内容摘要提供，再存阶段状态即第二事实源）；`doctor` 自检配置/时序 SSOT/样本指纹/IndexTTS 服务与自动化浏览器孤儿（`--clean-browsers` 回收）。
 
 | 脚本 | 用途 | 工程内等价调用 |
 | ---- | ---- | -------------- |
@@ -146,7 +146,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | [scripts/tts_bench.py](../scripts/tts_bench.py) | 合成耗时基准与**测量环境体检**（**运行于 index-tts 环境**，同 tts_server.py）：A/A 复现性判定 + 分段计时 + 换页/分配器诊断。本机漂移已定因为热节流，做任何耗时 A/B 前先用它确认环境合格 | 在 `~/tools/index-tts` 内：`./.venv/bin/python $T/scripts/tts_bench.py --check-only`；A/A 见 [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) |
 | [scripts/tts_resume.py](../scripts/tts_resume.py) | IndexTTS 长跑**自愈编排**（RSI-022，纯标准库）：健康检查（`/health`，`ok` 为真）→ 不健康或客户端失败后**按端口**冷重启服务（kill 判据=作用面，只杀该端口 LISTEN，勿 pkill -f）→ 以**真实退出码**（subprocess.run 直取 returncode，禁 ``cmd \| tail; $?`` 管道尾食）续跑 tts.py（幂等缓存从断点续）；连续 N 轮失败（`--max-restarts`，缺省 3）放弃并非零退出；入口硬门禁客户端依赖（mutagen 缺即大声退出，不进循环——否则首句合成成功、测时长才崩）；`--` 之后参数原样转发 tts.py | 工作区内：`uv run --no-project --with mutagen $T/scripts/tts_resume.py -- --engine indextts --project $P --ref $V/<样本>.wav --expect-ref-sha1 <指纹>`；服务启动命令缺省从 tts.py 同构派生（`--server-cmd` 覆写、根走 `TO_VIDEO_INDEX_TTS_ROOT`）；MPS 水位线优先用 tts_server 自带 flag，env 兜底须配对（RSI-017） |
 | [scripts/record_archify.py](../scripts/record_archify.py) | archify 图解录制器：Playwright 驱动系统 Chrome 的**无头**实例，逐章录 mp4/webm + 末帧 PNG + sidecar（单 browser 跨章复用、每章独立 context；生命周期纪律见 §十） | `uv run --with playwright $T/scripts/record_archify.py <图.html> /dev/null <sidecar.json> --mode chapter --all-chapters --out-dir <目录>`（批量重录走下行） |
-| [scripts/record_archify_all.py](../scripts/record_archify_all.py) | archify 逐图批量重录驱动：**逐图独立子进程**——单图崩溃不拖垮整批 + 每图干净浏览器状态（刻意不复用，见 §十）；含产物新鲜度 / 章节集对齐跳过判据与帧率基线比对 | `uv run --with playwright $T/scripts/record_archify_all.py --project $P` |
+| [scripts/record_archify_all.py](../scripts/record_archify_all.py) | archify 逐图批量重录驱动：默认**进程内跨图复用单 Headless Chrome 实例 + 单图异常隔离重启 supervisor**（`--reuse-browser` 缺省开启，`--no-reuse-browser` 退回逐图独立子进程；见 §十）；含产物新鲜度 / 章节集对齐跳过判据与帧率基线比对 | `uv run --with playwright $T/scripts/record_archify_all.py --project $P` |
 
 中心脚本以 `--project <工程根>` 参数化；工程内 `scripts/*.py` 与工作区 `scripts/*.py` 为薄包装（透传参数、保持原 CLI）。改造/迭代只改 `$T/scripts/`，验证门 = 受影响工程的 `narration.json` / `manifest.json` 字节级不变。
 
@@ -273,16 +273,19 @@ Remotion 对超过 3 人的公司需商业授权（个人/小团队免费）；e
 
 ## 十、浏览器进程纪律
 
-流水线会程序化驱动两类**浏览器进程**（操作系统进程；与 08 / skeleton.toml 的「chrome 层」——UI 外壳排版组件——同名不同物）：archify 录制器（Playwright `channel="chrome"` 起系统 Chrome 的无头实例）与 Remotion render/still（Remotion 自带无头浏览器，渲染完自退）。
+流水线会程序化驱动三类**浏览器动作**（操作系统进程；与 08 / skeleton.toml 的「chrome 层」——UI 外壳排版组件——同名不同物）：Stage ① 信源抓取、Stage ⑥ archify 录制器（Playwright `channel="chrome"` 起系统 Chrome 的无头实例）与 Stage ⑨/⑩ Remotion render/still（Remotion 自带无头浏览器，渲染完自退）。
 
-- **headless 缺省**：程序化浏览器一律 headless——录制器 `headless=True`，Remotion 走自带无头浏览器；确需人工看画面才临时开可见窗口，用完即关。
-- **复用决策（成文，勿反复推翻）**：录制器**跨章单 browser + 每章独立 context**（起停整套 Chrome 是秒级开销、context 是毫秒级，且录制上下文互不污染）；批量器 `record_archify_all.py` **跨图独立子进程**是刻意设计——单图崩溃不拖垮整批 + 每图拿到干净的浏览器状态，不得改成常驻共享 browser。全链路**串行**的理由 = 多实例互抢 **CPU/GPU 资源**会掉帧、`--min-fps` 只告警不失败，掉帧静默污染产物（headless 无前台焦点——旧文档「互抢前台焦点」系错误归因，2026-09 RSI-031 勘误）。
-- **生命周期结构化**（RSI-031）：录制器 `launched_browser` contextmanager 保证 launch/close 成对——`sys.exit`（泵/编码失败）与 Playwright TimeoutError（等待超时）出口一律必关；每章 context 另有 `_close_ctx_quietly` 幂等兜底（正常路径显式关闭的刻意次序不变）。
-- **孤儿两步窄域清理**：孤儿浏览器只可能来自对驱动进程的**不可捕获终止**——`kill -9`（SIGKILL）与裸 `kill`（SIGTERM，无 handler 时同样不执行 finally）（其余出口已由上述 finally 兜住），长批次结束后核对：
+- **三级渠道优先级与 Headless 缺省（RSI-033）**：
+  1. **Tier 1（零浏览器）**：公开静态网页与 API 一律走 `read_url_content` / HTTP 客户端（零进程开销）；
+  2. **Tier 2（Headless Chrome + 单实例跨任务/跨图复用）**：凡需 JS 渲染、DOM 测量或 CDP 录屏的任务，一律强制 `headless=True`（严禁在用户桌面上打开可见 Chrome 窗口），且在同一批次内复用单个 `Browser` 实例、仅按页/按章新建并关闭 `BrowserContext`；
+  3. **Tier 3（受控可见主 Profile 豁免）**：仅当公开页面被强登录墙拦截需复用用户已认证 Chrome 主 Profile（遵循 `Browser Validation Protocol`，严禁在 Sandbox 浏览器跳转 Google 同意屏或要求粘贴凭证）或用户显式要求打开 `remotion studio` 时才允许可见窗口，且提取完必须关闭临时 Tab。
+- **跨图复用与单图异常隔离重启（RSI-033，演进自 RSI-031）**：录制器 `record_archify.py` **跨章单 browser + 每章独立 context**；批量器 `record_archify_all.py` 默认开启**进程内跨图复用单 Headless Chrome 实例**（`--reuse-browser` 默认 `True`，`run_batch_reusing_browser`）——省去 67 张图逐图冷启动 Chrome 进程树（Main + GPU + Renderer + Utility）的系统开销。为兼顾复用效率与故障隔离，批量器内置**单图异常隔离重启 supervisor**：单图抛 `Exception` / `SystemExit` 或 `browser.is_connected()` 断连时，立即 `_close_browser_quietly` 销毁旧实例并在下一张图按需拉起全新 Headless Chrome，防止半死连接传染整批（需退回逐图独立子进程时传 `--no-reuse-browser`）。全链路**串行**的理由不变 = 多实例互抢 **CPU/GPU 资源**会掉帧、`--min-fps` 只告警不失败，掉帧静默污染产物。
+- **生命周期结构化**（RSI-031）：录制器 `launched_browser` contextmanager 保证 launch/close 成对——`sys.exit`（泵/编码失败）与 Playwright TimeoutError（等待超时）出口一律必关；每章 context 另有 `_close_ctx_quietly` 幂等兜底。
+- **自动化孤儿巡检与一键回收（`doctor --clean-browsers`，RSI-033）**：针对 `kill -9` / 外部强杀遗留的 `ppid=1` 孤儿进程（含 Headless Chrome 与自动化可见 Chrome），`pipeline.py doctor` 自动调用 `scan_automation_browsers()` 巡检告警，`pipeline.py --project $P doctor --clean-browsers` 一键向 `ppid==1` 的自动化孤儿主进程发送 `SIGTERM`（在途 `ppid!=1` 实例与用户日常 Chrome 零触碰）。手工复核与窄杀备查：
   ```bash
-  # ① 检测（只列不杀）：双特征 = --headless + playwright 临时 user-data-dir
-  ps axo pid,etime,command | grep -E '[Cc]hrome.*--headless' | grep -F playwright
-  # ② 窄杀（确认列表全是录制器残留后执行）：命中的是主进程与其带同款特征的 helper
-  pkill -f '[Cc]hrome.*--headless.*playwright'
+  # ① 统一巡检与一键回收（推荐，覆盖 --headless 与 playwright/puppeteer/.temp 自动化可见孤儿）
+  uv run --no-project $T/scripts/pipeline.py --project $P doctor --clean-browsers
+  # ② 手工只列不杀备查（双特征 = --headless + playwright 临时 user-data-dir）
+  ps axo pid,ppid,etime,command | grep -E '[Cc]hrome.*(--headless|playwright_chromiumdev_profile-|puppeteer_dev_chrome_profile-)'
   ```
-  安全论证（2026-09-29 实测 argv，Chrome 154 / macOS）：双特征各自排除一类误伤——日常可见 Chrome 的 argv 不含 `--headless`（第一特征即不匹配）；Remotion 自带浏览器的 user-data-dir 无 `playwright` 字样（第二特征不匹配）；首词写 `[Cc]hrome` 字符类是防命令自身文本进 ps 输出造成自匹配的惯用法。**明令严禁 `pkill -f Chrome` / 全局杀**——会连带杀掉用户在用的可见 Chrome（防误杀纪律同 TTS 域按端口窄杀，先例见 [07「服务生命周期」](./07-tts-voice.md)）。孤儿面窄（仅不可捕获终止残留）、两条命令即闭环，刻意不设清理脚本。
+  安全论证：`scan_automation_browsers` 排除所有 `--type=` helper 子进程，且只匹配带 `--headless` / `chrome-headless-shell` 或带自动化临时 profile（`playwright_chromiumdev_profile-` / `puppeteer_dev_chrome_profile-` / `--user-data-dir=.*(\.temp/|/browser-data|/to-video)`）的主进程，且 `clean_orphan_browsers` 仅杀 `ppid==1` 孤儿。**明令严禁 `pkill -f Chrome` / 全局杀**——会连带杀掉用户在用的日常 Chrome。

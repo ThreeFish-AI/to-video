@@ -88,3 +88,128 @@ def test_record_chapters_activation_failure_closes_ctx(tmp_path):
     with pytest.raises(SystemExit, match="激活失败"):
         ra.record_chapters(browser, src, tmp_path, tmp_path, "s", views, a)
     ctx.close.assert_called_once()  # 恰一次 = finally 兜底，无双关
+
+
+def test_run_batch_reuses_single_browser_across_multiple_diagrams(tmp_path):
+    """RSI-033：正常批次跨图共享同一 Headless Chrome 实例，全程只 launch 1 次、close 1 次。"""
+    import record_archify_all as raa
+
+    chromium, browser = _chromium()
+    browser.is_connected.return_value = True
+    seen_browsers = []
+
+    def fake_record(b, html, sidecar, **kwargs):
+        seen_browsers.append(b)
+        return {"slug": kwargs.get("slug") or html.stem}
+
+    tasks = [
+        {
+            "slug": f"d{i}",
+            "html": tmp_path / f"d{i}.html",
+            "sidecar": tmp_path / f"d{i}.json",
+            "out_dir": tmp_path,
+        }
+        for i in (1, 2, 3)
+    ]
+    done, failed = raa.run_batch_reusing_browser(chromium, tasks, record_fn=fake_record)
+    assert done == ["d1", "d2", "d3"]
+    assert failed == []
+    chromium.launch.assert_called_once_with(
+        channel="chrome",
+        headless=True,
+        args=list(ra.BROWSER_LAUNCH_ARGS),
+    )
+    assert seen_browsers == [browser, browser, browser]
+    browser.close.assert_called_once()
+
+
+def test_run_batch_restarts_browser_after_diagram_failure(tmp_path, capsys):
+    """RSI-033：单图抛 SystemExit/Exception 时立即关闭旧 browser、污染既有产物 mtime 防下次静默跳过，并在下张图重拉新实例。"""
+    import json
+    import time
+
+    import record_archify_all as raa
+
+    chromium = MagicMock()
+    b1, b2 = MagicMock(), MagicMock()
+    b1.is_connected.return_value = True
+    b2.is_connected.return_value = True
+    chromium.launch.side_effect = [b1, b2]
+    seen_browsers = []
+
+    # 预先给 d2 造一份旧产物 + 新于产物的 sidecar（模拟 --force 首章早崩前的干净旧现场）
+    old_mp4 = tmp_path / "d2--c1.mp4"
+    old_png = tmp_path / "d2--c1-end.png"
+    old_mp4.write_bytes(b"old")
+    old_png.write_bytes(b"old")
+    d2_views = tmp_path / "d2.views.json"
+    d2_views.write_text(json.dumps([{"id": "c1"}]), encoding="utf-8")
+    d2_sidecar = tmp_path / "d2.json"
+    time.sleep(0.02)
+    d2_sidecar.write_text(
+        json.dumps(
+            {
+                "slug": "d2",
+                "type": "lifecycle",
+                "chapters": [
+                    {"id": "c1", "file": old_mp4.name, "end_still": old_png.name}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert raa.stale_reason(d2_sidecar, d2_views, [old_mp4, old_png]) == ""
+
+    def fake_record(b, html, sidecar, **kwargs):
+        seen_browsers.append(b)
+        if html.stem == "d2":
+            raise SystemExit("FAIL: 模拟单图 CDP 泵超时")
+        return {"slug": html.stem}
+
+    tasks = [
+        {
+            "slug": "d0",
+            "skip": True,
+            "progress_line": "[1/4] 跳过 d0",
+        },
+        {
+            "slug": "d1",
+            "html": tmp_path / "d1.html",
+            "sidecar": tmp_path / "d1.json",
+            "out_dir": tmp_path,
+            "progress_line": "[2/4] 录制 d1",
+        },
+        {
+            "slug": "d2",
+            "html": tmp_path / "d2.html",
+            "sidecar": d2_sidecar,
+            "out_dir": tmp_path,
+            "progress_line": "[3/4] 录制 d2",
+        },
+        {
+            "slug": "d3",
+            "html": tmp_path / "d3.html",
+            "sidecar": tmp_path / "d3.json",
+            "out_dir": tmp_path,
+            "progress_line": "[4/4] 录制 d3",
+        },
+    ]
+    done, failed = raa.run_batch_reusing_browser(chromium, tasks, record_fn=fake_record)
+    assert done == ["d1", "d3"]
+    assert failed == ["d2"]
+    assert chromium.launch.call_count == 2
+    assert seen_browsers == [b1, b1, b2]
+    b1.close.assert_called_once()
+    b2.close.assert_called_once()
+    # 验证 [1/4]..[4/4] 严格按序输出，且 d2 失败后 sidecar 的 type 保住但产物被标记为新于 sidecar
+    out_lines = [
+        ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("[")
+    ]
+    assert out_lines == [
+        "[1/4] 跳过 d0",
+        "[2/4] 录制 d1",
+        "[3/4] 录制 d2",
+        "[4/4] 录制 d3",
+    ]
+    assert raa.prior_type(d2_sidecar) == "lifecycle"
+    assert "新于 sidecar" in raa.stale_reason(d2_sidecar, d2_views, [old_mp4, old_png])

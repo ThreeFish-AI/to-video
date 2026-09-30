@@ -38,7 +38,9 @@
   消除术语。机器面（WARN 级）：评审员圈定本集术语系统后跑
   `uv run --no-project $T/scripts/check_script.py --project $P --term-density --terms 集中度,门槛,计费单位`
   （中文术语声明计入、拉丁字母词自动计入；beat 边界读 narration.json 的
-  beatStart，幕内空行 = 一个 beat）。
+  beatStart，幕内空行 = 一个 beat）；
+- **过程具象化在场（No Rule Without Trace，RSI-032）**：观众被动看视频无法像读文档那样停顿推演——每个核心机制幕（`P1..Pk`）必须至少含 **1 个具体输入走查 beat（Worked Example）或正反破坏性对比 beat**（带具体输入值走完「进入 → 状态变换 → 结果」或「拔掉该设计在哪一步崩」）；整幕仅陈述抽象规则而无具体走查过程，直接判 `REWRITE`；
+- **线性收看零回溯负担（Zero Backward-Lookup，RSI-032）**：视频是单向线性流，严禁跨幕/跨 beat 出现「上面第一种做法」「前面那个参数」等需观众凭记忆回翻的悬空暗指；重提旧概念须用**「具名短词 + 画面母题同步复现」**就地唤醒。
 
 ## C. 译文保真校验（双语集的第三门）
 

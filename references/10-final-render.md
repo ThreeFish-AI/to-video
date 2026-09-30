@@ -2,6 +2,8 @@
 
 > 前置：Stage ⑨ 的自动体检零 FAIL 且人工目检通过；文稿与音频已冻结（B 遍完成）。
 
+**目录**：终渲 · 交付件清单 · 交付归档 · 平台合规 · 换机 / 换 worktree 重建 runbook
+
 ## 终渲
 
 ```bash
@@ -42,7 +44,7 @@ uv run --no-project $T/scripts/captions.py --project $P
 uv run --no-project $T/scripts/pipeline.py --project $P deliver
 ```
 
-**双语集（en 版）**：终渲 `pipeline.py --project $P render --final --lang en` → `out/final.en.mp4`；字幕 `captions --lang en` → `out/captions.en.{srt,vtt}`；归档 `deliver --lang en` → `<根>/<系列id>/<集标题> vN.en.mp4`（**版本号按语言独立**，与 zh 版互不抬号；标题暂仍取 series.json 的 zh 标题——英文标题字段属后续演进）。完成行按语言分打（`>> render 完成（en，…s）`），某语言失败不打该语言完成行。Studio 预览英文版需 `remotion studio --props='{"lang":"en"}'`。
+**双语集（en 版）**：终渲 `pipeline.py --project $P render --final --lang en` → `out/final.en.mp4`；字幕 `captions --lang en` → `out/captions.en.{srt,vtt}`；归档 `deliver --lang en` → `<根>/<系列id>/<集标题> vN.en.mp4`（**版本号按语言独立**，与 zh 版互不抬号；标题暂仍取 series.json 的 zh 标题——英文标题字段属后续演进）。完成行按语言分打（`>> render 完成（en，…s）`），某语言失败不打该语言完成行。Agent 自动化抽帧自检一律走 Headless `qa_frames.py` / `remotion still`（严禁自动拉起可见浏览器窗口）；仅当用户显式要求人工交互预览英文版时才运行 `remotion studio --props='{"lang":"en"}'`。
 
 - [ ] `out/final.mp4`（1080p30，h264/aac192K；`remotion ffmpeg -i` 核流摘要）
 - [ ] `out/captions.srt` + `out/captions.vtt`
@@ -60,7 +62,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver
 - **配置渠道**：`--root ~/Documents/video`（一次性 / prompt 指定）或 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video`（持久统一配置，可写 shell profile / Claude Code settings env）。根路径是机器属性，不写进受版本控制的 toml（同 tts.server / tts-store 立场）；两渠道皆无时 deliver 大声退出并列出用法。
 - **agent 契约**：用户在 prompt 中给出目标路径时，`render --final` 成功后**显式**执行 `pipeline.py --project $P deliver --root <路径>`，并建议用户以 env 固化。`render --final` 刻意不自动串联 deliver——本规格把编排层 `>> render 完成` 标记钉为判完成唯一信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号。
 - 先 `deliver --dry-run` 预览目的地与下一版本号，确认后再实投。
-- **收尾关服务**：deliver 成功后，按 [07-tts-voice.md](./07-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时）——制片会话不留常驻服务。
+- **收尾关服务与浏览器终扫（RSI-033）**：deliver 成功后，按 [07-tts-voice.md](./07-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时），并执行一次 `uv run --no-project $T/scripts/pipeline.py --project $P doctor --clean-browsers`（详见 [PIPELINE.md §十](./PIPELINE.md)）回收任何 `ppid=1` 的自动化 Chrome 孤儿进程（含 Headless 与自动化可见实例，不动用户日常 Chrome）——制片会话不留常驻服务、不留浏览器孤儿进程。
 
 ## 平台合规（发布前自查）
 

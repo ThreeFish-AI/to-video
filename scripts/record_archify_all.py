@@ -24,18 +24,112 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import config
-from record_archify import DIAGRAM_TYPES, find_remotion, read_views
+from playwright.sync_api import sync_playwright
+from record_archify import (
+    BROWSER_LAUNCH_ARGS,
+    DIAGRAM_TYPES,
+    find_remotion,
+    read_views,
+    record_one_diagram,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import PROJECT  # noqa: E402 - 惰性锚（取代 parents[4] 数层数）
+import paths  # noqa: E402 - WORKSPACE/PROJECT 惰性解析，import 期不触发 workspace_root()
 
-REPO_ROOT = PROJECT
 RECORDER = Path(__file__).resolve().parent / "record_archify.py"
+
+
+def _close_browser_quietly(browser) -> None:
+    """异常/重启路径关 browser：吞掉已断连/已关异常，不掩盖原始报错。"""
+    if browser is None:
+        return
+    try:
+        browser.close()
+    except Exception:
+        pass
+
+
+def _taint_on_failure(sidecar: Path, out_dir: Path) -> None:
+    """录制失败时污染首个既有产物 mtime，使下次不带 --force 重跑被 stale_reason 捕获。
+
+    不删 sidecar.json：删除会抹去人工审定的 type（prior_type 无法继承）与 fps_baseline；
+    仅刷新一个既有产物的 mtime 使其新于 sidecar，既保住元数据又防下次被静默当作已齐跳过。
+    """
+    if not sidecar.is_file():
+        return
+    for p in expected_products(sidecar, out_dir):
+        if p.is_file():
+            try:
+                os.utime(p, None)
+                break
+            except OSError:
+                pass
+
+
+def run_batch_reusing_browser(
+    chromium,
+    tasks: list[dict],
+    record_fn=record_one_diagram,
+) -> tuple[list[str], list[str]]:
+    """单 Headless Chrome 跨图复用 + 单图异常隔离重启 supervisor（RSI-033）。
+
+    进程内共享单个 headless browser、每章独立 BrowserContext，省去逐图冷启动浏览器进程树
+    的开销；单图抛 Exception / SystemExit 或连接断开时立即关闭旧实例并在下张图按需重拉，
+    防止半死浏览器状态跨图传染。
+    """
+    done: list[str] = []
+    failed: list[str] = []
+    browser = None
+    try:
+        for task in tasks:
+            if line := task.get("progress_line"):
+                print(line)
+            if task.get("skip"):
+                continue
+            slug = task["slug"]
+            if browser is not None and hasattr(browser, "is_connected"):
+                try:
+                    if not browser.is_connected():
+                        _close_browser_quietly(browser)
+                        browser = None
+                except Exception:
+                    _close_browser_quietly(browser)
+                    browser = None
+            if browser is None:
+                browser = chromium.launch(
+                    channel="chrome",
+                    headless=True,
+                    args=list(BROWSER_LAUNCH_ARGS),
+                )
+            try:
+                record_fn(
+                    browser,
+                    task["html"],
+                    task["sidecar"],
+                    out_dir=task["out_dir"],
+                    views_file=task.get("views_file"),
+                    slug=slug if task.get("overridden") else None,
+                    diagram_type=task.get("diagram_type") or None,
+                )
+                done.append(slug)
+            except (Exception, SystemExit) as exc:
+                failed.append(slug)
+                _taint_on_failure(task["sidecar"], task["out_dir"])
+                print(
+                    f"  ✗ {slug} 失败（{exc}）——隔离重启 browser 后继续下一图",
+                    file=sys.stderr,
+                )
+                _close_browser_quietly(browser)
+                browser = None
+    finally:
+        _close_browser_quietly(browser)
+    return done, failed
 
 
 def prior_type(sidecar: Path) -> str:
@@ -145,6 +239,12 @@ def main() -> None:
         "--force", action="store_true", help="产物已齐也重录（缺省跳过已齐的图）"
     )
     ap.add_argument("--dry-run", action="store_true", help="只做映射与预检，不起浏览器")
+    ap.add_argument(
+        "--reuse-browser",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="进程内跨图复用单个 Headless Chrome 实例（默认开启；传 --no-reuse-browser 退回逐图独立子进程）",
+    )
     a = ap.parse_args()
 
     root = Path(a.project).resolve()
@@ -164,7 +264,7 @@ def main() -> None:
     if cfg_fails:
         sys.exit("FAIL: pipeline.toml 配置有误：\n      " + "\n      ".join(cfg_fails))
     arch = cfg.get("archify", {})
-    html_dir = REPO_ROOT / arch.get("html_dir", config.default("archify.html_dir"))
+    html_dir = paths.PROJECT / arch.get("html_dir", config.default("archify.html_dir"))
     pattern = arch.get("html_pattern", config.default("archify.html_pattern"))
     overrides = arch.get("html_overrides", config.default("archify.html_overrides"))
 
@@ -241,12 +341,16 @@ def main() -> None:
             sys.exit(f"FAIL: {msg}\n      此处预检，免得录完才失败。")
 
     done, skipped, failed = [], [], []
+    batch_tasks: list[dict] = []
     types_before = diagram_types(archify_dir, [s for s, _h, _o in plan])
     # 帧率基线（录前快照 = 检出版本的 committed sidecar）：录后逐章比对，
     # 退化超 10% 点名补录——screencast 帧率受前台聚焦/负载影响，静默退化会让
     # trimBefore 掐点整体漂移，而既有 --min-fps 18 只拦「绝对低」不拦「相对掉」。
     fps_baseline = {s: chapter_fps(archify_dir / f"{s}.json") for s, _h, _o in plan}
-    print(f"计划重录 {len(plan)} 图（串行）；源图目录 {html_dir}")
+    mode_desc = (
+        "串行·跨图复用单 Headless Chrome" if a.reuse_browser else "串行·逐图独立进程"
+    )
+    print(f"计划重录 {len(plan)} 图（{mode_desc}）；源图目录 {html_dir}")
     for i, (slug, html, overridden) in enumerate(plan, 1):
         sidecar = archify_dir / f"{slug}.json"
         views = views_dir / f"{slug}.json"
@@ -261,7 +365,13 @@ def main() -> None:
             and all(p.is_file() and p.stat().st_size > 0 for p in products)
         ):
             skipped.append(slug)
-            print(f"[{i}/{len(plan)}] 跳过 {slug}（{len(products)} 个产物已齐）")
+            skip_line = f"[{i}/{len(plan)}] 跳过 {slug}（{len(products)} 个产物已齐）"
+            if a.reuse_browser and not a.dry_run:
+                batch_tasks.append(
+                    {"slug": slug, "skip": True, "progress_line": skip_line}
+                )
+            else:
+                print(skip_line)
             continue
 
         cmd = [
@@ -283,22 +393,52 @@ def main() -> None:
         if overridden:
             cmd += ["--slug", slug]
         # 审定图型必须活过重录：嗅探对 14/67 张无效，不透传即静默丢型。
-        if t := prior_type(sidecar):
-            cmd += ["--type", t]
+        saved_type = prior_type(sidecar)
+        if saved_type:
+            cmd += ["--type", saved_type]
 
         label = f"{slug}（例外源图 {html.name}）" if overridden else slug
         why = f"；{gap}" if gap else ""
-        print(f"[{i}/{len(plan)}] 录制 {label}{why}")
+        progress_line = f"[{i}/{len(plan)}] 录制 {label}{why}"
         if a.dry_run:
+            print(progress_line)
             done.append(slug)
             continue
-        # 逐图独立进程：单图崩溃不拖垮整批，且每张图拿到干净的浏览器状态。
-        r = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+        if a.reuse_browser:
+            batch_tasks.append(
+                {
+                    "slug": slug,
+                    "skip": False,
+                    "html": html,
+                    "sidecar": sidecar,
+                    "out_dir": archify_dir,
+                    "views_file": views if views.is_file() else None,
+                    "overridden": overridden,
+                    "diagram_type": saved_type,
+                    "progress_line": progress_line,
+                }
+            )
+            continue
+        # 退回模式（--no-reuse-browser）：逐图独立进程。
+        print(progress_line)
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=False)
         if r.returncode == 0:
             done.append(slug)
         else:
             failed.append(slug)
+            _taint_on_failure(sidecar, archify_dir)
             print(f"  ✗ {slug} 退出码 {r.returncode}", file=sys.stderr)
+
+    if batch_tasks:
+        if any(not t.get("skip") for t in batch_tasks):
+            with sync_playwright() as p:
+                b_done, b_failed = run_batch_reusing_browser(p.chromium, batch_tasks)
+                done.extend(b_done)
+                failed.extend(b_failed)
+        else:
+            for t in batch_tasks:
+                if line := t.get("progress_line"):
+                    print(line)
 
     verb = "预演" if a.dry_run else "录成"
     print(f"\n{verb} {len(done)} · 跳过 {len(skipped)} · 失败 {len(failed)}")
@@ -309,8 +449,9 @@ def main() -> None:
         print(f"  失败：{', '.join(failed)}")
         print(
             "  失败图的浏览器已由录制器 finally 兜底关闭；若曾 kill -9 / 裸 kill "
-            "强杀驱动（SIGKILL/SIGTERM 均绕过 finally），按 references/PIPELINE.md"
-            " §十 的检测命令复核无孤儿。"
+            "强杀驱动（SIGKILL/SIGTERM 均绕过 finally），运行 "
+            "`uv run --no-project $T/scripts/pipeline.py --project $P doctor --clean-browsers` "
+            "一键回收孤儿进程（详见 references/PIPELINE.md §十）。"
         )
 
     lost: set[str] = set()

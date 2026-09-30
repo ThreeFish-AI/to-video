@@ -497,3 +497,32 @@
 **处理方式**：record_archify.py 提取 launched_browser contextmanager（launch/close 结构化，SystemExit/TimeoutError 路径必关）+ 每章 context try/finally 幂等兜底；新增 tests/test_record_archify_session.py（importorskip playwright + Mock 假 browser/context，断言异常路径 close 仍被调、正常路径恰一次；--with playwright 专项跑入 PR 记录）；record_archify_all.py 失败汇总后补孤儿复核指引 + 串行理由勘误；PIPELINE.md 新增「浏览器进程纪律」小节（headless 缺省 / 复用既定决策 / Remotion 无头自退 / 两步窄域清理与防误杀禁令）+ §三 脚本表补 record_archify*.py 两行；10:88-90 勘误指向新小节；SKILL.md 运行时陷阱加一行指针；README 依赖表补 playwright 与系统 Chrome。[PR #27](https://github.com/ThreeFish-AI/to-video/pull/27)，commit `1aba7a8`。
 
 **后续防范**：① 浏览器生命周期一律 contextmanager/finally 结构化，禁止裸 close 顺序语句；② 进程清理必须窄域双特征匹配（headless + 临时 profile），严禁全局 pkill Chrome；③ 文档归因须与代码实况对拍（headless 无前台焦点——错误机理描述会诱导错误优化）。
+
+## RSI-032 C 型信源（guided-learn）止步于 Stage ① 取证：类比规则与 GL 四硬律冲突，缺跨模态过程具象化与被动线性收看门禁
+
+**表因**：用户提出（2026-09-30）——RSI-030 虽在 Stage ① 引入了 C 型信源（`research/gl-notes.md` 冻结快照与穿透核查），但下游 Stage ②–⑥ 对如何将《{学习目标} 精读与通俗拆解》从「主动阅读文档」转化为「具有画面感和过程具象化、让小白读者被动收看就能轻松理解的科普视频」存在三处断层：① **类比规则冲突**：guided-learn（`lecture-format.md §1.1`）强制执行类比四硬律（难点准入 ≤5 个、一物一喻、严禁升格为贯穿全篇的剧场/世界观、1–3 句即止并带失配拦截），而 `references/02-planning.md:9` 却硬性要求「一个贯穿全片的拟人化/比喻体系」、`03-narration.md:126` 要求「每个新概念配比喻」，诱导制片时推翻 GL 已核验的局部类比并强造失配大剧场；② **过程具象化映射缺位**：`01 §七` 仍引用 GL 已废除的「PREP 叙事」，且未规定 GL 的「三拍叙事（白话→机制→走查实例）」「动手实验室破坏性实验」「实证数字表」「适用边界」如何映射为分镜动画，压字数时极易删掉具体输入走查（Worked Example）与反例，只剩抽象规则配静态卡片；③ **被动收看门禁缺失**：`04 B 节` 缺「具象走查在场性」与「线性收看零回溯负担」判据，且未打通 GL 已产出的 `archify` 图与 `sources.md` 台账的直通复用。
+
+**根因**：RSI-030 仅解决了「信源真实性回溯（Veracity）」单维，未覆盖「跨模态教学转化（Pedagogical & Visual Translation）」维度；`02/03` 的比喻条款写于 GL 类比四硬律定型之前，两仓规范演进产生 Split-Brain。
+
+**定性**：非阻断改进（用户点名启动）。
+
+**方案比选**：① 仅在 01 补几句提示（否决：02/03 的全片剧场硬约束仍在，下游照旧违背一物一喻，且 04/06 无门禁抓手）；② 跨阶段正交对齐（采纳：01 §一/二/七补齐 GL 台账/类比表/archify 资产承接与五大构件具象化映射；02/03 改为「视觉母题统摄 + 局部类比按难点准入/继承 GL 一物一喻」并确立「宁砍旁支广度、不砍具象走查深度」；04 B 节新增「过程具象化在场」与「线性收看零回溯负担」两判据；06 新增过程具象化四定式）。
+
+**处理方式**：更新 `references/01-source-extraction.md`（§一/二/七 与 Stage ① 浏览器通道纪律）、`references/02-planning.md`（叙事策略与取舍原则）、`references/03-narration.md`（术语降落与三拍走查）、`references/04-verification.md`（B 节被动线性收看五判据）、`references/06-storyboard.md`（GL 构件动态具象化四定式）；扩展 `tests/test_source_types.py` 锚定 C 型跨模态映射与类比继承不变量。
+
+**后续防范**：① 跨 Skill 协作不仅对齐文件格式（语法层），必须同步核心概念约束（语义层：如类比四硬律 vs 全片剧场）；② 压缩长文档为视频逐字稿时，Worked Example（具体输入走查）与破坏性反例属不可裁减的骨架，只许裁旁支章节。
+
+## RSI-033 批量录制 67 图冷启动 67 次 Chrome、可见自动化孤儿进程漏检且无 doctor/Stage ⑩ 终扫闭环
+
+**表因**：用户提出（2026-09-30）——① `record_archify_all.py` 虽在单图内部跨章复用 browser，但跨图仍逐图 `subprocess.run` 冷启动全新 Chrome（如 67 张图连续冷启动并销毁 67 次 macOS Chrome 主进程 + GPU Helper + 67 个临时 profile），系统开销极大；② Stage ① 动态网页取证与 Stage ⑥/⑧/⑨ 预览缺少显式的「三档浏览器通道优先级」，Agent 易调 `open`、`remotion studio` 或非无头工具在桌面弹出多个可见 Chrome 窗口；③ `PIPELINE.md §十` 的孤儿检测命令 `grep -E '[Cc]hrome.*--headless' | grep -F playwright` 只认 `--headless` 且必须含 `playwright`，导致**带自动化 profile 的可见 Chrome 孤儿进程**、Remotion `chrome-headless-shell` 残留及 Stage ① `--dump-dom` 孤儿进程全部漏检，且 `pipeline.py doctor` 与 `10-final-render.md` 收尾均无自动体检与窄域回收入口。
+
+**根因**：① `record_archify_all.py` 将「故障隔离（单图崩不拖垮整批）」与「进程边界（每图新建 OS 进程）」耦合——实际上 Playwright 的状态隔离单位是毫秒级的 `BrowserContext`，单 `Browser` 进程配合每图异常捕获 + 崩溃时按需重启 `Browser`，即可兼得 1 次冷启动复用与 100% 故障隔离；② 孤儿进程判据将 `--headless` 当作必要条件而非特征之一，忽略了 `playwright_chromiumdev_profile-` / `puppeteer_dev_chrome_profile-` / `.temp/.*browser-data` 等沙箱 profile 特征本身即足以与用户日常 Chrome 100% 区分。
+
+**定性**：非阻断改进（用户点名启动；含系统资源开销优化与可见孤儿进程漏检修复）。
+
+**方案比选**：跨图复用三案——① 维持逐图子进程（否决：N 图 N 次冷启动 Chrome，违背复用减负要求）；② 裸共享单 Browser 无恢复（否决：任一图触发 Target closed 或连接断开会连坐后续全部图，违背 RSI-031 历史隔离初衷）；③ 进程内共享单 Headless Browser + 每章独立 Context + 单图异常捕获与 Browser 断连自愈重拉，并保留 `--no-reuse-browser` 逃生舱（采纳：正常批次 N 图仅启动 1 次 Chrome，异常时单图隔离并自动换新 Browser 续跑，显式权衡并升级 RSI-031 的跨图策略）。孤儿清理两案——① 仅更新文档 shell 命令（否决：无自动体检入口易被遗忘）；② `pipeline.py doctor` 内置 `scan_automation_browsers`（覆盖无头与可见自动化沙箱实例、区分 `ppid=1` 确认孤儿与在途实例）+ `doctor --clean-browsers` 按 PID 精准 `SIGTERM` 回收 `ppid=1` 孤儿 + Stage ⑩ 收尾必跑终扫（采纳：零误伤用户日常 Chrome，工具化闭环）。
+
+**处理方式**：`record_archify.py` 提炼 `BROWSER_LAUNCH_ARGS` 与 `record_one_diagram()` 单图入口；`record_archify_all.py` 新增 `run_batch_reusing_browser()`（默认 `--reuse-browser`，支持 `--no-reuse-browser` 回退）；`pipeline.py` 新增 `scan_automation_browsers()` / `clean_orphan_browsers()` 并接入 `cmd_doctor` 与 `doctor --clean-browsers`；同步 `references/PIPELINE.md §十`、`references/10-final-render.md` 与 `CHANGELOG.md`；扩展 `tests/test_record_archify_session.py` 与 `tests/test_stages.py`。
+
+**后续防范**：① 性能优化触碰既有隔离决策时，通过「细粒度沙箱（Context）+ 监督器自愈重启（Supervisor Restart）」同时满足低开销与故障隔离；② 孤儿浏览器识别一律以「自动化沙箱特征（profile/headless-shell/headless）× 主进程（非 `--type=`）× 父进程状态（`ppid=1`）」三维判定，兼顾无头与可见孤儿且永不触碰用户日常主 profile。
+

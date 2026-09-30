@@ -1058,3 +1058,86 @@ def test_status_reports_per_language_and_lock(monkeypatch, tmp_path, capsys):
     )
     assert pipeline.cmd_status(tmp_path, {"narration": {"langs": ["zh", "en"]}}) == 0
     assert "主稿已改" in capsys.readouterr().out
+
+
+def test_scan_and_clean_orphan_browsers_respects_safety_boundaries():
+    """RSI-033：只识别 Headless 与自动化可见 Chrome 主进程，只杀 ppid==1 孤儿，绝不触碰日常个人 Chrome（含 Browser Validation Protocol 调试端口）与在途实例。"""
+    import signal
+    import pipeline
+
+    fake_ps = "\n".join(
+        [
+            # 1. 用户日常个人 Chrome（ppid=1，但无 --headless 且无自动化临时 profile）——绝不命中
+            "1001    1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --profile-directory=Default",
+            # 2. 用户按 Browser Validation Protocol 启用了 --remote-debugging-port=9222 的日常 Chrome 主 profile——绝不命中（白名单保护）
+            "1002    1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --remote-debugging-port=9222 --user-data-dir=/Users/demo/Library/Application Support/Google/Chrome",
+            # 3. Renderer/GPU 子进程（含 --type=）——绝不命中
+            "1003    1 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper --type=renderer --headless",
+            # 4. chrome_crashpad_handler 辅助进程（无 --type= 但非主浏览器 exe）——绝不命中
+            "1004    1 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/134.0.0.0/Helpers/chrome_crashpad_handler --monitor-self-annotation=ptype=crashpad-handler",
+            # 5. 用户在终端执行的 grep / zsh / python 命令含有 'Google Chrome --headless' 文本——绝不命中
+            "1005    1 /bin/zsh -c grep 'Google Chrome --headless'",
+            # 6. 在途 Headless 自动化主进程（ppid=4321 != 1）——命中为 active，绝不清理
+            "1006 4321 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless --user-data-dir=/var/folders/xx/playwright_chromiumdev_profile-live",
+            # 7. 孤儿 Headless 主进程（ppid=1）——命中且应被 SIGTERM 回收
+            "1007    1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless --user-data-dir=/var/folders/xx/playwright_chromiumdev_profile-orphan1",
+            # 8. 孤儿自动化可见 Chrome 主进程（ppid=1，无 --headless，但带临时 /tmp 目录）——命中且应被 SIGTERM 回收
+            "1008    1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=/tmp/browser-data-demo",
+        ]
+    )
+    found = pipeline.scan_automation_browsers(fake_ps)
+    by_pid = {p["pid"]: p for p in found}
+    assert set(by_pid) == {1006, 1007, 1008}
+    assert by_pid[1006]["orphan"] is False
+    assert by_pid[1007]["orphan"] is True and by_pid[1007]["kind"] == "headless"
+    assert (
+        by_pid[1008]["orphan"] is True and by_pid[1008]["kind"] == "visible-automation"
+    )
+
+    killed: list[tuple[int, int]] = []
+    cleaned = pipeline.clean_orphan_browsers(
+        found, kill_fn=lambda pid, sig: killed.append((pid, sig))
+    )
+    assert [p["pid"] for p in cleaned] == [1007, 1008]
+    assert killed == [(1007, signal.SIGTERM), (1008, signal.SIGTERM)]
+
+
+def test_doctor_clean_browsers_flag_cleans_orphans(monkeypatch, tmp_path, capsys):
+    """RSI-033：doctor 缺省对孤儿进程打 ⚠️ 告警，传 clean_browsers=True 时一键回收并打 ✅。"""
+    import json
+    import pipeline
+
+    (tmp_path / "video" / "src").mkdir(parents=True)
+    (tmp_path / "video" / "src" / "timing.json").write_text(
+        json.dumps(
+            {
+                "fps": 30,
+                "sentenceGapSec": 0.32,
+                "sceneGapSec": 0.9,
+                "leadInSec": 0.6,
+                "tailSec": 2.0,
+                "sceneCrossFadeSec": 0.4,
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_orphans = [
+        {
+            "pid": 2001,
+            "ppid": 1,
+            "kind": "headless",
+            "orphan": True,
+            "cmd": "Google Chrome --headless",
+        }
+    ]
+    monkeypatch.setattr(pipeline, "scan_automation_browsers", lambda: fake_orphans)
+    monkeypatch.setattr(pipeline, "clean_orphan_browsers", lambda procs: list(procs))
+
+    assert pipeline.cmd_doctor(tmp_path, {}, None, clean_browsers=False) == 0
+    out_warn = capsys.readouterr().out
+    assert "检测到自动化浏览器孤儿进程 1 个" in out_warn
+    assert "doctor --clean-browsers" in out_warn
+
+    assert pipeline.cmd_doctor(tmp_path, {}, None, clean_browsers=True) == 0
+    out_clean = capsys.readouterr().out
+    assert "已清理自动化浏览器孤儿进程 1 个" in out_clean

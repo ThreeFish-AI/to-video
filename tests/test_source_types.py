@@ -73,3 +73,29 @@ def test_skill_router_has_c_type_entry():
         "SKILL.md 任务表缺「GL 精读产物成片」入口——上游 guided-learn 产物无路由，"
         "Stage ① 会被迫重复精读（RSI-030 表因）"
     )
+
+
+def test_guided_learn_process_concretization_bridges():
+    """RSI-032：GL 伴生资产直通承接、五元过程具象化映射、被动收看双门、成文护栏与四大分镜/动效定式须在位。"""
+    s01 = (REFERENCES / "01-source-extraction.md").read_text(encoding="utf-8")
+    s02 = (REFERENCES / "02-planning.md").read_text(encoding="utf-8")
+    s04 = (REFERENCES / "04-verification.md").read_text(encoding="utf-8")
+    s05 = (REFERENCES / "05-prose-refinement.md").read_text(encoding="utf-8")
+    s06 = (REFERENCES / "06-storyboard.md").read_text(encoding="utf-8")
+    s08 = (REFERENCES / "08-remotion-implementation.md").read_text(encoding="utf-8")
+
+    assert "GL 伴生资产直通承接" in s01 and "过程具象化" in s01
+    assert "视觉母题全片统摄" in s02 and "Worked Example" in s02
+    assert "No Rule Without Trace" in s04 and "Zero Backward-Lookup" in s04
+    assert "No Rule Without Trace" in s05 and "Worked Example" in s05
+    assert "过程具象化四大定式动效落地" in s08
+    for pattern in (
+        "全景坐标先行",
+        "机制必演单步流转",
+        "反例必演消融对比",
+        "数字必带基线标尺",
+    ):
+        assert pattern in s06, f"06-storyboard.md 缺少过程具象化定式：{pattern}"
+        assert pattern in s08, (
+            f"08-remotion-implementation.md 缺少过程具象化动效映射：{pattern}"
+        )
