@@ -482,6 +482,8 @@
 
 合并前评审（2026-09-30）：穿透抽查口径的出处订正——01「三、穿透抽查」与 CHANGELOG 原写「口径沿 ④ 验收」，但 04 并无该抽样口径（A 节是逐句全扫 + 锚点停在事实源笔记、不穿透原始信源），改为数字全量沿 04 A 节「数字……逐一核对」加严为穿透、非数字抽样沿用本规格 A/B 型验收的抽 10 条（01 与 CHANGELOG 两处同步）。
 
+合并前评审二（2026-09-30）：02:11 与 03:126 的「B/C 型对应素材节」半悬空——C 型在 01 §七「素材映射」有锚点，B 型六节无素材节定义，执行者按指引回 01 找不到落点。订正为三型各有实锚：A 型 paper-notes 第 4 段、B 型 source-notes 叙事正文（B 轨）、C 型 01 §七「素材映射」（02 与 03 两处同步）。
+
 ## RSI-031 录制器异常路径泄漏整套系统 Chrome：browser.close 是顺序语句非结构保证，全仓无浏览器纪律成文
 
 **表因**：用户提出（2026-09-29）——要求「能用 Headless Chrome 就用 Headless、用完的孤儿浏览器进程及时清理、能复用则复用」。核查：record_archify.py 是全仓唯一程序化驱动浏览器的脚本（Playwright channel="chrome" headless=True，:616-621，跨章复用单 browser——headless 与复用已达标），但 `browser.close()`（:628）只在正常返回路径执行：pump_until 超时 sys.exit（:684）、encode_frames 三处 sys.exit（:226/:230/:292）、wait_for_selector/wait_for_function 15s 超时抛 TimeoutError（:646/:705）、激活失败（:716 仅此一处先关再退）等路径全部跳过——每章 context（new_ctx :643/:698）异常路径同样泄漏；长批次（record_archify_all 逐图独立子进程 ~45 分钟）一次超时即残留整套 headless 系统 Chrome 常驻内存。文档层全仓无「headless 优先/用后清理/复用」任何表述，且 record_archify_all.py:17-19 与 10-final-render.md:88-90 的串行理由「多实例互抢前台焦点会掉帧」与 headless=True 矛盾（真实机理是 CPU/GPU 资源争抢，错误归因会诱导未来错误优化）。
