@@ -34,6 +34,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import signal
 import subprocess
 import sys
 import time
@@ -301,8 +303,137 @@ def cmd_status(root: Path, _cfg: dict, langs: list[str] | None = None) -> int:
     return 0
 
 
-def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> int:
-    """环境自检：配置、时序 SSOT、参考样本、IndexTTS 服务、node_modules。"""
+_BROWSER_MAIN_EXES = frozenset(
+    {
+        "Google Chrome",
+        "Google Chrome for Testing",
+        "Chromium",
+        "chrome-headless-shell",
+        "chrome",
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+    }
+)
+
+_VISIBLE_AUTOMATION_RE = re.compile(
+    r"(?:playwright_chromiumdev_profile-|puppeteer_dev_chrome_profile-|"
+    r"--enable-automation\b|"
+    r"--user-data-dir=(?:['\"]?)(?:/tmp/|/private/tmp/|/var/folders/|[^\s]*(?:\.temp/|/browser-data|/to-video)))"
+)
+
+
+def scan_automation_browsers(ps_text: str | None = None) -> list[dict]:
+    """扫描系统中的自动化 Chrome/Chromium 主进程（含 Headless 与自动化可见实例，RSI-033）。
+
+    安全边界（绝不误伤用户日常 Chrome）：
+      1. 必须校验首个可执行文件名为 `_BROWSER_MAIN_EXES`，并排除 `--type=` / `Helper` /
+         `crashpad` 子进程及包含关键字的 shell/grep/python 命令；
+      2. 仅匹配两类自动化特征主进程：
+         - `headless`：带 `--headless` 或 `chrome-headless-shell`；
+         - `visible-automation`：未带 `--headless`，不含用户个人资料目录
+           （`Library/Application Support/Google/Chrome` / `--profile-directory=`），且带
+           Playwright/Puppeteer 临时 profile、`--enable-automation` 或指向 `/tmp/`、
+           `/var/folders/`、`.temp/`、`/browser-data`、`/to-video` 的 `--user-data-dir=`。
+      用户日常个人 Chrome（即使按 Browser Validation Protocol 开启 `--remote-debugging-port`）恒不命中。
+    """
+    if ps_text is None:
+        try:
+            r = subprocess.run(
+                ["ps", "-axo", "pid=,ppid=,args="],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if r.returncode != 0:
+                return []
+            ps_text = r.stdout
+        except (OSError, subprocess.SubprocessError):
+            return []
+
+    found: list[dict] = []
+    for raw in ps_text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        try:
+            pid, ppid = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        cmd = parts[2]
+        if "--type=" in cmd or "Helper" in cmd or "crashpad" in cmd:
+            continue
+        exe_name = Path(cmd.split(" -", 1)[0].strip()).name
+        if exe_name not in _BROWSER_MAIN_EXES:
+            continue
+        if "--headless" in cmd or exe_name == "chrome-headless-shell":
+            kind = "headless"
+        elif (
+            "Library/Application Support/Google/Chrome" not in cmd
+            and "--profile-directory=" not in cmd
+            and _VISIBLE_AUTOMATION_RE.search(cmd)
+        ):
+            kind = "visible-automation"
+        else:
+            continue
+        found.append(
+            {
+                "pid": pid,
+                "ppid": ppid,
+                "kind": kind,
+                "orphan": ppid == 1,
+                "cmd": cmd,
+            }
+        )
+    return found
+
+
+def clean_orphan_browsers(
+    procs: list[dict] | None = None,
+    kill_fn=os.kill,
+) -> list[dict]:
+    """仅对 ppid==1 的自动化浏览器孤儿主进程发 SIGTERM（假死逾 0.3s 升级 SIGKILL；在途 ppid!=1 与日常 Chrome 零触碰）。"""
+    candidates = procs if procs is not None else scan_automation_browsers()
+    cleaned: list[dict] = []
+    for p in candidates:
+        if not p.get("orphan"):
+            continue
+        pid = p["pid"]
+        try:
+            kill_fn(pid, signal.SIGTERM)
+            if kill_fn is os.kill:
+                for _ in range(6):
+                    time.sleep(0.05)
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        break
+                    except PermissionError:
+                        # 信号已发出但 0 号探针被拒（跨 uid 等）：视作已处置，不再升级
+                        break
+                else:
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            cleaned.append(p)
+        except (ProcessLookupError, PermissionError, OSError):
+            continue
+    return cleaned
+
+
+def cmd_doctor(
+    root: Path,
+    cfg: dict,
+    origin: dict[str, str] | None = None,
+    clean_browsers: bool = False,
+) -> int:
+    """环境自检：配置、时序 SSOT、参考样本、IndexTTS 服务、node_modules、自动化浏览器孤儿巡检。"""
     ok = True
     tts = cfg.get("tts", {})
     print(">> doctor")
@@ -411,6 +542,37 @@ def cmd_doctor(root: Path, cfg: dict, origin: dict[str, str] | None = None) -> i
             "  ℹ️  交付归档未配置（deliver 子命令；渠道 --root 一次性 或 env"
             " TO_VIDEO_DELIVER_ROOT 持久）"
         )
+    browsers = scan_automation_browsers()
+    orphans = [p for p in browsers if p["orphan"]]
+    active = [p for p in browsers if not p["orphan"]]
+    if orphans:
+        if clean_browsers:
+            cleaned = clean_orphan_browsers(orphans)
+            pids = [p["pid"] for p in cleaned]
+            if cleaned:
+                print(
+                    f"  ✅ 已清理自动化浏览器孤儿进程 {len(cleaned)} 个（ppid=1, pids={pids}）"
+                )
+                # 破坏性操作的审计面：逐条留 cmd 摘要，误杀时有据可查
+                for p in cleaned:
+                    print(
+                        f"     - pid={p['pid']} [{p.get('kind', '?')}] {p['cmd'][:100]}"
+                    )
+            else:
+                print(
+                    f"  ⚠️  未能清理自动化浏览器孤儿进程 {len(orphans)} 个（权限不足或进程状态异常）"
+                )
+        else:
+            pids = [p["pid"] for p in orphans]
+            print(
+                f"  ⚠️  检测到自动化浏览器孤儿进程 {len(orphans)} 个（ppid=1, pids={pids}）"
+                "——运行 `doctor --clean-browsers` 一键回收（不动日常 Chrome）"
+            )
+    elif clean_browsers:
+        print("  ✅ 自动化浏览器巡检：0 个孤儿进程（无需清理）")
+    if active:
+        pids = [p["pid"] for p in active]
+        print(f"  ℹ️  在途自动化浏览器实例 {len(active)} 个（ppid!=1, pids={pids}）")
     print(
         "  ℹ️  渲染主机约束：macOS + PingFang SC/Songti SC 系统字体（Linux/CI 渲染不在支持范围）"
     )
@@ -946,7 +1108,12 @@ def main() -> None:
     sub.add_parser(
         "status", parents=[lang_flag], help="阶段新鲜度（实时派生，按声明语言分行）"
     )
-    sub.add_parser("doctor", help="环境自检")
+    p_doctor = sub.add_parser("doctor", help="环境自检")
+    p_doctor.add_argument(
+        "--clean-browsers",
+        action="store_true",
+        help="回收 ppid=1 的自动化 Chrome 孤儿进程（含 Headless 与自动化可见实例，不动日常 Chrome）",
+    )
     p = sub.add_parser("build", parents=[lang_flag], help="③ narration(.en).md → .json")
     p.add_argument(
         "--accept",
@@ -1082,7 +1249,9 @@ def main() -> None:
     t0 = time.time()
     rc = {
         "status": lambda: cmd_status(root, cfg, lang_list),
-        "doctor": lambda: cmd_doctor(root, cfg, origin),
+        "doctor": lambda: cmd_doctor(
+            root, cfg, origin, getattr(args, "clean_browsers", False)
+        ),
         "build": lambda: cmd_build(root, cfg, lang_list, args.accept),
         "check": lambda: cmd_check(
             root, cfg, args.check_scenes, args.check_motion, lang_list

@@ -26,7 +26,7 @@ allowed-tools: Read Write Edit Glob Grep Bash
 | 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④ 复核 → `build` → `check`（无分镜时改跑 `check_script.py --pre-tts`，见 05 §九） | 速查表 ⑤ |
 | 出英文版 / 双语 | `pipeline.toml` 声明 `narration.langs = ["zh","en"]` + 句 id 对齐的译稿 `narration.en.md`；tts/render/captions/deliver 加 `--lang en`（build/check 缺省覆盖全部声明语言，产物加 `.en` 后缀） | [PIPELINE.md §五「双语渲染」](references/PIPELINE.md) |
 | 交付归档 | 终渲后显式 `deliver`；根路径 `--root`（一次性）或 env `TO_VIDEO_DELIVER_ROOT`（持久，进 shell profile 不进 toml） | 速查表 ⑩ |
-| 环境 / 状态排障 | `pipeline.py doctor`（配置、时序 SSOT、样本指纹、IndexTTS 服务自检）/ `pipeline.py status`（阶段新鲜度） | [PIPELINE.md §三](references/PIPELINE.md) |
+| 环境 / 状态排障 | `pipeline.py doctor`（配置/时序/样本指纹/TTS/浏览器孤儿 `--clean-browsers`）/ `status`（阶段新鲜度） | [PIPELINE.md §三](references/PIPELINE.md) |
 | 本 Skill 自身缺陷或改进 | 走「自改进回路（RSI）」，不顺手改 `$T` | [RSI.md](RSI.md) |
 
 ## 工作流（全新制作）
@@ -70,7 +70,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 
 | Stage | 做什么 | 规格链接 | 工具/命令 | 通过门 |
 |---|---|---|---|---|
-| ① 信源精读取证 | A 型论文：并行逐章 + 官方站点补充；B 型活信源：固定提交取证 + 证据三级；C 型 GL 精读产物：冻结快照 + 穿透抽查 | [01](references/01-source-extraction.md) | A 型 `paper_extract.py`；B 型 `source_ledger.py` | 全部断言可回溯；RISKY=0 |
+| ① 信源精读取证 | A 型论文：并行逐章；B 型活信源：固定提交取证 + 证据三级；C 型 GL 产物：冻结快照 + 穿透抽查 | [01](references/01-source-extraction.md) | A 型 `paper_extract.py`；B 型 `source_ledger.py` | 全部断言可回溯；RISKY=0 |
 | ② 策划案 | 受众/结构/视觉契约（色彩语义映射核心概念） | [02](references/02-planning.md) | —（authored） | planning.md 六节齐 |
 | ③ 逐字稿 | `narration.md` ★单一事实源 | [03](references/03-narration.md) | `build` | build_narration.py 通过（narration.json 是派生物） |
 | ④ 双重校验 | 真实性回溯 + 易懂性 | [04](references/04-verification.md) | `check` | RISKY=0 且 REWRITE=0 |
@@ -101,7 +101,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 - **`$T` 锚定的命令须在工作区内执行**：脚本读 env `TO_VIDEO_WORKSPACE` 或自 CWD 向上找 `.to-video-root`，找不到即大声退出——照报错指引处置，绝不静默猜根；包装器缺 skill 同照其打印指引处置。
 - **脚本当黑盒**：优先走 `pipeline.py` 子命令；直调独立脚本先跑 `--help`，用途与调用形态查 [PIPELINE.md §三](references/PIPELINE.md)；不为使用通读源码（RSI 调研例外）。
 - **机器属性只走 env**：交付根、TTS 音频库、IndexTTS 服务地址等永不进版本控制的 toml，注册表见 [PIPELINE.md「环境变量」](references/PIPELINE.md)。
-- **浏览器任务一律 headless**：录制器/渲染均无头；孤儿检测与窄域清理见 [PIPELINE.md §十](references/PIPELINE.md)，严禁全局 pkill Chrome。
+- **浏览器任务一律 headless**：录制/渲染无头复用；孤儿回收走 `doctor --clean-browsers`（[PIPELINE.md §十](references/PIPELINE.md)），禁全局 pkill。
 
 ## 按需加载
 
@@ -118,7 +118,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 
 ## 相邻技能协作
 
-- **Stage ① 信源输入**：已有 /guided-learn 产出的《精读与通俗拆解》时作 C 型信源直接成片（01「C 型」：冻结快照 + 穿透抽查），不重新精读；无产物时可先跑 /guided-learn 再回来。
+- **Stage ① 信源输入**：已有 /guided-learn 产出时作 C 型信源直接成片（01「C 型」：冻结快照 + 穿透抽查），不重新精读；无产物可先跑 /guided-learn。
 - **Stage ⑥/⑧ 图示资产**：需要架构/流程类图解时调 `/archify` 出图，HTML 落 `$W` 下，`record_archify_all.py` 逐章录成动效素材；句级锚定覆盖门（`check_archify_coverage.py`）已串联进 `check`。
 - **Stage ⑧ 精确 3D 资产（可选）**：信源真涉机械结构/硬件且示意级几何不够用时，装 text-to-cad 的 **cad 单 skill**（`npx skills add earthtojake/text-to-cad --skill cad`，本地 build123d、零 key）出 GLB 供场景加载；加载链路与 3D 宪法见 [08「外部 CAD 资产」](references/08-remotion-implementation.md)。
 

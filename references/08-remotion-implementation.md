@@ -212,6 +212,11 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 - 一幕一文件 `P<n><Name>.tsx`；一「镜」一内部子组件；
 - `Sequence name` 与 storyboard 镜号一一对应（QA 时可对照）；
 - beat 内动画优先走 `src/motion/` 运动模型（见上节铁律）；裸 `interpolate`/`spring` 是逃生舱而非默认。一律帧驱动，禁 `Date.now()`/随机数——渲染必须确定。
+- **过程具象化四大定式动效落地（RSI-032）**：对照 [06](./06-storyboard.md)「画面感与过程具象化四定式」——
+  1. **全景坐标先行**：幕首镜或换焦点时以全景架构/因果图底图 + 高亮视框（Map-First Anchor），让观众瞬时建立宏观坐标；
+  2. **机制必演单步流转**：核心机制通过 `rel(beat, '句id')` + `useTravel`/`useFlowDash` 驱动具象数据流经组件、逐拍改写状态标签（Animated State Trace），严禁静止文字卡片；
+  3. **反例必演消融对比**：破坏性实验采用左/右或前/后同屏消融，警示红 `#FF5C5C` 演崩溃链路与退化数据 ↔ 确认绿 `#7ED321` 演机制在位拦截（Counterfactual Ablation Contrast）；
+  4. **数字必带基线标尺**：实证对比通过 `useCount` 驱动动态计数，标尺底部恒常驻基线值与基准标签（Baseline-Anchored Counter）。
 
 ## 双语 i18n（场景文案，双语集）
 

@@ -549,6 +549,81 @@ def _require_file(p: Path, what: str) -> None:
         )
 
 
+BROWSER_LAUNCH_ARGS = ("--force-color-profile=srgb", "--disable-lcd-text")
+
+
+def record_one_diagram(
+    browser,
+    src: Path,
+    sidecar_path: Path,
+    *,
+    out_dir: Path,
+    views_file: Path | None = None,
+    slug: str | None = None,
+    diagram_type: str | None = None,
+    mode: str = "chapter",
+    all_chapters: bool = True,
+    capture: str = "cdp",
+    scale: int = 2,
+    encode: str = "h264",
+    crf: int = 16,
+    min_fps: float = 18.0,
+    settle_ms: int = 1200,
+    out_webm: Path | None = None,
+) -> dict:
+    src = Path(src).resolve()
+    resolved_slug = slug or src.stem.split("--")[-1]
+    if mode == "chapter" and sidecar_path.stem != resolved_slug:
+        sys.exit(
+            f"FAIL: chapter 模式下 sidecar 文件名须等于 slug："
+            f"{sidecar_path.name} vs slug={resolved_slug!r}\n"
+            f"      源图名与产物名不一致时用 slug 显式钉住"
+            f"（如 --slug next-episode-blueprint）。"
+        )
+    if mode == "story" and capture == "cdp":
+        sys.exit("FAIL: story 模式不接 cdp 采集（字节级兼容承诺，见模块 docstring）")
+    out_dir = Path(out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    opts = argparse.Namespace(
+        mode=mode,
+        all_chapters=all_chapters,
+        capture=capture,
+        scale=scale,
+        encode=encode,
+        crf=crf,
+        min_fps=min_fps,
+        settle_ms=settle_ms,
+        out_webm=str(out_webm) if out_webm else "/dev/null",
+    )
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        page_src, views = materialize(src, views_file, tmp)
+        if not views:
+            sys.exit(
+                f"FAIL: {src.name} 的 archify-guided-views-data 为空，引导故事不可播。\n"
+                f"      请用 --views <views.json> 注入，或先给 archify 源补 meta.views。"
+            )
+        if mode == "chapter" and not all_chapters:
+            print(
+                f"  注意：未给 --all-chapters，本次只录第 1 章（共 {len(views)} 章）",
+                file=sys.stderr,
+            )
+        if mode == "story":
+            sidecar = record_story(browser, page_src, tmp, out_dir, opts)
+        else:
+            sidecar = record_chapters(
+                browser, page_src, tmp, out_dir, resolved_slug, views, opts
+            )
+
+    sidecar["source"] = str(src)
+    sidecar["slug"] = resolved_slug
+    sidecar["type"] = diagram_type or _sniff_diagram_type(src)
+    sidecar_path.write_text(
+        json.dumps(sidecar, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
+    )
+    return sidecar
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="archify 引导故事录制器")
     ap.add_argument("src")
@@ -635,42 +710,33 @@ def main() -> None:
             f"必须同时给 --out-dir，否则产物目录会落到 /dev。"
         )
 
-    with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td)
-        page_src, views = materialize(src, views_file, tmp)
-        if not views:
-            sys.exit(
-                f"FAIL: {src.name} 的 archify-guided-views-data 为空，引导故事不可播。\n"
-                f"      请用 --views <views.json> 注入，或先给 archify 源补 meta.views。"
+    with sync_playwright() as p:
+        # 单 browser 跨章复用、每章独立 context（复用决策成文见 PIPELINE.md §十）；
+        # launch/close 走 launched_browser 结构化保证，异常路径必关。
+        with launched_browser(
+            p.chromium,
+            channel="chrome",
+            headless=True,
+            args=list(BROWSER_LAUNCH_ARGS),
+        ) as browser:
+            sidecar = record_one_diagram(
+                browser,
+                src,
+                sidecar_path,
+                out_dir=out_dir,
+                views_file=views_file,
+                slug=slug,
+                diagram_type=a.type,
+                mode=a.mode,
+                all_chapters=a.all_chapters,
+                capture=a.capture,
+                scale=a.scale,
+                encode=a.encode,
+                crf=a.crf,
+                min_fps=a.min_fps,
+                settle_ms=a.settle_ms,
+                out_webm=Path(a.out_webm),
             )
-        if a.mode == "chapter" and not a.all_chapters:
-            print(
-                f"  注意：未给 --all-chapters，本次只录第 1 章（共 {len(views)} 章）",
-                file=sys.stderr,
-            )
-
-        with sync_playwright() as p:
-            # 单 browser 跨章复用、每章独立 context（复用决策成文见 PIPELINE.md §十）；
-            # launch/close 走 launched_browser 结构化保证，异常路径必关。
-            with launched_browser(
-                p.chromium,
-                channel="chrome",
-                headless=True,
-                args=["--force-color-profile=srgb", "--disable-lcd-text"],
-            ) as browser:
-                if a.mode == "story":
-                    sidecar = record_story(browser, page_src, tmp, out_dir, a)
-                else:
-                    sidecar = record_chapters(
-                        browser, page_src, tmp, out_dir, slug, views, a
-                    )
-
-    sidecar["source"] = str(src)
-    sidecar["slug"] = slug
-    sidecar["type"] = a.type or _sniff_diagram_type(src)
-    sidecar_path.write_text(
-        json.dumps(sidecar, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
-    )
     print(json.dumps(sidecar, ensure_ascii=False))
 
 
