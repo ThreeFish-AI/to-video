@@ -508,7 +508,7 @@
 
 **方案比选**：① 仅在 01 补几句提示（否决：02/03 的全片剧场硬约束仍在，下游照旧违背一物一喻，且 04/06 无门禁抓手）；② 跨阶段正交对齐（采纳：01 §一/二/七补齐 GL 台账/类比表/archify 资产承接与五大构件具象化映射；02/03 改为「视觉母题统摄 + 局部类比按难点准入/继承 GL 一物一喻」并确立「宁砍旁支广度、不砍具象走查深度」；04 B 节新增「过程具象化在场」与「线性收看零回溯负担」两判据；06 新增过程具象化四定式）。
 
-**处理方式**：更新 `references/01-source-extraction.md`（§一/二/七 与 Stage ① 浏览器通道纪律）、`references/02-planning.md`（叙事策略与取舍原则）、`references/03-narration.md`（术语降落与三拍走查）、`references/04-verification.md`（B 节被动线性收看五判据）、`references/06-storyboard.md`（GL 构件动态具象化四定式）；扩展 `tests/test_source_types.py` 锚定 C 型跨模态映射与类比继承不变量。
+**处理方式**：更新 `references/01-source-extraction.md`（§一/二/七 与 Stage ① 浏览器通道纪律）、`references/02-planning.md`（叙事策略与取舍原则）、`references/03-narration.md`（术语降落与三拍走查）、`references/04-verification.md`（B 节被动线性收看五判据）、`references/06-storyboard.md`（GL 构件动态具象化四定式）；扩展 `tests/test_source_types.py` 锚定 C 型跨模态映射与类比继承不变量。[PR #28](https://github.com/ThreeFish-AI/to-video/pull/28)。
 
 **后续防范**：① 跨 Skill 协作不仅对齐文件格式（语法层），必须同步核心概念约束（语义层：如类比四硬律 vs 全片剧场）；② 压缩长文档为视频逐字稿时，Worked Example（具体输入走查）与破坏性反例属不可裁减的骨架，只许裁旁支章节。
 
@@ -522,7 +522,7 @@
 
 **方案比选**：跨图复用三案——① 维持逐图子进程（否决：N 图 N 次冷启动 Chrome，违背复用减负要求）；② 裸共享单 Browser 无恢复（否决：任一图触发 Target closed 或连接断开会连坐后续全部图，违背 RSI-031 历史隔离初衷）；③ 进程内共享单 Headless Browser + 每章独立 Context + 单图异常捕获与 Browser 断连自愈重拉，并保留 `--no-reuse-browser` 逃生舱（采纳：正常批次 N 图仅启动 1 次 Chrome，异常时单图隔离并自动换新 Browser 续跑，显式权衡并升级 RSI-031 的跨图策略）。孤儿清理两案——① 仅更新文档 shell 命令（否决：无自动体检入口易被遗忘）；② `pipeline.py doctor` 内置 `scan_automation_browsers`（覆盖无头与可见自动化沙箱实例、区分 `ppid=1` 确认孤儿与在途实例）+ `doctor --clean-browsers` 按 PID 精准 `SIGTERM` 回收 `ppid=1` 孤儿 + Stage ⑩ 收尾必跑终扫（采纳：零误伤用户日常 Chrome，工具化闭环）。
 
-**处理方式**：`record_archify.py` 提炼 `BROWSER_LAUNCH_ARGS` 与 `record_one_diagram()` 单图入口；`record_archify_all.py` 新增 `run_batch_reusing_browser()`（默认 `--reuse-browser`，支持 `--no-reuse-browser` 回退）；`pipeline.py` 新增 `scan_automation_browsers()` / `clean_orphan_browsers()` 并接入 `cmd_doctor` 与 `doctor --clean-browsers`；同步 `references/PIPELINE.md §十`、`references/10-final-render.md` 与 `CHANGELOG.md`；扩展 `tests/test_record_archify_session.py` 与 `tests/test_stages.py`。
+**处理方式**：`record_archify.py` 提炼 `BROWSER_LAUNCH_ARGS` 与 `record_one_diagram()` 单图入口；`record_archify_all.py` 新增 `run_batch_reusing_browser()`（默认 `--reuse-browser`，支持 `--no-reuse-browser` 回退）；`pipeline.py` 新增 `scan_automation_browsers()` / `clean_orphan_browsers()` 并接入 `cmd_doctor` 与 `doctor --clean-browsers`；同步 `references/PIPELINE.md §十`、`references/10-final-render.md` 与 `CHANGELOG.md`；扩展 `tests/test_record_archify_session.py` 与 `tests/test_stages.py`。[PR #28](https://github.com/ThreeFish-AI/to-video/pull/28)。
 
 **后续防范**：① 性能优化触碰既有隔离决策时，通过「细粒度沙箱（Context）+ 监督器自愈重启（Supervisor Restart）」同时满足低开销与故障隔离；② 孤儿浏览器识别一律以「自动化沙箱特征（profile/headless-shell/headless）× 主进程（非 `--type=`）× 父进程状态（`ppid=1`）」三维判定，兼顾无头与可见孤儿且永不触碰用户日常主 profile。
 
