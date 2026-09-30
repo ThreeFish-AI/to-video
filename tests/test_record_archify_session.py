@@ -213,3 +213,69 @@ def test_run_batch_restarts_browser_after_diagram_failure(tmp_path, capsys):
     ]
     assert raa.prior_type(d2_sidecar) == "lifecycle"
     assert "新于 sidecar" in raa.stale_reason(d2_sidecar, d2_views, [old_mp4, old_png])
+
+
+def test_run_batch_launch_failure_isolated_per_diagram(tmp_path, capsys):
+    """RSI-033 回归：chromium.launch 失败按单图失败隔离——不穿透 for 循环、逐图重试、
+    既有产物被 taint、failed 全记录（与 --no-reuse-browser 子进程路径语义对齐）。"""
+    import json
+    import time
+
+    import record_archify_all as raa
+
+    chromium = MagicMock()
+    chromium.launch.side_effect = Exception(
+        "Failed to launch chromium channel=chrome（模拟资源紧张/缺 Chrome）"
+    )
+
+    # d1 预置「已齐且新鲜」现场（产物旧于 sidecar）：launch 失败后必须被 taint 标脏
+    old_mp4 = tmp_path / "d1--c1.mp4"
+    old_png = tmp_path / "d1--c1-end.png"
+    old_mp4.write_bytes(b"old")
+    old_png.write_bytes(b"old")
+    d1_views = tmp_path / "d1.views.json"
+    d1_views.write_text(json.dumps([{"id": "c1"}]), encoding="utf-8")
+    d1_sidecar = tmp_path / "d1.json"
+    time.sleep(0.02)
+    d1_sidecar.write_text(
+        json.dumps(
+            {
+                "slug": "d1",
+                "type": "lifecycle",
+                "chapters": [
+                    {"id": "c1", "file": old_mp4.name, "end_still": old_png.name}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert raa.stale_reason(d1_sidecar, d1_views, [old_mp4, old_png]) == ""
+
+    record_spy = MagicMock()
+
+    tasks = [
+        {
+            "slug": "d1",
+            "html": tmp_path / "d1.html",
+            "sidecar": d1_sidecar,
+            "out_dir": tmp_path,
+            "progress_line": "[1/2] 录制 d1",
+        },
+        {
+            "slug": "d2",
+            "html": tmp_path / "d2.html",
+            "sidecar": tmp_path / "d2.json",
+            "out_dir": tmp_path,
+            "progress_line": "[2/2] 录制 d2",
+        },
+    ]
+    # 不抛异常即通过：launch 失败被单图异常面吃掉
+    done, failed = raa.run_batch_reusing_browser(chromium, tasks, record_fn=record_spy)
+    assert done == []
+    assert failed == ["d1", "d2"]
+    assert chromium.launch.call_count == 2  # 每图各自重试，与子进程路径一致
+    record_spy.assert_not_called()
+    assert raa.prior_type(d1_sidecar) == "lifecycle"  # taint 不动 type
+    assert "新于 sidecar" in raa.stale_reason(d1_sidecar, d1_views, [old_mp4, old_png])
+    err = capsys.readouterr().err
+    assert "启动浏览器失败" in err and "d1" in err and "d2" in err

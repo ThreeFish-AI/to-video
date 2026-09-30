@@ -580,6 +580,8 @@ def record_one_diagram(
             f"      源图名与产物名不一致时用 slug 显式钉住"
             f"（如 --slug next-episode-blueprint）。"
         )
+    if mode == "story" and capture == "cdp":
+        sys.exit("FAIL: story 模式不接 cdp 采集（字节级兼容承诺，见模块 docstring）")
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     opts = argparse.Namespace(

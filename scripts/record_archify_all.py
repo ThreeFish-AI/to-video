@@ -102,11 +102,23 @@ def run_batch_reusing_browser(
                     _close_browser_quietly(browser)
                     browser = None
             if browser is None:
-                browser = chromium.launch(
-                    channel="chrome",
-                    headless=True,
-                    args=list(BROWSER_LAUNCH_ARGS),
-                )
+                # launch 也在单图异常面内：启动失败（资源紧张/缺 Chrome）按该图失败
+                # 隔离并继续，与 --no-reuse-browser 子进程路径的逐图失败语义对齐，
+                # 不许穿透 for 循环吞掉整批的 failed/taint/汇总。
+                try:
+                    browser = chromium.launch(
+                        channel="chrome",
+                        headless=True,
+                        args=list(BROWSER_LAUNCH_ARGS),
+                    )
+                except Exception as exc:
+                    failed.append(slug)
+                    _taint_on_failure(task["sidecar"], task["out_dir"])
+                    print(
+                        f"  ✗ {slug} 启动浏览器失败（{exc}）——按单图失败隔离",
+                        file=sys.stderr,
+                    )
+                    continue
             try:
                 record_fn(
                     browser,

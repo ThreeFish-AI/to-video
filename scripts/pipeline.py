@@ -413,6 +413,9 @@ def clean_orphan_browsers(
                         os.kill(pid, 0)
                     except ProcessLookupError:
                         break
+                    except PermissionError:
+                        # 信号已发出但 0 号探针被拒（跨 uid 等）：视作已处置，不再升级
+                        break
                 else:
                     try:
                         os.kill(pid, signal.SIGKILL)
@@ -550,6 +553,11 @@ def cmd_doctor(
                 print(
                     f"  ✅ 已清理自动化浏览器孤儿进程 {len(cleaned)} 个（ppid=1, pids={pids}）"
                 )
+                # 破坏性操作的审计面：逐条留 cmd 摘要，误杀时有据可查
+                for p in cleaned:
+                    print(
+                        f"     - pid={p['pid']} [{p.get('kind', '?')}] {p['cmd'][:100]}"
+                    )
             else:
                 print(
                     f"  ⚠️  未能清理自动化浏览器孤儿进程 {len(orphans)} 个（权限不足或进程状态异常）"

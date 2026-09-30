@@ -508,7 +508,7 @@
 
 **方案比选**：① 仅在 01 补几句提示（否决：02/03 的全片剧场硬约束仍在，下游照旧违背一物一喻，且 04/06 无门禁抓手）；② 跨阶段正交对齐（采纳：01 §一/二/七补齐 GL 台账/类比表/archify 资产承接与五大构件具象化映射；02/03 改为「视觉母题统摄 + 局部类比按难点准入/继承 GL 一物一喻」并确立「宁砍旁支广度、不砍具象走查深度」；04 B 节新增「过程具象化在场」与「线性收看零回溯负担」两判据；06 新增过程具象化四定式）。
 
-**处理方式**：更新 `references/01-source-extraction.md`（§一/二/七 与 Stage ① 浏览器通道纪律）、`references/02-planning.md`（叙事策略与取舍原则）、`references/03-narration.md`（术语降落与三拍走查）、`references/04-verification.md`（B 节被动线性收看五判据）、`references/06-storyboard.md`（GL 构件动态具象化四定式）；扩展 `tests/test_source_types.py` 锚定 C 型跨模态映射与类比继承不变量。[PR #28](https://github.com/ThreeFish-AI/to-video/pull/28)。
+**处理方式**：更新 `references/01-source-extraction.md`（§一/二/七 与 Stage ① 浏览器通道纪律）、`references/02-planning.md`（叙事策略与取舍原则）、`references/03-narration.md`（术语降落与三拍走查）、`references/04-verification.md`（B 节新增「被动收看双门」两判据）、`references/06-storyboard.md`（GL 构件动态具象化四定式）；扩展 `tests/test_source_types.py` 锚定 C 型跨模态映射与类比继承不变量。[PR #28](https://github.com/ThreeFish-AI/to-video/pull/28)。
 
 **后续防范**：① 跨 Skill 协作不仅对齐文件格式（语法层），必须同步核心概念约束（语义层：如类比四硬律 vs 全片剧场）；② 压缩长文档为视频逐字稿时，Worked Example（具体输入走查）与破坏性反例属不可裁减的骨架，只许裁旁支章节。
 
