@@ -11,7 +11,9 @@
   绝不 `pkill -f tts_server.py`——那会连带 8767 上他人的第二实例
   （references/07「服务生命周期」第 2 步）。
 - 纯标准库（RSI 不变量 14）；服务启动命令从 tts.py 的 server_launch_hint 同构
-  派生（--with 集合由测试对 hint 钉死防漂移，事实源仍在 tts.py）。
+  派生（--with 集合由测试对 hint 钉死防漂移，事实源仍在 tts.py）；长跑所需的
+  服务端能力经 --use-qwen-emo 透传（RSI-034：冷重启不得静默降级服务能力——
+  缺省不带，story 块情感走台本向量无需 QwenEmotion）。
 - 仅服务 indextts 长跑：edge 无服务端可自愈，直接跑 tts.py。
 
 用法（`--` 之后的参数原样转发 tts.py；须与 tts.py 同解释器依赖面 --with mutagen）：
@@ -63,14 +65,19 @@ def port_from_server(server: str) -> int:
     sys.exit(f"无法从 --server {server!r} 解析端口（需 http(s)://host:port 形态）")
 
 
-def default_server_argv(port: int) -> list[str]:
+def default_server_argv(port: int, use_qwen_emo: bool = False) -> list[str]:
     """tts_server 启动命令的可执行形态——与 tts.server_launch_hint 同构。
 
     刻意不调用 hint 原文（含 cd ~/tools/index-tts 字面量与续行符，面向终端粘贴）；
     --with 集合与脚本路径的一致性由 tests/test_tts_resume.py 对 hint 钉死，事实源
     留在 tts.py（不另立第二事实源，RSI 不变量 10 同款纪律）。
+
+    use_qwen_emo：透传 tts_server.py 同名 flag（RSI-034）——--emo-text 自然语言
+    情感的长跑必传（冷重启不带会静默降级服务能力、客户端在健康门硬失败）；
+    **缺省不带**：story 档块情感走台本 cue 向量，无需 QwenEmotion，无条件开会
+    +1.5 GB 且 qwen 权重未下载的机器直接起不来（VOICE-CLONING §2.4）。
     """
-    return [
+    argv = [
         "uv",
         "run",
         "--frozen",
@@ -88,9 +95,16 @@ def default_server_argv(port: int) -> list[str]:
         str(tts.SERVER_SCRIPT),
         "--model-dir",
         "checkpoints",
+        "--indextts-version",
+        "2.5",
+        "--host",
+        "127.0.0.1",
         "--port",
         str(port),
     ]
+    if use_qwen_emo:
+        argv.append("--use-qwen-emo")
+    return argv
 
 
 def index_tts_root(override: str | None = None) -> Path:
@@ -331,6 +345,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="覆写服务启动命令（整条命令字符串；缺省从 tts.py 派生同构命令）",
     )
     p.add_argument(
+        "--use-qwen-emo",
+        action="store_true",
+        help="透传 tts_server.py 同名 flag（加载 QwenEmotion，约 +1.5 GB）：--emo-text "
+        "自然语言情感的长跑必传——否则冷重启后服务静默降级、客户端在健康门硬失败"
+        "（RSI-034）；story 档块情感走台本向量、无需此 flag；缺省不带，且仅作用于"
+        "缺省启动命令（--server-cmd 时请把 flag 写进命令串）",
+    )
+    p.add_argument(
         "--index-tts-root",
         default=None,
         help="index-tts checkout 根（缺省 env TO_VIDEO_INDEX_TTS_ROOT 或 ~/tools/index-tts）",
@@ -373,11 +395,18 @@ def main(argv: list[str] | None = None) -> int:
         )
     require_indextts(forwarded)
     require_client_deps()
+    if args.use_qwen_emo and args.server_cmd:
+        sys.exit(
+            "--use-qwen-emo 只追加进缺省启动命令；--server-cmd 自定义命令请把 flag "
+            "写进命令串（编排器不猜用户命令的参数面）"
+        )
     extra_env = mps_env(args.mps_high_ratio, args.mps_low_ratio)
 
     port = port_from_server(args.server)
     server_argv = (
-        shlex.split(args.server_cmd) if args.server_cmd else default_server_argv(port)
+        shlex.split(args.server_cmd)
+        if args.server_cmd
+        else default_server_argv(port, use_qwen_emo=args.use_qwen_emo)
     )
     root = index_tts_root(args.index_tts_root)
     if not root.is_dir():

@@ -235,6 +235,64 @@ def test_default_server_argv_matches_launch_hint():
     assert argv[argv.index("--port") + 1] == "8766"
 
 
+def test_default_server_argv_flags_pinned_to_manual():
+    """RSI-034 快照钉死：缺省 argv 的显式 flag 集对齐 VOICE-CLONING §2.3 权威
+    命令（hint 同步携带，四处口径一处红）；可选能力 --use-qwen-emo 缺省不带
+    （story 块情感走台本向量；无条件开会 +1.5 GB 且 qwen 权重缺机器起不来）。"""
+    hint = tts.server_launch_hint(8766)
+    argv = tts_resume.default_server_argv(8766)
+    assert argv[argv.index("--indextts-version") + 1] == "2.5"
+    assert argv[argv.index("--host") + 1] == "127.0.0.1"
+    assert "--use-qwen-emo" not in argv
+    # hint 对人可见可选能力（尾注释形态），对机器可 grep——两侧不漂移
+    assert "--use-qwen-emo" in hint
+
+
+def test_use_qwen_emo_passthrough_appends_flag(monkeypatch, fake_root):
+    """RSI-034 回归：--emo-text 长跑经 --use-qwen-emo 透传后，冷重启 argv 带上
+    同名 flag（此前冷重启静默降级服务能力 → 客户端健康门硬失败循环到放弃）。"""
+    argv = tts_resume.default_server_argv(8766, use_qwen_emo=True)
+    assert argv.count("--use-qwen-emo") == 1  # store_true 形 flag，无值跟随
+    # main() 透传链路：服务不健康触发一次冷重启，捕获编排器实际拉起的 argv
+    captured: dict[str, list[str]] = {}
+
+    def fake_restart(**kw):
+        captured["argv"] = list(kw["server_argv"])
+        return True
+
+    _mock_loop(monkeypatch, [False], [0])
+    monkeypatch.setattr(tts_resume, "cold_restart", fake_restart)
+    rc = tts_resume.main(
+        [
+            "--use-qwen-emo",
+            "--index-tts-root",
+            str(fake_root),
+            "--",
+            *FWD,
+        ]
+    )
+    assert rc == 0
+    assert "--use-qwen-emo" in captured["argv"]
+
+
+def test_use_qwen_emo_rejected_with_custom_server_cmd(monkeypatch, fake_root):
+    """透传 flag 只作用于缺省启动命令；--server-cmd 下静默忽略 = 判据面≠作用面。"""
+    _mock_loop(monkeypatch, [True], [0])
+    with pytest.raises(SystemExit) as e:
+        tts_resume.main(
+            [
+                "--use-qwen-emo",
+                "--server-cmd",
+                "uv run x",
+                "--index-tts-root",
+                str(fake_root),
+                "--",
+                *FWD,
+            ]
+        )
+    assert "--server-cmd" in str(e.value)
+
+
 def test_index_tts_root_honors_env_and_flag(monkeypatch):
     monkeypatch.setenv("TO_VIDEO_INDEX_TTS_ROOT", "/opt/idx")
     assert tts_resume.index_tts_root(None) == Path("/opt/idx")
