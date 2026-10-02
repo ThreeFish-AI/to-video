@@ -304,6 +304,60 @@ def test_cue_count_assertion(tmp_path):
     assert "只识别出" in out
 
 
+# ---------------- cue 形态对 prettier 默认格式化的容忍（RSI-036） ----------------
+
+SCENE_P0_PRETTIER = """export const P0X = () => (
+  <ArchifyRecap
+    slug="demo"
+    caption="演示"
+    variant="inset"
+    cues={[
+      {
+        chapterId: 'ch1',
+        at: at('p0-01') - bA.from,
+        durationInFrames: dur('p0-01'),
+      },
+      { chapterId: 'ch2', at: at('p0-02') - bA.from, durationInFrames: dur('p0-02') },
+    ]}
+  />
+);
+"""
+
+
+def test_prettier_multiline_cue_objects_parse(tmp_path):
+    """RSI-036 回归：prettier 默认格式化（`{` 后换行缩进/加空格、逐键换行）不再
+    把合法 cue 打成「声明 N 只识别 M」——多行与 `{ ` 空格两形态均可解析，锚定
+    统计与单行基线逐数一致。"""
+    root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0_PRETTIER, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc == 0, out
+    assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
+    assert "FAIL 0" in out and "WARN 0" in out, out
+
+
+def test_multiline_cue_still_enforces_at_form(tmp_path):
+    """宽松化只认格式、不松断言：多行对象的 at 形态断言照旧硬失败（少算不报错
+    = 门形同虚设）。"""
+    scene = SCENE_P0_PRETTIER.replace(
+        "at: at('p0-01') - bA.from,\n        durationInFrames: dur('p0-01'),",
+        "at: 0,\n        durationInFrames: 60,",
+    )
+    root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc != 0
+    assert "未识别出" in out and "at('句id')" in out
+
+
+def test_prettier_form_count_assertion_still_fires(tmp_path):
+    """计数断言对多行形态照常执法：块外的多行 chapterId 对象仍打成「声明 N 只
+    识别 M」——放宽的是格式容错，不是对账口径。"""
+    scene = SCENE_P0_PRETTIER + "const stray = {\n  chapterId: 'ch9',\n};\n"
+    root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc != 0
+    assert "只识别出" in out
+
+
 # ---------------- skip 语义 ----------------
 
 

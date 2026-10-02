@@ -567,6 +567,8 @@
 
 **后续防范**：对代理产出代码做正则解析的门，正则先过 prettier 默认输出形态的快照测试。
 
+复盘（2026-10-02，RSI 子代理）：按登记方向修复——`CUE_OBJ_RE` 放宽为 `\{\s*chapterId:`（`{` 后容换行/空格），**其余断言一律不动**（chapterId 仍须首键、`at('句id')` 形态、dur 单参/求和形态、同锚句一致、计数断言）；G4 核对：放宽只增提取覆盖面（合法多行 cue 从「计数失配 FAIL」变为可提取），既有合规单行形态解析结果逐字节不变，块外 `chapterId` 仍走计数断言硬失败——对账口径未弱化。episode 侧 `check_archify.py` 反向 import `extract_cues`（单一提取器），同一放宽自动受益。实施：分支 `ThreeFish-AI/rsi-034-036-emo-memlimit-cue-form`（PR 链接待回填），回归测试 3 条：`test_prettier_multiline_cue_objects_parse`（多行+`{ ` 空格两形态可解析且锚定统计与单行基线逐数一致）/ `test_multiline_cue_still_enforces_at_form`（多行对象 at 形态断言照旧硬失败）/ `test_prettier_form_count_assertion_still_fires`（块外多行 chapterId 仍打计数失配）。
+
 ## RSI-037 archify 3.0 产物与录制器断层：无官方支持路径，使用侧兼容层方案未文档化
 
 **表因**（2026-10-01，E1 实测）：archify 3.0 出的 HTML 无 guided-views 模块（JS+容器全无），`record_archify_all.py` 预检 FAIL 且指路「须用仍含该模块的版本重新出图」——但 2.x 无备份可寻（skill 非 git 历史、npm 同名包无关），指路不可执行。E1 以 80 行兼容层绕过（桥接 3.0 原生 `focus.set/view.reveal/view.centerAt` + 播放期 opacity 脉动保帧率 15→62fps），注入器幂等可复现（negentropy E1 `scripts/patch-archify-html.py`）。
