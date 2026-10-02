@@ -84,6 +84,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 ## 关键不变量
 
 - 逐字稿只改 `narration.md`；`narration.json`/`manifest.json` 是派生物。
+- **开篇钩子铁律**：首句（`p0-01`）必须以「这是 XXX ……」破题入场，重要性高于标题，3–5 秒强留存且与主干强关联抛出核心引子；② 策划案必出 3–5 个优质候选 Hook 供人决策。
 - **口播永不出现他集标题与集数序号**——顺序只活在视觉层与 `series.json`（执法 `check_series.py`；pre-commit 见 PIPELINE）。
 - **B 型三级证据纪律**：「他人对闭源产品源码的分析」属三级证据，口播必须带归属句、不得说成产品既成事实；活数据（行数/总量/star）不进口播。
 - 每集 `pipeline.toml` 是可执行参数唯一来源（默认值在 `config.py` SCHEMA，toml 只写偏离）；README 不复制命令行参数。
@@ -124,4 +125,4 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 
 ## 自改进回路（RSI）
 
-制片中（Agent 或用户）发现**本 Skill 自身**缺陷或流程/制度/方法改进项——脚本误报漏报、文档命令复制即跑失败、规格与实现漂移等——走 RSI：发现即登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容质量问题不在此列（走 ④/⑨ 既有 QA 回路）。四道门（问题属实/方案比选/正向收益/无损历史）全过后自动发起改进 PR 并回报链接。唯一的内容侧例外：被认可/否决的**动效画面建模方法**追加进有界的 [建模手册](references/MODELING-PLAYBOOK.md) 候选区，交付后策展子代理攒批并入（上限与压缩阶梯见 RSI.md 第十节）。协议全文：[RSI.md](RSI.md)。
+制片中发现**本 Skill 自身**缺陷或改进项（脚本报错、命令失败、规格漂移等）走 RSI：登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容问题走既有 QA 回路。四道门全过后发起改进 PR 并回报链接。内容侧例外：认可/否决的**动效建模方法**追加进有界的 [建模手册](references/MODELING-PLAYBOOK.md) 候选区（上限见 RSI.md 第十节）。协议全文：[RSI.md](RSI.md)。

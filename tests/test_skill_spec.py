@@ -328,3 +328,43 @@ def test_repo_markdown_relative_links_resolve():
                     rel = doc.relative_to(SKILL_ROOT).as_posix()
                     broken.append(f"{rel} → {target}")
     assert not broken, "相对链接指向不存在的文件：\n  " + "\n  ".join(broken)
+
+
+# ── 7. 开篇钩子规范跨文档一致性（RSI-039） ────────────────────────────────────
+
+
+def test_opening_hook_discipline_cross_docs_consistency():
+    """断言开篇「这是 XXX ……」钩子规范在策划、逐字稿、校验、优化、分镜及路由壳中全链条锚定。"""
+    skill_text = SKILL_MD.read_text(encoding="utf-8")
+    assert "开篇钩子铁律" in skill_text, "SKILL.md 关键不变量须声明开篇钩子铁律"
+
+    plan_text = (SKILL_ROOT / "references" / "02-planning.md").read_text(
+        encoding="utf-8"
+    )
+    assert "这是 XXX" in plan_text and "候选" in plan_text, (
+        "02-planning.md 须声明「这是 XXX」模式与人机协同候选矩阵"
+    )
+
+    narration_text = (SKILL_ROOT / "references" / "03-narration.md").read_text(
+        encoding="utf-8"
+    )
+    assert "这是 XXX" in narration_text and "p0-01" in narration_text, (
+        "03-narration.md 须声明首句 p0-01「这是 XXX」入场铁律"
+    )
+
+    verify_text = (SKILL_ROOT / "references" / "04-verification.md").read_text(
+        encoding="utf-8"
+    )
+    assert "开篇钩子" in verify_text and "这是 XXX" in verify_text, (
+        "04-verification.md 须声明开篇钩子与核心引子门"
+    )
+
+    prose_text = (SKILL_ROOT / "references" / "05-prose-refinement.md").read_text(
+        encoding="utf-8"
+    )
+    assert "这是 XXX" in prose_text, "05-prose-refinement.md 须声明开篇钩子破题与闭环"
+
+    sb_text = (SKILL_ROOT / "references" / "06-storyboard.md").read_text(
+        encoding="utf-8"
+    )
+    assert "开篇首镜视听合力" in sb_text, "06-storyboard.md 须声明开篇首镜视听合力定式"
