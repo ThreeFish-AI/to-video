@@ -20,7 +20,7 @@
 
 1. **样本就位？** `uv run --no-project $T/scripts/refs.py list` → 缺失则 `refs.py rebuild --name <样本>`（源录音是本人私有文件，路径记录在 `voices/refs.toml`）。
 2. **指纹一致？** `refs.py verify --name <样本>` 必须全绿——sha1 与清单不符说明源文件/裁剪参数变了，**勿在未核验音色上烧 10 小时**；新样本须先过第 4 步试听再回填清单。
-3. **风格定档？** 终声档锚点建集已声明（默认 **`story` 段落演绎**，[VOICE-CLONING §4.5](VOICE-CLONING.md)）；**升档前试听定档**：`tts_sample.py --ref <样本> --style story --play`。写稿阶段应已同产 `script/narration.cues.toml`（[references/03](./03-narration.md) 台本规约；无台本也能跑——自动分块 + 预设情绪，但块间情绪对比会打折）。**边听边记读错字**到 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)，用 `<字|读音>` 标注修（写稿规约见 [references/03](./03-narration.md)）。**句尾英文词不赌采样、直接 CMU 标注**（采样层缺陷率约 50%；配方见 [VOICE-CLONING §5.4](VOICE-CLONING.md) take 验收节）。听完 `--cleanup` 或 `pipeline.py clean-samples`（生物特征）。
+3. **风格定档？** 终声档锚点建集已声明（默认 **`story` 段落演绎**，[VOICE-CLONING §4.5](VOICE-CLONING.md)）；**升档前试听定档**：`tts_sample.py --ref <样本> --style story --play`。写稿阶段应已同产 `script/narration.cues.toml`（[references/03](./03-narration.md) 台本规约；无台本也能跑——自动分块 + 预设情绪，但块间情绪对比会打折）；**开篇块（`p0-01` 所在）宜在台本中显式定块、配与钩子匹配的情绪**——自动分块沿用预设情绪向量，开篇值得显式选型（[references/03](./03-narration.md) 开篇钩子铁律的声音通道）。**边听边记读错字**到 [PRON-GLOSSARY.md](PRON-GLOSSARY.md)，用 `<字|读音>` 标注修（写稿规约见 [references/03](./03-narration.md)）。**句尾英文词不赌采样、直接 CMU 标注**（采样层缺陷率约 50%；配方见 [VOICE-CLONING §5.4](VOICE-CLONING.md) take 验收节）。听完 `--cleanup` 或 `pipeline.py clean-samples`（生物特征）。
 4. **排期对账？** `pipeline.py tts --plan`（纯本地）：story 档按**块**统计（块=缓存单位，改一句重录整块）+ 墙钟估算。ETA 与预期差 >15% 先查机器负载。
    束宽代价**不是无条件线性**：MPS 上近乎免费（整集 1→3 束实测 +4%），CUDA 上近线性——
    `--plan` 的 3 束常量刻意保守，见 [ADVANCED §6.2](INDEXTTS-2.5-ADVANCED.md)。

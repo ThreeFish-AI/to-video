@@ -217,6 +217,7 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
   2. **机制必演单步流转**：核心机制通过 `rel(beat, '句id')` + `useTravel`/`useFlowDash` 驱动具象数据流经组件、逐拍改写状态标签（Animated State Trace），严禁静止文字卡片；
   3. **反例必演消融对比**：破坏性实验采用左/右或前/后同屏消融，警示红 `#FF5C5C` 演崩溃链路与退化数据 ↔ 确认绿 `#7ED321` 演机制在位拦截（Counterfactual Ablation Contrast）；
   4. **数字必带基线标尺**：实证对比通过 `useCount` 驱动动态计数，标尺底部恒常驻基线值与基准标签（Baseline-Anchored Counter）。
+- **开篇首镜视听合力（RSI-039）**：对照 [06](./06-storyboard.md)「开篇首镜视听合力定式」——0-A 首镜第一秒以高反差核心意象或动态冲击入场（入场动画 / `useCount` 冲击计数 / 核心意象放大定格），与口播「这是 XXX ……」同步发力，严禁静止文字卡；P0 首镜与全景坐标冲突时以本定式优先（坐标后移一镜或动态高亮融入）。
 
 ## 双语 i18n（场景文案，双语集）
 

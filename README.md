@@ -114,8 +114,8 @@ sed -i '' -e 's/^target_minutes = .*/target_minutes = [0.1, 2.0]/' "$P/pipeline.
 cat > "$P/script/narration.md" <<'EOF'
 ## P0 开场
 
-- [p0-01] 你好，这是用 to-video 流水线做出的第一支视频。
-- [p0-02] 画面、配音、字幕，全部由代码生成。
+- [p0-01] 这是一支画面、配音、字幕全部由代码生成的视频。
+- [p0-02] to-video 流水线把它自动做了出来。
 
 ## P1 收束
 
@@ -126,7 +126,7 @@ EOF
 cat > "$P/script/storyboard.md" <<'EOF'
 | 镜号 | 句区间 | 画面 | 动效 |
 | --- | --- | --- | --- |
-| 0-A | p0-01..p0-02 | 居中标题卡 | FadeUp |
+| 0-A | p0-01..p0-02 | accent 视觉锚冲击入场 + 错峰词卡 | FadeUp |
 | 1-A | p1-01 | 章节进度条放大解剖图（与顶部条逐帧同步） | FadeUp |
 EOF
 
