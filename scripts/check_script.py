@@ -265,8 +265,9 @@ def check_budget(
         engine = tts_view.get("engine", config.default("tts.engine"))
         anchor = tts_view.get("style")
         marker = langs.audio_dir(root, lang) / ".engine"
+        # 空/畸形首 token 一律当「无标记」处理（保守：不跳过，照常执法）
         marker_engine = (
-            marker.read_text(encoding="utf-8").split("|", 1)[0].strip()
+            marker.read_text(encoding="utf-8").split("|", 1)[0].strip() or None
             if marker.is_file()
             else None
         )

@@ -49,7 +49,7 @@
 ## 双语配音（en 版，双语集）
 
 - **追配触发**（示例话术）：「使用 index tts 2.5 及本人声音（风格：xxx）**额外为本集视频配置英文配音**」——在既有 zh 集上追加完整英文版：`narration.langs` 补 `"en"` + `[tts.en]` 声明 `engine = "indextts"` 与跨语种 `ref`/`style`，其后走 [PIPELINE.md §五「双语渲染」](PIPELINE.md) 全轨：`narration.en.md` 句 id 1:1 → `build --lang en`（基线锁）→ `check --lang en` → **跨语种试听（下一条，不可跳）** → `tts --lang en` → `check_archify --lang en` → `render --lang en` + qa → `captions` / `deliver --lang en`（en 版本号独立）。
-- **生效配置**：`[tts.en]` 可覆写 `engine / ref / ref_sha1 / style / voice`，缺省**继承 `[tts]` 同一样本与风格**；IndexTTS 的 `lang` 由语言自动解析为 `EN`（zh 版仍 `ZH`，两版 digest 与 `.engine` 签名天然隔离）。`engine = "edge"` 时英文缺省音色 `en-US-AndrewNeural`（注册表 [langs.py](../scripts/langs.py)）。
+- **生效配置**：`[tts.en]` 可覆写 `engine / ref / ref_sha1 / style / voice`，缺省**继承 `[tts]` 同一样本与风格**；IndexTTS 的 `lang` 由语言自动解析为 `EN`（zh 版仍 `ZH`，两版 digest 与 `.engine` 签名天然隔离）。`engine = "edge"` 时英文缺省音色 `en-US-AndrewNeural`（注册表 [langs.py](../scripts/langs.py)）。zh 挂终声档锚点而 en 以 edge 为终声时，`[tts.en] style = ""` 可中和继承的锚点、恢复 en 实测门。
 - **跨语种克隆必须先试听定档**（决策树第 3 闸的英文版，不可跳过）：`uv run --no-project --with mutagen $T/scripts/tts_sample.py --ref <样本> --lang EN --text "<本集最难英文句>"` ——同一样本跨语种可能带口音、风格档 alpha 是在中文选段上标定的；未试听不得进长跑。
 - **en 版需 IndexTTS-2.5 服务**（`lang` 仅 2.5 的 infer 转发；服务版本见 `/health`）。
 - **命令**：`uv run --no-project $T/scripts/pipeline.py --project $P tts --lang en`（缺省只跑 zh，显式 `--lang` 才跑英文——昂贵命令显式化）；产物落 `video/public/audio/en/`（独立 `.engine` 护栏与 manifest）；tts-store 按 digest 中英并存，互不覆盖。

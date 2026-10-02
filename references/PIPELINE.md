@@ -111,7 +111,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | ----- | ---------------- | --------------------------------------------------- | ----------------------- |
 | ③     | `build`          | narration.md → narration.json + video/src/chapters.json | 纯函数               |
 | ④⑥    | `check`          | narration.json + storyboard.md + pipeline.toml → 门 | —                       |
-| ⑦     | `tts [--plan]`   | narration.json + 参考样本 → 逐句 mp3 + manifest     | sidecar 摘要 / 逐句续跑 |
+| ⑦     | `tts`（克隆档另加 `--plan`） | narration.json（克隆档另需参考样本）→ 逐句 mp3 + manifest | sidecar 摘要 / 逐句续跑 |
 | ⑦+    | `captions`       | manifest + timing.json → out/captions.{srt,vtt}     | 纯函数                  |
 | ⑨     | `render` + `qa`  | src + audio → draft.mp4 + 抽帧体检                  | 渲染否 / 抽帧是         |
 | ⑩     | `render --final` + `deliver` | 同上 → final.mp4 + 归档副本（前置：⑨ 零 FAIL）  | 否                      |
@@ -121,12 +121,12 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | 脚本 | 用途 | 工程内等价调用 |
 | ---- | ---- | -------------- |
 | [scripts/build_narration.py](../scripts/build_narration.py) | narration.md → narration.json + chapters.json（章节条标签）+ 时长估算 | `uv run --no-project scripts/build_narration.py` |
-| [scripts/tts.py](../scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 预置音色 / indextts 声音克隆；风格推荐位 sunny 明快阳光，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
+| [scripts/tts.py](../scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 草声默认 / indextts 终声克隆；终声档默认 story 段落演绎，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期仅克隆档） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
 | [scripts/tts_server.py](../scripts/tts_server.py) | IndexTTS 推理服务（声音克隆后端，**运行于 index-tts 环境**，非本仓） | 在 `~/tools/index-tts` 内启动，见 [VOICE-CLONING.md §二](./VOICE-CLONING.md) |
 | [scripts/tts_sample.py](../scripts/tts_sample.py) | 单句声音小样试听（直调 IndexTTS 服务合成一句话 + 全风格 A/B，定稿风格前的必经关口） | 无工程薄包装，从 $T 调用：`uv run --no-project --with mutagen $T/scripts/tts_sample.py --ref <样本.wav> --all-styles --play`，见 [VOICE-CLONING.md §5.1](./VOICE-CLONING.md) |
 | [scripts/prepare_ref.py](../scripts/prepare_ref.py) | 参考音色样本裁剪/规范化（长录音 → **10–14s** 干净 WAV；硬上限 15s——上游超出即静默前截） | 无工程薄包装（与具体工程无关），从 $T 调用：`uv run --no-project --with soundfile --with numpy $T/scripts/prepare_ref.py <源音频>` |
 | [scripts/prospect_ref.py](../scripts/prospect_ref.py) | 参考样本选段勘探（按 F0/起伏/音节率/限带质心筛「更亮更轻快」的候选起点）+ `--accept` **保真度验收**（削波/底噪/动态/有效带宽/超 15s，与风格分正交；损伤事后无法弥补故只否决不加权） | 无工程薄包装，从 $T 调用：`uv run --no-project --with soundfile --with numpy $T/scripts/prospect_ref.py <源音频…>`，见 [VOICE-CLONING.md §3.2](./VOICE-CLONING.md) |
-| [scripts/pipeline.py](../scripts/pipeline.py) | **单入口编排**（上表） | `uv run --no-project $T/scripts/pipeline.py --project $P tts --plan` |
+| [scripts/pipeline.py](../scripts/pipeline.py) | **单入口编排**（上表） | `uv run --no-project $T/scripts/pipeline.py --project $P tts` |
 | [scripts/timeline.py](../scripts/timeline.py) | 时间轴 Python 侧实现（与 timing.ts 同构，直读 timing.json） | 被 qa_frames/captions/check_script 复用 |
 | [scripts/check_script.py](../scripts/check_script.py) | ④⑥ 内容门：beat 覆盖性 / 时长预算双口径 / SceneFade 不变式 / 画面文字复述口播（缺省 FAIL）/ `--check-scenes` 分镜↔代码互比 / `--pron-gate` 语义读音门（FAIL，RSI-014）/ `--term-density` 术语密度预算（WARN，RSI-015，见 04 B 节） | `uv run --no-project scripts/check_script.py --check-scenes` |
 | [scripts/archify_lead.py](../scripts/archify_lead.py) | 场记板白闪**实测**回写各章真实 `lead_sec`（录制器恒写 0.0，漏跑＝白闪帧播进成片——全 0 由覆盖门点名 WARN）；webm 前段含页面加载非故事起点、墙钟估算带 ±0.3s，故只在像素上找白闪末帧 | `uv run --no-project --with pillow $T/scripts/archify_lead.py --project $P` |

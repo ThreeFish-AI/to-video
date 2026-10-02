@@ -18,7 +18,7 @@ to-video Skill 的评测资产（格式遵循 agentskills.io 官方规范），�
 ## Trigger eval
 
 1. 每条 query 跑 3 次算 trigger rate：正例 > 0.5、负例 < 0.5 为通过。
-2. 固定 60/40 切分：下标 `i % 5 ∈ {0,1,2}` 入 train（12 条），其余入 validation（8 条）；文件正负交替排列，两集正负各半，跨迭代不改。
+2. 固定 60/40 切分：下标 `i % 5 ∈ {0,1,2}` 入 train（条数随文件规模推数，如 24 条时 15/9），其余入 validation；文件正负交替排列，两集正负各半，跨迭代不改。
 3. 只用 train 失败项指导改写，按 validation pass rate 选最佳 description（未必是最后一版）；不得把失败 query 的关键词抄进 description（过拟合），应提炼其所属类别；改后复核 ≤1024 字符。
 4. ⚠️ **同名遮蔽**：个人级 `~/.claude/skills/to-video` 会遮蔽同名的项目级 / worktree 副本——候选 description 须合入并更新已安装 clone 后再测（或临时把安装指向候选版本），否则测到的仍是旧 description。
 
