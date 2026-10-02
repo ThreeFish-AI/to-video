@@ -358,6 +358,26 @@ def test_prettier_form_count_assertion_still_fires(tmp_path):
     assert "只识别出" in out
 
 
+def test_prettier_double_quote_cues_parse(tmp_path):
+    """RSI-037 回归补：prettier 出厂默认 singleQuote=false 会把字符串翻双引号
+    ——只容多行不容引号时「容 prettier 默认格式化」只修一半（双引号形态整块
+    零识别、报错却指向 at/dur 写法，易误诊）。双引号多行形态可解析且锚定
+    统计与单引号基线逐数一致。"""
+    scene = (
+        SCENE_P0_PRETTIER.replace("'ch1'", '"ch1"')
+        .replace("'ch2'", '"ch2"')
+        .replace("at('p0-01')", 'at("p0-01")')
+        .replace("dur('p0-01')", 'dur("p0-01")')
+        .replace("at('p0-02')", 'at("p0-02")')
+        .replace("dur('p0-02')", 'dur("p0-02")')
+    )
+    root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc == 0, out
+    assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
+    assert "FAIL 0" in out and "WARN 0" in out, out
+
+
 # ---------------- skip 语义 ----------------
 
 

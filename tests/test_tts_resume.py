@@ -51,17 +51,27 @@ def test_run_tts_returns_real_exit_code(tmp_path, monkeypatch):
 # ---------------- 重启计数状态机（mock，不真起服务） ----------------
 
 
+class _Calls(dict):
+    """计数 dict：既有断言用整 dict 相等（calls == {"healthy": …, "restart": …,
+    "tts": …}）钉调用序列形状——额外捕获（cold_restart 的 kwargs）以属性附着
+    而非键存放，不破坏旧断言。"""
+
+    restart_kw: list[dict]
+
+
 def _mock_loop(monkeypatch, healthy_seq, rc_seq, restart_ok=True):
     """钉住 main 循环的三个副作用点，返回调用计数。"""
-    calls = {"healthy": 0, "restart": 0, "tts": 0}
+    calls = _Calls({"healthy": 0, "restart": 0, "tts": 0})
+    calls.restart_kw = []
     healthy_iter, rc_iter = iter(healthy_seq), iter(rc_seq)
 
     def fake_healthy(*_a, **_k):
         calls["healthy"] += 1
         return next(healthy_iter, True)
 
-    def fake_restart(**_k):
+    def fake_restart(**kw):
         calls["restart"] += 1
+        calls.restart_kw.append(kw)
         return restart_ok
 
     def fake_tts(_fwd):
@@ -371,7 +381,7 @@ def test_mps_mem_limit_rejects_bad_values_before_killing_server(monkeypatch, fak
     """入口防呆先于杀服：坏值若透传到服务端，冷重启会先杀掉健康服务、新进程才
     被服务端 argparse 拦下（起不来）——自愈器必须在本入口拦（nan/inf/负数同拦，
     nan/-inf 比较恒 False 是 mps_env 已登记的老陷阱形态）。"""
-    _mock_loop(monkeypatch, [True], [0])
+    calls = _mock_loop(monkeypatch, [True], [0])
     for bad in ("-1", "nan", "inf"):
         with pytest.raises(SystemExit) as e:
             tts_resume.main(
@@ -385,6 +395,21 @@ def test_mps_mem_limit_rejects_bad_values_before_killing_server(monkeypatch, fak
                 ]
             )
         assert "mps-mem-limit-gib" in str(e.value)
+    assert calls["restart"] == 0  # 校验先于杀服：全程未动服务
+
+
+def test_mps_low_ratio_alone_rejected_on_default_argv(monkeypatch, fake_root):
+    """RSI-036 回归：单独传 --mps-low-ratio 在缺省路径同样走「env 兜底仅
+    --server-cmd」的指路报错——此前误落 mps_env 的「须成对使用」，照做配对后
+    又被同一入口驳回（两步矛盾链，把用户引上必然被拒的路）。"""
+    calls = _mock_loop(monkeypatch, [True], [0])
+    with pytest.raises(SystemExit) as e:
+        tts_resume.main(
+            ["--mps-low-ratio", "0.7", "--index-tts-root", str(fake_root), "--", *FWD]
+        )
+    assert "--mps-mem-limit-gib" in str(e.value)  # 可操作指路
+    assert "--server-cmd" in str(e.value)
+    assert calls["restart"] == 0  # 入口拦截，未动服务
 
 
 def test_mps_mem_limit_rejected_with_server_cmd_or_env_knobs(monkeypatch, fake_root):
@@ -442,8 +467,10 @@ def test_mps_high_ratio_rejected_on_default_argv(monkeypatch, fake_root):
 
 def test_mps_high_ratio_env_still_works_with_server_cmd(monkeypatch, fake_root):
     """env 兜底是降级圈定不是删除：--server-cmd 自定义命令（无 flag 追加通道）
-    仍走 env 注入，配对纪律由 mps_env 纯函数侧执法。"""
-    calls = _mock_loop(monkeypatch, [True], [0])
+    仍走 env 注入，配对纪律由 mps_env 纯函数侧执法。服务不健康触发一次冷重启，
+    断言编排器拉起进程时 env 真被带上（extra_env→start_server 接线在此前
+    零覆盖——只断言放行不证明注入）。"""
+    calls = _mock_loop(monkeypatch, [False], [0])
     rc = tts_resume.main(
         [
             "--mps-high-ratio",
@@ -458,6 +485,10 @@ def test_mps_high_ratio_env_still_works_with_server_cmd(monkeypatch, fake_root):
     )
     assert rc == 0
     assert calls["tts"] == 1  # env 路径放行、未被入口拦截
+    assert calls["restart"] == 1  # 不健康触发一次冷重启
+    assert calls.restart_kw[0]["extra_env"] == {
+        "PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.0"
+    }
 
 
 # ---------------- 入口门禁：引擎面 + 客户端依赖面 ----------------
