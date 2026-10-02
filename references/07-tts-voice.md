@@ -61,7 +61,7 @@ RSI-034 起**草声档就是最快的迭代载体**：改稿频繁期停在 edge
 
 ## 调用形态
 
-- 编排入口（参数读自各集 `pipeline.toml`）：`uv run --no-project $T/scripts/pipeline.py --project $P tts [--plan|--style sunny]`
+- 编排入口（参数读自各集 `pipeline.toml`）：`uv run --no-project $T/scripts/pipeline.py --project $P tts [--plan|--style sunny]`（两可选参仅克隆档：edge 草声直行，`--plan` 会报「仅对 --engine indextts 生效」、`--style` 不生效）
 - 直接薄包装（工程内）：`uv run --no-project --with mutagen scripts/tts.py --engine indextts …`（须带 `--expect-ref-sha1`，编排入口会自动带上）
 - 服务端启动命令由 `tts.py`/`tts_sample.py` 在不可达时自动打印（可直接粘贴），手册见 [VOICE-CLONING.md §二](VOICE-CLONING.md)
 - 长跑旁路监视：`uv run --no-project $T/scripts/tts_progress.py --project $P`（按逐句 mp3 mtime 重建墙钟进度与热漂移告警，story 块合成按 <1s 聚簇并折回每句口径，与合成进程零耦合——nohup 长跑时另开终端跑）
