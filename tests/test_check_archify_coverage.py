@@ -14,6 +14,9 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_archify_coverage.py"
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from check_archify_coverage import extract_cues  # noqa: E402 - 直调观测 fit（CLI 门输出不含）
+
 NARRATION = [
     {"id": "p0-01", "scene": "P0", "text": "甲"},
     {"id": "p0-02", "scene": "P0", "text": "乙"},
@@ -302,6 +305,98 @@ def test_cue_count_assertion(tmp_path):
     rc, out = run_gate(root)
     assert rc != 0
     assert "只识别出" in out
+
+
+# ---------------- cue 形态对 prettier 默认格式化的容忍（RSI-037） ----------------
+
+SCENE_P0_PRETTIER = """export const P0X = () => (
+  <ArchifyRecap
+    slug="demo"
+    caption="演示"
+    variant="inset"
+    cues={[
+      {
+        chapterId: 'ch1',
+        at: at('p0-01') - bA.from,
+        durationInFrames: dur('p0-01'),
+      },
+      { chapterId: 'ch2', at: at('p0-02') - bA.from, durationInFrames: dur('p0-02') },
+    ]}
+  />
+);
+"""
+
+
+def test_prettier_multiline_cue_objects_parse(tmp_path):
+    """RSI-037 回归：prettier 默认格式化（`{` 后换行缩进/加空格、逐键换行）不再
+    把合法 cue 打成「声明 N 只识别 M」——多行与 `{ ` 空格两形态均可解析，锚定
+    统计与单行基线逐数一致。"""
+    root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0_PRETTIER, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc == 0, out
+    assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
+    assert "FAIL 0" in out and "WARN 0" in out, out
+
+
+def test_multiline_cue_still_enforces_at_form(tmp_path):
+    """宽松化只认格式、不松断言：多行对象的 at 形态断言照旧硬失败（少算不报错
+    = 门形同虚设）。"""
+    scene = SCENE_P0_PRETTIER.replace(
+        "at: at('p0-01') - bA.from,\n        durationInFrames: dur('p0-01'),",
+        "at: 0,\n        durationInFrames: 60,",
+    )
+    root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc != 0
+    assert "未识别出" in out and "at('句id')" in out
+
+
+def test_prettier_form_count_assertion_still_fires(tmp_path):
+    """计数断言对多行形态照常执法：块外的多行 chapterId 对象仍打成「声明 N 只
+    识别 M」——放宽的是格式容错，不是对账口径。"""
+    scene = SCENE_P0_PRETTIER + "const stray = {\n  chapterId: 'ch9',\n};\n"
+    root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc != 0
+    assert "只识别出" in out
+
+
+def test_prettier_double_quote_cues_parse(tmp_path):
+    """RSI-037 回归补：prettier 出厂默认 singleQuote=false 会把字符串翻双引号
+    ——只容多行不容引号时「容 prettier 默认格式化」只修一半（双引号形态整块
+    零识别、报错却指向 at/dur 写法，易误诊）。双引号多行形态可解析且锚定
+    统计与单引号基线逐数一致。"""
+    scene = (
+        SCENE_P0_PRETTIER.replace("'ch1'", '"ch1"')
+        .replace("'ch2'", '"ch2"')
+        .replace("at('p0-01')", 'at("p0-01")')
+        .replace("dur('p0-01')", 'dur("p0-01")')
+        .replace("at('p0-02')", 'at("p0-02")')
+        .replace("dur('p0-02')", 'dur("p0-02")')
+    )
+    root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
+    rc, out = run_gate(root)
+    assert rc == 0, out
+    assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
+    assert "FAIL 0" in out and "WARN 0" in out, out
+
+
+def test_prettier_double_quote_fit_extracted(tmp_path):
+    """RSI-037 回归补二：引号放宽曾漏同循环第 4 处单引号正则（fit）——
+    `fit: "stretch"` 此前静默解析为 None，下游 check_archify 的 explicit_stretch
+    集合漏收、「显式 stretch 越界」FAIL 不再触发（该门防的正是渲染期抛错）。
+    直调单一提取器 extract_cues 观测 fit 字段（CLI 门输出不含 fit）。"""
+    scenes = tmp_path / "scenes"
+    scenes.mkdir()
+    (scenes / "P0X.tsx").write_text(
+        SCENE_P0_PRETTIER.replace(
+            "durationInFrames: dur('p0-01'),",
+            'durationInFrames: dur("p0-01"),\n        fit: "stretch",',
+        ),
+        encoding="utf-8",
+    )
+    fits = {cid: fit for _f, _slug, cid, _sid, fit in extract_cues(scenes)}
+    assert fits == {"ch1": "stretch", "ch2": None}  # 未写 fit 的 cue 仍 None
 
 
 # ---------------- skip 语义 ----------------

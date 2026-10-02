@@ -483,11 +483,21 @@ SERVER_SCRIPT = Path(__file__).resolve().parent / "tts_server.py"
 
 
 def server_launch_hint(port: int = 8766) -> str:
-    """返回可直接粘贴的 IndexTTS 服务启动命令（服务须运行在 index-tts 自己的环境里）。"""
+    """返回可直接粘贴的 IndexTTS 服务启动命令（服务须运行在 index-tts 自己的环境里）。
+
+    显式 flag 集对齐 VOICE-CLONING §2.3 权威命令（--indextts-version/--host 显式化，
+    语义同服务端缺省）；可选的 --use-qwen-emo 以独立提示行呈现——tts_resume 的同名
+    透传参数映射此 flag（RSI-035）。提示行用 POSIX `:` no-op 前缀而非 `#` 注释：
+    macOS 缺省 zsh 交互态 interactivecomments 关闭，`#` 会连注释文本一起进入
+    服务 argv、被 argparse 拒收（服务起不来）——`: ` 前缀在 bash/zsh/sh 粘贴
+    均为无害空命令。
+    """
     return (
         "  cd ~/tools/index-tts && uv run --frozen --with fastapi --with uvicorn \\\n"
         "      --with soundfile --with numpy --with lameenc \\\n"
-        f"      python {SERVER_SCRIPT} --model-dir checkpoints --port {port}"
+        f"      python {SERVER_SCRIPT} --model-dir checkpoints --indextts-version 2.5 \\\n"
+        f"      --host 127.0.0.1 --port {port} \n"
+        "      : 可选：--use-qwen-emo（自然语言情感 --emo-text 需要，约 +1.5 GB 内存）"
     )
 
 

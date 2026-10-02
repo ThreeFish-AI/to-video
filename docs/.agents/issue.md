@@ -540,3 +540,65 @@
 **处理方式**：`config.py`（默认翻转 + 锚点语义）；`check_script.py`（预算门实测口径双条件跳过，各打一行点名）；`pipeline.toml.tmpl`/`scaffold.py`（草声模板：engine=edge、ref/ref_sha1 注释预置、style 标注锚点）；`SKILL.md`（任务表新增「评审后重配音」路由行 + 工作流/⑦ 速查改写，gate 与 stages.toml 双址同步、阶段更名「TTS 配音：草声与克隆档位」）；`references/07-tts-voice.md`（决策树第 0 闸引擎分支 +「重配（评审后升档）」节 + 双语克隆追配要点 + 完成门双条件语义）；`VOICE-CLONING.md`/`PIPELINE.md`/`README.md`（两档策略对齐，quickstart 删 sed 行）；新增 `tests/test_voice_tiers.py` 锚定 + `test_config`/`test_check_script` 回归（含升档中间态钉子）；trigger-evals +1 正（重配话术）/1 负（近邻不触发）。独立验证代理四门对抗核验全过（887 用例 0 失败、15/15 不变量、升档中间态假红 origin/main 实机复现 vs HEAD 修复实证），其抓出的 2 处 MUST-FIX（PIPELINE §四 `tts --plan` 范例 edge 分集复制即跑失败、⑦ 行参考样本未分档）+ 8 项承诺面内漏网已修复（ef338a3）。[PR #29](https://github.com/ThreeFish-AI/to-video/pull/29)（ef5bb57/4c55607/d71a319/ef338a3）；合并后待办：trigger-evals 新旧对拍（同名遮蔽须合并后做）。
 
 **后续防范**：① 成本差数量级悬殊的同类引擎必须显式分档（草声/终声生命周期），默认档取便宜者，贵的档只由用户显式触发；② 一切「按 manifest 实测执法」的门必须先核 manifest 属不属于当前生效配置——换引擎/换档中间态是常态而非异常；③ 显式触发型重配的安全闸复用既有 `.engine` 护栏与 `--allow-voice-switch`，不另造门；④ 文档声明「默认引擎」处（VOICE-CLONING/PIPELINE/README）与 SCHEMA 默认值必须同 commit 对齐，防再出现「文档说 edge、机制默认 indextts」的 Split-Brain。
+
+## RSI-035 tts_resume 默认 server argv 缺 --use-qwen-emo：story 档（skill 默认配音档）MPS 泄漏自愈后必败
+
+**表因**（2026-10-01，E1《刻意做小》配音实测）：story 档长跑遇 MPS 显存 OOM 后，`tts_resume.py` 自动冷重启的服务 health 显示 `supports_emo_text:false`，续跑客户端对 emo 块（`[block.*]` 台本，story 档标配）合成必然失败——自愈回路对 skill 默认配音档不闭环，须人工带 `--use-qwen-emo` 重启服务再裸跑 tts.py 才能续。
+
+**根因**：`tts_resume.py` 的 `default_server_argv()`（L73-91）硬编码 argv 不含 `--use-qwen-emo`（也不含 `--indextts-version 2.5`/`--host`）；该函数 docstring 声称与 `tts.server_launch_hint` 同构并由 `tests/test_tts_resume.py` 钉死——但 hint 本身或测试快照若同样缺 emo flag，则「单一事实源」自身不完整：`references/07-tts-voice.md` 的启动命令明确带 `--use-qwen-emo`，两处口径已漂移。
+
+**定性**：阻断性缺陷（默认档自愈失效）。
+
+**处理方式**：待子代理（G1 复现=health emo 字段翻转即可判定；G2 修复方向=server_launch_hint 补 flag + default_server_argv 同步 + 测试快照钉死）。
+
+**后续防范**：改 tts_server 启动参数时，hint / default_server_argv / 07 规格 / 测试快照四处同批走。
+
+复盘（2026-10-02，RSI 子代理）：**登记的失败链经 G1 静态核对 + E1 现场日志双重证伪**。①story 档块情感走台本 cue 的**向量**（`tts.py` `resolve_block_vec` → `parse_emo_vector`，`[block.*]` 的 `emo` 字段恒为 `happy:0.6` 向量式，自然语言会被 `parse_emo_vector` 直接报「未知情感键」），服务端 `emo_vector` 不需要 QwenEmotion（`tts_server.py` 仅对 `emo_text` 查 `supports_emo_text`）；②客户端健康门对 story 档只查 `supports_blocks`/`version`/`low_vram`/sampling/seed/`duration_factor`，`supports_emo_text` 仅在 CLI 显式 `--emo-text` 时被查（tts.py 长跑健康门）；③E1 现场 `.temp/tts-resume/server-8766.log`：四次 resume 冷重启**全部** `use_qwen_emo=False`（`>> QwenEmotion not loaded`），块合成持续 200 OK（`Use the specified emotion vector` ×N）——「默认配音档自愈后 emo 必败」不成立，**定性由阻断性降级为非阻断潜在缺陷**；E1 实测当时真正卡住的是 RSI-036 的水位线问题（人工重启带 `--use-qwen-emo` 只是顺带）。另勘误：启动命令 SSOT 在 [VOICE-CLONING.md §2.3](../../references/VOICE-CLONING.md)（07 只是指针行），且其 `--use-qwen-emo` 标注为**可选**、`--indextts-version 2.5`/`--host` 为服务端缺省等价——「07 规格明确带 flag」的口径表述不准。真实缺口：`--emo-text` 长跑（手册既有特性）冷重启后服务静默降级 → 客户端健康门硬失败 → resume 循环重启至 `--max-restarts` 放弃（自愈器把可续跑变确定性失败）；以及 `server_launch_hint`/`default_server_argv` 与 §2.3 权威命令的显式 flag 口径差。G2 比选：A（登记原方向）缺省 argv 无条件带 `--use-qwen-emo`——否决：与手册「可选」冲突、无条件 +1.5 GiB 常驻强加全部长跑、qwen 权重未下载的机器（§2.4 已登记该失败形态）会把能自愈变启动必败；B（采纳）`tts_resume` 新增 `--use-qwen-emo` 透传（缺省不带、同名映射服务端 flag、`--server-cmd` 下拒收指点写进命令串），`server_launch_hint` 对齐 §2.3 显式 flag + 可选 flag 尾注释，测试快照钉死缺省不含/透传含/与 hint 口径一致；C 通用 `--server-flag` 字符串透传——否决：无校验面 + 已知需求是枚举型（YAGNI）。实施：分支 `ThreeFish-AI/rsi-034-036-emo-memlimit-cue-form`（PR 链接待回填），回归测试 `test_default_server_argv_flags_pinned_to_manual` / `test_use_qwen_emo_passthrough_appends_flag` / `test_use_qwen_emo_rejected_with_custom_server_cmd`。后续防范补充：服务端 flag 语义唯一事实源 = `tts_server.py` parser；hint 显式 flag 集 = §2.3 权威命令；resume 透传参数与之同名映射——三处同批走。独立核验（2026-10-02，第二子代理）：E1 日志复核（≥4 次冷启动全 `use_qwen_emo=False`、159 次 "Use the specified emotion vector" + 165 次 200 OK）与三链代码复核确认降级成立；hint 尾注释 `\`+`#` 形态经 zsh/bash/sh 三口径实测粘贴安全（注释不入 argv）；核验建议①已采纳——hint↔§2.3 手册锚升机器执法（`test_server_launch_hint_flags_anchored_to_manual`，仿 test_tts_mps_oom_contract 读手册先例），「三处同批走」不再只靠纪律。
+
+复盘补（2026-10-02，PR #30 冲突消解复核）：复核子代理**证伪上文「尾注释 `\`+`#` 形态经 zsh/bash/sh 三口径实测粘贴安全」**——其 zsh 口径在 rc 加载态跑（本机 oh-my-zsh lib/misc.zsh 默认 `setopt interactivecomments` 造成遮蔽），macOS 缺省交互 zsh 该选项 OFF：`#` 不是注释，注释文本整体进入服务 argv、被 tts_server argparse 拒收（unrecognized arguments → exit 2），服务起不来且报错无「注释污染」可定位性。修复：hint 命令止于 `--port {port}`（去尾续行符），可选能力改为独立 `: 可选：--use-qwen-emo（…）` 提示行（POSIX `:` no-op 前缀，bash/zsh/sh 粘贴均无害；`--use-qwen-emo in hint` 机器锚子串不受影响）。教训：「粘贴安全」类核验必须在 pristine shell（`zsh -f -i`，无 rc）口径实测。另：本次合并重编号曾盲扫误伤 CHANGELOG §⑦ 与 PIPELINE §五的 RSI-034 配音两档标号（已回滚）——判据教训：对双侧都改过的文件，终验须锚定「main 侧行逐字节不变」，而非「文件内新号零残留」。
+
+## RSI-036 --mps-high-ratio env 兜底对「服务端缺省已设限」不生效：水位线开关两层打架
+
+**表因**（同日实测）：传 `--mps-high-ratio 0.0`（resume 注入 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0`）冷重启服务后，OOM 报错仍为「当前上限 15.98 GiB」且 health `mps_mem_limit_gib:15.98`；直接给服务端传 `--mps-mem-limit-gib 0` 后 health 该字段变 `None`、泄漏块一次通过——env 兜底路径失效，真开关在服务端 flag。
+
+**根因**：`tts_resume.mps_env()` docstring 自述「env 仅服务自定义 --server-cmd 未带 flag 的场合」，但默认 argv 路径下 `tts_server.py` 的 `--mps-mem-limit-gib` **缺省即设进程水位线**（RSI-017 行为）——服务端缺省逻辑覆盖/无视了 resume 注入的进程 env，两层各说各话。
+
+**定性**：非阻断改进（参数存在但行为与文档承诺不符；文档已部分承认边界）。
+
+**处理方式**：待子代理（G1 复现=对比两种注入路径的 health 字段；G2 方向=resume 冷重启 argv 直接透传 `--mps-mem-limit-gib`（如新增 `--mps-mem-limit-gib` 透传参数或 mps_env 并入 argv），env 兜底降级为仅自定义 server-cmd 路径并更新 docstring）。
+
+**后续防范**：涉及「缺省已设 X」的服务端参数，客户端编排一律走 flag 透传不走 env 猜测。
+
+复盘（2026-10-02，RSI 子代理）：G2 比选——A「env 兜底继续 + 文档强调局限」否决（缺省命令路径服务端缺省 setter 结构性覆盖 env，文档修不了行为）；B（采纳）`tts_resume` 新增 `--mps-mem-limit-gib` 透传（同名映射 `tts_server.py` flag）+ env 兜底**降级圈定** `--server-cmd` 路径：缺省路径传 `--mps-high-ratio` 改为入口大声拒绝并指路新 flag（静默无效正是本条病理，放过等于埋同一个坑）；C「`--mps-high-ratio` 自动换算 GiB 透传」否决（ratio×recommended 的 recommended 值只有服务端知道，客户端换算引入第二事实源）；D「删除 env 兜底」否决（自定义 `--server-cmd` 命令无 flag 追加通道，env 是唯一手段——降级不删除）。入口防呆次序刻意：值校验（≥0 有限，nan/inf/负数同拦）**先于杀服**——坏值若透传到服务端，冷重启会先杀掉健康服务、新进程才被服务端 argparse 拦下起不来；`--mps-mem-limit-gib` 与 env 旋钮互斥、与 `--server-cmd` 组合拒收（同 RSI-035 的「编排器不猜用户命令的参数面」）。`mps_env` docstring 与 `--mps-high-ratio` help 同步圈定作用域；PIPELINE.md §三脚本表 MPS 句改写。实施：分支 `ThreeFish-AI/rsi-034-036-emo-memlimit-cue-form`（PR 链接待回填），回归测试 5 条：透传落 argv（0/16.5/缺省三态）/坏值先于杀服拦截/`--server-cmd` 与 env 旋钮双拒收/缺省路径 `--mps-high-ratio` 大声拒绝且指路/env+`--server-cmd` 路径保留放行。独立核验（2026-10-02，第二子代理）：17 参数组合矩阵推演+实测无漏洞、值校验先于杀服经源码序结构性确认、文档三处互洽。备查两条（不改行为）：①`-0.0` 经 `:g` 格式化落成 `-0`（服务端 `>=0` 放行、语义等同 0，仅形态略怪）；②16 GB 级机型服务端缺省额度低于常驻底线时缺省路径**不调 setter**（env 实未被覆盖），`reconcile_mps` 对缺省路径 env 旋钮一刀切拒绝在该机型属过度拒绝——换来的是全机型确定性语义（flag 路径恒有效），取舍保留。
+
+复盘补（2026-10-02，PR #30 复核）：复核子代理抓出拒收矩阵漏口——`reconcile_mps` 的 elif 只守 `--mps-high-ratio`，单独传 `--mps-low-ratio`（缺省路径）误落 mps_env 的「须成对使用」，照做配对后又被同一入口以「env 兜底仅 --server-cmd」驳回——两步矛盾链把用户引上必然被拒的路（与 RSI-038 登记的「指路不可执行」同类病理）。修复：elif 放宽为 high/low 任一在场即拦（报错覆盖两旋钮并指路 `--mps-mem-limit-gib`），`--mps-low-ratio` help 补 server-cmd 圈定；回归钉 `test_mps_low_ratio_alone_rejected_on_default_argv`（含「未杀服」计数断言）。同批测试加固：`test_mps_high_ratio_env_still_works_with_server_cmd` 升为真触发一次冷重启并断言 `extra_env` 注入（此前 extra_env→start_server 接线全仓零覆盖）、`test_mps_mem_limit_rejects_bad_values_before_killing_server` 补「restart 零调用」钉。
+
+## RSI-037 覆盖门 cue 形态对 prettier 默认格式化零容错：多行/`{ ` 空格即解析失败
+
+**表因**（同日实测）：场景代码经 prettier 默认格式化（cue 对象多行、`{` 后空行/空格）后 `check_archify_coverage` 只识别 10/18 个 cue；`CUE_OBJ_RE = \{chapterId:...` 要求 `{` 与 `chapterId` 零空白，格式化工具的默认输出直接破坏可解析性。
+
+**根因**：`check_archify_coverage.py` L70 `CUE_OBJ_RE` 正则未容空白；计数断言（声明数=识别数）本意防静默缩水，但把「格式化副作用」也当成了静默缩水。
+
+**定性**：非阻断改进（有 FAIL 报错不静默，但每个并行撰写场景的集都要再修一轮格式）。
+
+**处理方式**：待子代理（G2 方向=`\{\s*chapterId:` 放宽 + 回归测试：多行 cue 对象/`{ ` 空格形态可解析且计数不变；G4=确认宽松化不弱化「同锚句双 cue」「dur 单参」等既有断言）。
+
+**后续防范**：对代理产出代码做正则解析的门，正则先过 prettier 默认输出形态的快照测试。
+
+复盘（2026-10-02，RSI 子代理）：按登记方向修复——`CUE_OBJ_RE` 放宽为 `\{\s*chapterId:`（`{` 后容换行/空格），**其余断言一律不动**（chapterId 仍须首键、`at('句id')` 形态、dur 单参/求和形态、同锚句一致、计数断言）；G4 核对：放宽只增提取覆盖面（合法多行 cue 从「计数失配 FAIL」变为可提取），既有合规单行形态解析结果逐字节不变，块外 `chapterId` 仍走计数断言硬失败——对账口径未弱化。episode 侧 `check_archify.py` 反向 import `extract_cues`（单一提取器），同一放宽自动受益。实施：分支 `ThreeFish-AI/rsi-034-036-emo-memlimit-cue-form`（PR 链接待回填），回归测试 3 条：`test_prettier_multiline_cue_objects_parse`（多行+`{ ` 空格两形态可解析且锚定统计与单行基线逐数一致）/ `test_multiline_cue_still_enforces_at_form`（多行对象 at 形态断言照旧硬失败）/ `test_prettier_form_count_assertion_still_fires`（块外多行 chapterId 仍打计数失配）。独立核验（2026-10-02，第二子代理）：对抗矩阵全过（多行可解析/dur 双参仍 FAIL/锚句时长句分家仍 FAIL/块外计数失配/chapterId 非首键行为与修复前逐位一致，无新弱点）；episode 侧 check_archify 经 extract_cues 无行为回退。**残余风险登记**：`CUE_BLOCK_RE` 的 2200 字符窗未动，prettier 多行化把 cues 数组拉长 ~30–50%，大场景整体格式化后可能超窗触发「声明 N 只识别 0」——失败响亮不静默，但报错文案指向 at/dur 写法、不点名窗口，易误诊；撞上时按新条目处理（扩窗或在报错里点名窗口）。
+
+复盘补（2026-10-02，PR #30 复核）：复核子代理指出引号残差——prettier 出厂默认 `singleQuote=false` 会把字符串翻双引号，只放宽空白不容引号时「容 prettier 默认格式化」只修一半（双引号形态整块零识别、报错仍指向 at/dur 写法易误诊；全机真实语料 828/828 cue 恒单引号，故此前未暴露——属承诺面内的未来风险）。修复：CUE_OBJ_RE/CUE_AT_RE/CUE_DUR_RE 三处引号放宽为 `['"]…['"]`（捕获组序不变，锚句 id 字符类 `[a-z0-9-]+` 与全部形态断言不动，declared 侧计数与引号无关不受影响）；回归钉 `test_prettier_double_quote_cues_parse`（双引号多行形态锚定统计与单引号基线逐数一致）。
+
+复盘补二（2026-10-02，PR #30 评审）：评审抓出引号放宽的同类残差——同一提取循环**第 4 处**单引号正则 `fit:\s*'(stretch|hold|trim)'`（extract_cues 函数体内、不在正则常量块）漏改：`fit: "stretch"` 双引号形态 CUE_OBJ_RE 可匹配、fit 静默解析为 None，下游 check_archify 的 `explicit_stretch` 集合漏收该 cue、「显式 stretch 越界」FAIL 不再触发——该门防的正是渲染期抛错（与 ArchifyRecap.pickFit 同构：自动挡越界降档 hold/trim，唯显式 stretch 越界才渲染期抛错），静默 None 即「少算不报错」病理。修复：fit 正则同步放宽 `['"]…['"]`（值词表 stretch|hold|trim 不动）；回归钉 `test_prettier_double_quote_fit_extracted` 直调 `extract_cues` 观测 fit（CLI 门输出不含 fit，直调单一提取器是唯一可观测面）。教训：对「容 X 格式化」类修复，验收须枚举同一数据流上的**全部**消费者/提取点逐个比对容差口径——三兄弟正则在常量块同批改，函数体内第四处漏网。
+
+## RSI-038 archify 3.0 产物与录制器断层：无官方支持路径，使用侧兼容层方案未文档化
+
+**表因**（2026-10-01，E1 实测）：archify 3.0 出的 HTML 无 guided-views 模块（JS+容器全无），`record_archify_all.py` 预检 FAIL 且指路「须用仍含该模块的版本重新出图」——但 2.x 无备份可寻（skill 非 git 历史、npm 同名包无关），指路不可执行。E1 以 80 行兼容层绕过（桥接 3.0 原生 `focus.set/view.reveal/view.centerAt` + 播放期 opacity 脉动保帧率 15→62fps），注入器幂等可复现（negentropy E1 `scripts/patch-archify-html.py`）。
+
+**根因**：录制器（`record_archify.py` L815+）硬依赖 `Archify.guidedViews` 五 API，archify 3.0 移除该模块后两侧无桥接层；录制器报错文案写成时的「重新出图」路径在 3.0 时代已不存在。
+
+**定性**：非阻断改进（有 FAIL 报错不静默；每支用 3.0 图的集都要自行重造兼容层）。
+
+**处理方式**：暂缓（G2 方案比选成本高：录制器消费 3.0 原生 focus API vs skill 内置注入器 vs 文档化使用侧方案——三条路线须对比；先由本条沉淀 E1 的可复现实例）。触发条件=下一支集再用 archify 3.0 图时一并比选。
+
+**后续防范**：升 archify major 前先跑 `record_archify_all --dry-run` 预检，断层在制作早期暴露。
