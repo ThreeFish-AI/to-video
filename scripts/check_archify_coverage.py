@@ -67,12 +67,13 @@ from check_script import parse_storyboard, parse_storyboard_visual
 # ---------------- cue 提取（单一事实源，episode check_archify 反向 import） ----------------
 
 CUE_BLOCK_RE = re.compile(r"<ArchifyRecap\b([\s\S]{0,2200}?)/>")
-# `{` 与 chapterId 之间容空白（RSI-037：prettier 默认格式化把 cue 对象拆多行/
-# `{` 后加空格，零容错会把合法 cue 打成「声明 N 只识别 M」）；chapterId 仍须是
-# 首键，at('句id')/dur 单参/同锚句等形态断言不变。
-CUE_OBJ_RE = re.compile(r"\{\s*chapterId:\s*'([^']+)'[^{}]*\}")
-CUE_AT_RE = re.compile(r"at:[^,]*?at\('([a-z0-9-]+)'\)")
-CUE_DUR_RE = re.compile(r"durationInFrames:\s*dur\('([a-z0-9-]+)'\)")
+# `{` 与 chapterId 之间容空白、字符串引号单双均容（RSI-037：prettier 默认格式化
+# 把 cue 对象拆多行/`{` 后加空格，出厂默认 singleQuote=false 还会把字符串翻成
+# 双引号——只容多行不容引号，「容 prettier 默认格式化」只修一半）；chapterId
+# 仍须是首键，at('句id')/dur 单参/同锚句等形态断言不变。
+CUE_OBJ_RE = re.compile(r"""\{\s*chapterId:\s*['"]([^'"]+)['"][^{}]*\}""")
+CUE_AT_RE = re.compile(r"""at:[^,]*?at\(['"]([a-z0-9-]+)['"]\)""")
+CUE_DUR_RE = re.compile(r"""durationInFrames:\s*dur\(['"]([a-z0-9-]+)['"]\)""")
 
 Cue = tuple[
     str, str, str, str, "str | None"

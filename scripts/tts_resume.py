@@ -192,11 +192,15 @@ def reconcile_mps(args: argparse.Namespace) -> dict[str, str]:
                 "--mps-mem-limit-gib 与 --mps-high-ratio/--mps-low-ratio 互斥："
                 "flag 透传路径下 env 被服务端 setter 覆盖（RSI-036），env 旋钮无效"
             )
-    elif args.mps_high_ratio is not None and not args.server_cmd:
+    elif (
+        args.mps_high_ratio is not None or args.mps_low_ratio is not None
+    ) and not args.server_cmd:
+        # low 单独在场同样拦在圈定门：此前误落 mps_env 的「须成对使用」，照做
+        # 补 high 后又被本门驳回——两步矛盾链把用户引上必然被拒的路。
         sys.exit(
-            "--mps-high-ratio 的 env 兜底仅服务 --server-cmd 自定义命令：缺省命令"
-            "路径下 tts_server 缺省已调 setter 设水位线、env 注入被覆盖"
-            "（RSI-036 实测无效）——改用 --mps-mem-limit-gib 透传"
+            "--mps-high-ratio/--mps-low-ratio 的 env 兜底仅服务 --server-cmd 自定义"
+            "命令：缺省命令路径下 tts_server 缺省已调 setter 设水位线、env 注入被"
+            "覆盖（RSI-036 实测无效）——调上限改用 --mps-mem-limit-gib 透传"
         )
     return mps_env(args.mps_high_ratio, args.mps_low_ratio)
 
@@ -433,7 +437,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--mps-low-ratio",
         default=None,
-        help="注入 PYTORCH_MPS_LOW_WATERMARK_RATIO（与 --mps-high-ratio 成对）",
+        help="注入 PYTORCH_MPS_LOW_WATERMARK_RATIO（与 --mps-high-ratio 成对；同样"
+        "仅 --server-cmd 自定义命令生效——缺省命令路径改用 --mps-mem-limit-gib）",
     )
     return p
 
