@@ -293,6 +293,25 @@ def test_use_qwen_emo_rejected_with_custom_server_cmd(monkeypatch, fake_root):
     assert "--server-cmd" in str(e.value)
 
 
+def test_server_launch_hint_flags_anchored_to_manual():
+    """RSI-034 核验建议①：hint ↔ VOICE-CLONING §2.3 的 flag 口径此前只靠台账
+    纪律「三处同批走」，仿 test_tts_mps_oom_contract 读手册先例升机器锚——
+    §2.3 权威命令的显式 flag 必须同时在 hint 与缺省 argv（可选 --use-qwen-emo
+    在手册与 hint 以可选/注释形态在场、缺省 argv 不带）。"""
+    manual = (
+        Path(__file__).resolve().parents[1] / "references" / "VOICE-CLONING.md"
+    ).read_text(encoding="utf-8")
+    sec = manual.split("### 2.3", 1)[1].split("### 2.4", 1)[0]
+    hint = tts.server_launch_hint(8766)
+    argv = tts_resume.default_server_argv(8766)
+    for token in ("--indextts-version 2.5", "--host 127.0.0.1", "--use-qwen-emo"):
+        assert token in sec, (
+            f"手册 §2.3 不再含 {token}——口径漂移，请同批更新 hint/argv/测试"
+        )
+        assert token in hint
+    assert "--use-qwen-emo" not in argv  # 可选能力缺省不带（透传参数才追加）
+
+
 def test_index_tts_root_honors_env_and_flag(monkeypatch):
     monkeypatch.setenv("TO_VIDEO_INDEX_TTS_ROOT", "/opt/idx")
     assert tts_resume.index_tts_root(None) == Path("/opt/idx")
