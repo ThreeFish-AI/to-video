@@ -330,41 +330,98 @@ def test_repo_markdown_relative_links_resolve():
     assert not broken, "相对链接指向不存在的文件：\n  " + "\n  ".join(broken)
 
 
+def test_repo_markdown_free_of_merge_conflict_markers():
+    """全仓 Markdown 不得残留 git 冲突标记（RSI-039 评审加固：冲突标记曾全绿入库）。
+
+    只查行首 '<<<<<<<' / '>>>>>>>'（git 冲突形态），不查 '======='——setext 标题
+    下划线会假阳性；代码围栏内亦不计（_outside_fences）。
+    """
+    offenders = []
+    for doc in repo_markdown():
+        for i, line in enumerate(_outside_fences(doc.read_text(encoding="utf-8")), 1):
+            if line.startswith(("<<<<<<<", ">>>>>>>")):
+                rel = doc.relative_to(SKILL_ROOT).as_posix()
+                offenders.append(f"{rel}:{i}: {line[:50]}")
+    assert not offenders, "Markdown 残留 git 冲突标记：\n  " + "\n  ".join(offenders)
+
+
 # ── 7. 开篇钩子规范跨文档一致性（RSI-039） ────────────────────────────────────
 
 
+def _lines_with(text: str, *needles: str) -> list[str]:
+    """同一行内共现全部子串的行——行锚防跨节无关命中拼合出假绿。"""
+    return [ln for ln in text.splitlines() if all(n in ln for n in needles)]
+
+
 def test_opening_hook_discipline_cross_docs_consistency():
-    """断言开篇「这是 XXX ……」钩子规范在策划、逐字稿、校验、优化、分镜及路由壳中全链条锚定。"""
+    """开篇「这是 XXX ……」钩子规范在策划、逐字稿、校验、优化、分镜及路由壳中
+    全链条行级锚定（RSI-039；评审加固改行锚共现断言，并补 en/Z14/门名/复核枚举锚）。"""
     skill_text = SKILL_MD.read_text(encoding="utf-8")
-    assert "开篇钩子铁律" in skill_text, "SKILL.md 关键不变量须声明开篇钩子铁律"
+    assert _lines_with(skill_text, "开篇钩子铁律", "这是 XXX", "候选"), (
+        "SKILL.md 关键不变量行须同行声明铁律句式与候选矩阵"
+    )
 
     plan_text = (SKILL_ROOT / "references" / "02-planning.md").read_text(
         encoding="utf-8"
     )
-    assert "这是 XXX" in plan_text and "候选" in plan_text, (
+    assert _lines_with(plan_text, "人机协同钩子候选矩阵", "这是 XXX"), (
         "02-planning.md 须声明「这是 XXX」模式与人机协同候选矩阵"
+    )
+    assert _lines_with(plan_text, "人机协同钩子候选矩阵", "★ 选定"), (
+        "02-planning.md 候选矩阵须同行约定「★ 选定」落盘标记"
     )
 
     narration_text = (SKILL_ROOT / "references" / "03-narration.md").read_text(
         encoding="utf-8"
     )
-    assert "这是 XXX" in narration_text and "p0-01" in narration_text, (
-        "03-narration.md 须声明首句 p0-01「这是 XXX」入场铁律"
+    assert _lines_with(narration_text, "开篇钩子入场铁律", "这是 XXX", "p0-01"), (
+        "03-narration.md 写作纪律须同行声明首句 p0-01「这是 XXX」入场铁律"
+    )
+    assert _lines_with(narration_text, "p0-01", "This is"), (
+        "03-narration.md 英文写作口径须同行声明 en 首句 This is 对齐"
     )
 
     verify_text = (SKILL_ROOT / "references" / "04-verification.md").read_text(
         encoding="utf-8"
     )
-    assert "开篇钩子" in verify_text and "这是 XXX" in verify_text, (
+    assert _lines_with(verify_text, "开篇钩子与核心引子门", "3–5"), (
         "04-verification.md 须声明开篇钩子与核心引子门"
+    )
+    assert _lines_with(verify_text, "模式与即时吸引力", "这是 XXX"), (
+        "04-verification.md 开篇钩子门判据须锚定「这是 XXX」句式"
+    )
+    assert _lines_with(verify_text, "首句 Hook 保真", "This is"), (
+        "04-verification.md 译文保真须同行声明 en 首句 Hook 保真"
+    )
+    assert _lines_with(verify_text, "判定口径", "这不是"), (
+        "04-verification.md 开篇钩子门须声明句式判定口径（含否定式悬念钩）"
+    )
+    assert _lines_with(verify_text, "改动句复核", "开篇钩子"), (
+        "04-verification.md 改动句复核范围须纳入开篇钩子门（p0-01 改动时）"
     )
 
     prose_text = (SKILL_ROOT / "references" / "05-prose-refinement.md").read_text(
         encoding="utf-8"
     )
-    assert "这是 XXX" in prose_text, "05-prose-refinement.md 须声明开篇钩子破题与闭环"
+    assert _lines_with(prose_text, "Z14", "这是 XXX"), (
+        "05-prose-refinement.md 去机器味表 Z14 行须锚定「这是 XXX」钩子处方"
+    )
+    assert _lines_with(prose_text, "开篇钩子与问题兑现", "这是 XXX"), (
+        "05-prose-refinement.md L1 第 4 条须锚定开篇钩子破题"
+    )
+    assert _lines_with(prose_text, "改动句复核", "开篇钩子"), (
+        "05-prose-refinement.md §九.4 改动句复核范围须纳入开篇钩子门"
+    )
 
     sb_text = (SKILL_ROOT / "references" / "06-storyboard.md").read_text(
         encoding="utf-8"
     )
-    assert "开篇首镜视听合力" in sb_text, "06-storyboard.md 须声明开篇首镜视听合力定式"
+    assert _lines_with(sb_text, "开篇首镜视听合力", "这是 XXX"), (
+        "06-storyboard.md 须声明开篇首镜视听合力定式（与口播「这是 XXX」合力）"
+    )
+    impl_text = (SKILL_ROOT / "references" / "08-remotion-implementation.md").read_text(
+        encoding="utf-8"
+    )
+    assert _lines_with(impl_text, "开篇首镜视听合力", "严禁静止文字卡"), (
+        "08-remotion-implementation.md 实现层须镜像开篇首镜定式落地条目"
+    )

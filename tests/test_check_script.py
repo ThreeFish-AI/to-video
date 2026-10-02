@@ -349,6 +349,58 @@ def test_subtitle_width_runs_in_pre_tts(project):
     assert "超字幕单行上限" in out
 
 
+# ---------------- p0-01 开篇钩子句式 WARN（RSI-039；执法主体=④ 评审门） ----------------
+
+
+def test_opening_hook_plain_opener_warns(project):
+    """寒暄/平铺开场（「今天我们来聊聊」）→ WARN 点名 p0-01，不影响退出码。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(project, ["今天我们来聊聊一个新东西。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert any(
+        "WARN" in ln and "p0-01" in ln and "开篇钩子" in ln for ln in out.splitlines()
+    )
+
+
+def test_opening_hook_negation_prefix_passes(project):
+    """「这不是」起头零 WARN——否定式悬念钩合法（RSI-039 判定口径）。"""
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    write_narration(project, ["这不是一支普通的科普视频。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert not [ln for ln in out.splitlines() if "开篇钩子" in ln and "WARN" in ln], out
+
+
+def test_opening_hook_runs_in_pre_tts(project):
+    """两遍法草稿遍（无分镜）即拦——句式是文本自身可判面。"""
+    (project / "script" / "storyboard.md").unlink()
+    write_config(project, CFG_OK)
+    write_narration(project, ["大家好，欢迎收看本期节目。", BENIGN, BENIGN, BENIGN])
+    rc, out = run_check(project, "--pre-tts")
+    assert rc == 0, out
+    assert any(
+        "WARN" in ln and "p0-01" in ln and "开篇钩子" in ln for ln in out.splitlines()
+    )
+
+
+def test_opening_hook_en_warns_without_this_is(project):
+    """en 门：p0-01 不以 "This is" 起头 → WARN；对齐起头零 WARN（语义判定在 ④C）。"""
+    setup_en(project)
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 0, out
+    assert any("WARN" in ln and "p0-01" in ln for ln in out.splitlines()), out
+    items = [
+        dict(EN_ITEMS_OK[0], text="This is a video made entirely by code.")
+    ] + EN_ITEMS_OK[1:]
+    setup_en(project, items)
+    rc, out = run_check(project, "--lang", "en")
+    assert rc == 0, out
+    assert not [ln for ln in out.splitlines() if "WARN" in ln and "开篇钩子" in ln], out
+
+
 # ---------------- --pre-tts：TTS 前置门（两遍法草稿遍，分镜未写） ----------------
 
 
@@ -405,7 +457,11 @@ def test_pre_tts_json_output_without_storyboard(project):
 
     # 输出 = 前置门头部行（人读）+ 多行 JSON（indent=1）；从第一个 "{" 起解析
     payload = _j.loads(out[out.index("{") :])
-    assert payload == {"fails": [], "warns": []}
+    assert payload["fails"] == []
+    # 夹具 p0-01 是平铺开场，触发已知的开篇钩子 WARN（RSI-039，WARN 不判死）——
+    # JSON 面关心 fails 清零与 warns 可消费，不锁定 WARN 明细。
+    assert all(w.startswith("WARN") for w in payload["warns"]), payload["warns"]
+    assert any("p0-01" in w and "开篇钩子" in w for w in payload["warns"])
 
 
 # ---------------- --pron-candidates：多音字候选报告（非门） ----------------

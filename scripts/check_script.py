@@ -68,6 +68,11 @@ occurrence **无任何标注**」升为 FAIL。字典级确定的语境（每行
 beatStart（build 派生，幕内空行 = 一个 beat）；旧版产物缺失该键时 beat 级
 点名跳过、幕级照跑。与 --lang en 互斥（英文稿整句拉丁字母，密度口径无意义）。
 
+p0-01 开篇钩子句式 WARN（RSI-039，WARN 级）：首句不以 zh「这是/这不是」、
+en "This is" 起头即点名——句式是可机械判定的显性面，留存力/主干关联/引子精度
+仍是语义判据，执法主体 = ④ 评审门（不 FAIL，避免机械门越权替评审）。挂
+--pre-tts、--lang en 与 zh 完整门三路。
+
 用法：uv run --no-project $T/scripts/check_script.py --project $P [--lang zh|en]
 退出码：0 = 通过；1 = 有 FAIL。WARN 不影响退出码但会列明。
 """
@@ -603,6 +608,36 @@ def check_pron_marks(items: list[dict], msgs: list[str]) -> None:
             fail(msgs, f"句 {it['id']} 发音标注非法：{errs[0]}")
 
 
+#: 开篇钩子句式（RSI-039 ④「开篇钩子与核心引子门」的机器面，WARN 级）：句式是
+#: 可机械判定的显性面（zh 句首「这是/这不是」、en "This is" 起头）；留存力、主干
+#: 关联与引子精度是语义判据，执法主体仍是 ④ 评审门——这里只拦「句式都不对」，
+#: 不 FAIL，避免机械门越权替评审。
+HOOK_ZH_PREFIXES = ("这是", "这不是")
+HOOK_EN_PREFIX = "This is"
+
+
+def check_opening_hook(items: list[dict], lang: str, msgs: list[str]) -> None:
+    """p0-01 开篇钩子句式 WARN：首句不以钩子句式起头即点名（判定口径见 04 规格）。"""
+    first = next((it for it in items if it["id"] == "p0-01"), None)
+    if first is None:
+        return  # 幕结构不含 p0-01 的集（非常规开场）——此门不适用
+    text = (first.get("ttsText") or first["text"]).strip()
+    if lang != langs.PRIMARY:
+        if not text.startswith(HOOK_EN_PREFIX):
+            warn(
+                msgs,
+                f'p0-01 en 首句未以 "This is" 起头「{text[:32]}」——开篇钩子铁律'
+                "（RSI-039；变体合法性与留存力由 ④ 评审门裁定）",
+            )
+        return
+    if not text.startswith(HOOK_ZH_PREFIXES):
+        warn(
+            msgs,
+            f"p0-01 首句未以「这是/这不是」起头「{text[:20]}」——开篇钩子铁律"
+            "（RSI-039；句首禁寒暄，执法主体=④ 评审门）",
+        )
+
+
 #: 术语密度预算（RSI-015 ④B「密度预算」的机器面，WARN 级）：jev 集三个名词系统
 #: （集中度/门槛/计费单位）全部「先用后讲」，④B 五条全检通过而普通观众仍一脸懵
 #: ——每 beat 首现术语 ≤2、每幕 ≤8 是 04 规格 B 节的判据，此处做可机判的那半。
@@ -1133,6 +1168,7 @@ def main() -> None:
             check_reading_traps(items, msgs)
             check_subtitle_width(root, items, msgs)
         check_pron_marks(items, msgs)
+        check_opening_hook(items, lang, msgs)
         if args.term_density:
             check_term_density(items, args.terms.split(","), msgs)
     elif lang != langs.PRIMARY:
@@ -1143,6 +1179,7 @@ def main() -> None:
         check_translation(root, lang, items, msgs)
         check_budget(root, items, cfg, msgs, lang)
         check_pron_marks(items, msgs)
+        check_opening_hook(items, lang, msgs)
         check_caption_duplication(root, items, msgs)
         if args.check_scenes:
             report_untranslated_scene_text(root, msgs)
@@ -1154,6 +1191,7 @@ def main() -> None:
         check_budget(root, items, cfg, msgs)
         check_reading_traps(items, msgs)
         check_subtitle_width(root, items, msgs)
+        check_opening_hook(items, lang, msgs)
         check_fade_invariant(root, msgs)
         check_caption_duplication(root, items, msgs)
         if args.term_density:
