@@ -553,6 +553,8 @@
 
 **后续防范**：涉及「缺省已设 X」的服务端参数，客户端编排一律走 flag 透传不走 env 猜测。
 
+复盘（2026-10-02，RSI 子代理）：G2 比选——A「env 兜底继续 + 文档强调局限」否决（缺省命令路径服务端缺省 setter 结构性覆盖 env，文档修不了行为）；B（采纳）`tts_resume` 新增 `--mps-mem-limit-gib` 透传（同名映射 `tts_server.py` flag）+ env 兜底**降级圈定** `--server-cmd` 路径：缺省路径传 `--mps-high-ratio` 改为入口大声拒绝并指路新 flag（静默无效正是本条病理，放过等于埋同一个坑）；C「`--mps-high-ratio` 自动换算 GiB 透传」否决（ratio×recommended 的 recommended 值只有服务端知道，客户端换算引入第二事实源）；D「删除 env 兜底」否决（自定义 `--server-cmd` 命令无 flag 追加通道，env 是唯一手段——降级不删除）。入口防呆次序刻意：值校验（≥0 有限，nan/inf/负数同拦）**先于杀服**——坏值若透传到服务端，冷重启会先杀掉健康服务、新进程才被服务端 argparse 拦下起不来；`--mps-mem-limit-gib` 与 env 旋钮互斥、与 `--server-cmd` 组合拒收（同 RSI-034 的「编排器不猜用户命令的参数面」）。`mps_env` docstring 与 `--mps-high-ratio` help 同步圈定作用域；PIPELINE.md §三脚本表 MPS 句改写。实施：分支 `ThreeFish-AI/rsi-034-036-emo-memlimit-cue-form`（PR 链接待回填），回归测试 5 条：透传落 argv（0/16.5/缺省三态）/坏值先于杀服拦截/`--server-cmd` 与 env 旋钮双拒收/缺省路径 `--mps-high-ratio` 大声拒绝且指路/env+`--server-cmd` 路径保留放行。
+
 ## RSI-036 覆盖门 cue 形态对 prettier 默认格式化零容错：多行/`{ ` 空格即解析失败
 
 **表因**（同日实测）：场景代码经 prettier 默认格式化（cue 对象多行、`{` 后空行/空格）后 `check_archify_coverage` 只识别 10/18 个 cue；`CUE_OBJ_RE = \{chapterId:...` 要求 `{` 与 `chapterId` 零空白，格式化工具的默认输出直接破坏可解析性。

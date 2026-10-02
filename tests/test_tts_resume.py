@@ -336,6 +336,111 @@ def test_mps_env_pairing_rules():
         tts_resume.mps_env("-1", "0.7")
 
 
+# ---------------- MPS 旋钮归位（RSI-035：flag 透传 vs env 兜底） ----------------
+
+
+def test_mps_mem_limit_gib_passthrough_appended():
+    """>0 设限与 0（禁用 high watermark）都原样落进缺省 argv；缺省不追加。"""
+    argv = tts_resume.default_server_argv(8766, mps_mem_limit_gib=0.0)
+    assert argv[argv.index("--mps-mem-limit-gib") + 1] == "0"
+    argv16 = tts_resume.default_server_argv(8766, mps_mem_limit_gib=16.5)
+    assert argv16[argv16.index("--mps-mem-limit-gib") + 1] == "16.5"
+    assert "--mps-mem-limit-gib" not in tts_resume.default_server_argv(8766)
+
+
+def test_mps_mem_limit_rejects_bad_values_before_killing_server(monkeypatch, fake_root):
+    """入口防呆先于杀服：坏值若透传到服务端，冷重启会先杀掉健康服务、新进程才
+    被服务端 argparse 拦下（起不来）——自愈器必须在本入口拦（nan/inf/负数同拦，
+    nan/-inf 比较恒 False 是 mps_env 已登记的老陷阱形态）。"""
+    _mock_loop(monkeypatch, [True], [0])
+    for bad in ("-1", "nan", "inf"):
+        with pytest.raises(SystemExit) as e:
+            tts_resume.main(
+                [
+                    "--mps-mem-limit-gib",
+                    bad,
+                    "--index-tts-root",
+                    str(fake_root),
+                    "--",
+                    *FWD,
+                ]
+            )
+        assert "mps-mem-limit-gib" in str(e.value)
+
+
+def test_mps_mem_limit_rejected_with_server_cmd_or_env_knobs(monkeypatch, fake_root):
+    """flag 只追加进缺省命令（--server-cmd 请自带）；与 env 旋钮互斥——flag 在场
+    时 env 被服务端 setter 覆盖，两层各说各话。"""
+    _mock_loop(monkeypatch, [True], [0])
+    with pytest.raises(SystemExit) as e1:
+        tts_resume.main(
+            [
+                "--mps-mem-limit-gib",
+                "0",
+                "--server-cmd",
+                "uv run x",
+                "--index-tts-root",
+                str(fake_root),
+                "--",
+                *FWD,
+            ]
+        )
+    assert "--server-cmd" in str(e1.value)
+    with pytest.raises(SystemExit) as e2:
+        tts_resume.main(
+            [
+                "--mps-mem-limit-gib",
+                "0",
+                "--mps-high-ratio",
+                "0.0",
+                "--index-tts-root",
+                str(fake_root),
+                "--",
+                *FWD,
+            ]
+        )
+    assert "互斥" in str(e2.value)
+
+
+def test_mps_high_ratio_rejected_on_default_argv(monkeypatch, fake_root):
+    """RSI-035 回归钉：缺省命令路径 env 兜底被服务端缺省 setter 覆盖（实测
+    HIGH=0.0 注入后 /health 仍 15.98）——入口大声拒绝并指路 flag 透传，不再
+    静默无效（静默放过 = 埋同一个坑给下一次长跑）。"""
+    _mock_loop(monkeypatch, [True], [0])
+    with pytest.raises(SystemExit) as e:
+        tts_resume.main(
+            [
+                "--mps-high-ratio",
+                "0.0",
+                "--index-tts-root",
+                str(fake_root),
+                "--",
+                *FWD,
+            ]
+        )
+    assert "--mps-mem-limit-gib" in str(e.value)  # 可操作指路，不止报错
+
+
+def test_mps_high_ratio_env_still_works_with_server_cmd(monkeypatch, fake_root):
+    """env 兜底是降级圈定不是删除：--server-cmd 自定义命令（无 flag 追加通道）
+    仍走 env 注入，配对纪律由 mps_env 纯函数侧执法。"""
+    calls = _mock_loop(monkeypatch, [True], [0])
+    rc = tts_resume.main(
+        [
+            "--mps-high-ratio",
+            "0.0",
+            "--server-cmd",
+            "uv run x",
+            "--index-tts-root",
+            str(fake_root),
+            "--",
+            *FWD,
+        ]
+    )
+    assert rc == 0
+    assert calls["tts"] == 1  # env 路径放行、未被入口拦截
+
+
 # ---------------- 入口门禁：引擎面 + 客户端依赖面 ----------------
 
 

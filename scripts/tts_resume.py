@@ -13,7 +13,9 @@
 - 纯标准库（RSI 不变量 14）；服务启动命令从 tts.py 的 server_launch_hint 同构
   派生（--with 集合由测试对 hint 钉死防漂移，事实源仍在 tts.py）；长跑所需的
   服务端能力经 --use-qwen-emo 透传（RSI-034：冷重启不得静默降级服务能力——
-  缺省不带，story 块情感走台本向量无需 QwenEmotion）。
+  缺省不带，story 块情感走台本向量无需 QwenEmotion）；MPS 显存上限经
+  --mps-mem-limit-gib 直传（RSI-035：缺省命令路径 env 兜底被服务端缺省 setter
+  覆盖、实测无效——env 仅剩 --server-cmd 自定义命令路径）。
 - 仅服务 indextts 长跑：edge 无服务端可自愈，直接跑 tts.py。
 
 用法（`--` 之后的参数原样转发 tts.py；须与 tts.py 同解释器依赖面 --with mutagen）：
@@ -65,7 +67,9 @@ def port_from_server(server: str) -> int:
     sys.exit(f"无法从 --server {server!r} 解析端口（需 http(s)://host:port 形态）")
 
 
-def default_server_argv(port: int, use_qwen_emo: bool = False) -> list[str]:
+def default_server_argv(
+    port: int, use_qwen_emo: bool = False, mps_mem_limit_gib: float | None = None
+) -> list[str]:
     """tts_server 启动命令的可执行形态——与 tts.server_launch_hint 同构。
 
     刻意不调用 hint 原文（含 cd ~/tools/index-tts 字面量与续行符，面向终端粘贴）；
@@ -76,6 +80,10 @@ def default_server_argv(port: int, use_qwen_emo: bool = False) -> list[str]:
     情感的长跑必传（冷重启不带会静默降级服务能力、客户端在健康门硬失败）；
     **缺省不带**：story 档块情感走台本 cue 向量，无需 QwenEmotion，无条件开会
     +1.5 GB 且 qwen 权重未下载的机器直接起不来（VOICE-CLONING §2.4）。
+    mps_mem_limit_gib：透传 tts_server.py 同名 flag（RSI-035）——缺省命令路径
+    服务端缺省即调 setter 设水位线、进程 env 注入被覆盖（实测无效），长跑调
+    上限/禁用（0）只能走 flag 直传；缺省 None 不追加（服务端缺省
+    min(0.90×recommended, 16) 即生效）。
     """
     argv = [
         "uv",
@@ -104,6 +112,8 @@ def default_server_argv(port: int, use_qwen_emo: bool = False) -> list[str]:
     ]
     if use_qwen_emo:
         argv.append("--use-qwen-emo")
+    if mps_mem_limit_gib is not None:
+        argv += ["--mps-mem-limit-gib", f"{mps_mem_limit_gib:g}"]
     return argv
 
 
@@ -115,8 +125,11 @@ def index_tts_root(override: str | None = None) -> Path:
 
 
 def mps_env(high: str | None, low: str | None) -> dict[str, str]:
-    """MPS 水位线 env 兜底（可选）：tts_server.py 的 --mps-mem-limit-gib 缺省已设
-    进程水位线（RSI-017），env 仅服务自定义 --server-cmd 未带 flag 的场合。
+    """MPS 水位线 env 兜底（可选）——**仅 --server-cmd 自定义命令路径**（调用点
+    reconcile_mps 已圈定）：缺省命令路径下 tts_server.py 的 --mps-mem-limit-gib
+    缺省即调 setter 设进程水位线（RSI-017），继承的 env 被覆盖、注入无效
+    （RSI-035 实测：HIGH=0.0 注入后 /health 仍 15.98）——该路径调上限一律走
+    --mps-mem-limit-gib flag 透传。
 
     配对纪律（RSI-017 评审①⑤，实测）：单设正的 HIGH 而不配 LOW（默认 low=1.4，
     凡 high<1.4 即 low>high）首个 MPS 分配即抛 invalid low watermark ratio——
@@ -147,6 +160,45 @@ def mps_env(high: str | None, low: str | None) -> dict[str, str]:
     if low is not None:
         env["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = low
     return env
+
+
+def reconcile_mps(args: argparse.Namespace) -> dict[str, str]:
+    """MPS 旋钮归位（RSI-035）：缺省命令路径只认 flag 透传，env 兜底圈定
+    --server-cmd；返回注入 extra_env。
+
+    - --mps-mem-limit-gib：透传 tts_server.py 同名 flag（0=禁用 high watermark）。
+      入口校验 ≥0 有限值——坏值若透传到服务端，冷重启会**先杀掉健康服务**、新
+      进程才被服务端 argparse 拦下（起不来），自愈器必须先于杀服拦截。仅缺省
+      启动命令可追加（--server-cmd 请把 flag 写进命令串）；与 env 旋钮互斥
+      （flag 在场时 env 被服务端 setter 覆盖，两层各说各话）。
+    - --mps-high-ratio/--mps-low-ratio：缺省命令路径下大声拒绝——env 注入被
+      服务端缺省 setter 覆盖（RSI-035 实测无效），静默放过等于埋同一个坑。
+    """
+    v = args.mps_mem_limit_gib
+    if v is not None:
+        if not math.isfinite(v) or v < 0:
+            # 与 mps_env 同款防呆：nan/-inf 比较恒 False，负数同例
+            sys.exit(
+                f"--mps-mem-limit-gib 须为 ≥ 0 的有限数（0=禁用 high watermark），"
+                f"实际 {v!r}"
+            )
+        if args.server_cmd:
+            sys.exit(
+                "--mps-mem-limit-gib 只追加进缺省启动命令；--server-cmd 自定义命令"
+                "请把 flag 写进命令串（编排器不猜用户命令的参数面）"
+            )
+        if args.mps_high_ratio is not None or args.mps_low_ratio is not None:
+            sys.exit(
+                "--mps-mem-limit-gib 与 --mps-high-ratio/--mps-low-ratio 互斥："
+                "flag 透传路径下 env 被服务端 setter 覆盖（RSI-035），env 旋钮无效"
+            )
+    elif args.mps_high_ratio is not None and not args.server_cmd:
+        sys.exit(
+            "--mps-high-ratio 的 env 兜底仅服务 --server-cmd 自定义命令：缺省命令"
+            "路径下 tts_server 缺省已调 setter 设水位线、env 注入被覆盖"
+            "（RSI-035 实测无效）——改用 --mps-mem-limit-gib 透传"
+        )
+    return mps_env(args.mps_high_ratio, args.mps_low_ratio)
 
 
 def server_healthy(
@@ -363,10 +415,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="服务日志路径（缺省 .temp/tts-resume/server-<端口>.log，相对 CWD）",
     )
     p.add_argument(
+        "--mps-mem-limit-gib",
+        type=float,
+        default=None,
+        help="透传 tts_server.py 同名 flag（GiB；0=禁用 high watermark；缺省"
+        " min(0.90×recommended, 16) 即生效）——长跑调显存上限走 flag 直传：缺省命令"
+        "路径 env 注入被服务端 setter 覆盖、实测无效（RSI-035）；与 --mps-high-ratio"
+        " 互斥，仅缺省启动命令（--server-cmd 时写进命令串）",
+    )
+    p.add_argument(
         "--mps-high-ratio",
         default=None,
         help="注入 PYTORCH_MPS_HIGH_WATERMARK_RATIO（0<high<1.4 须配 --mps-low-ratio；"
-        "0.0=禁用水位线；tts_server 自带 flag 缺省已设限，仅在自定义 --server-cmd 时需要）",
+        "0.0=禁用水位线）——**仅 --server-cmd 自定义命令生效**：缺省命令路径被服务端"
+        "缺省 setter 覆盖（RSI-035 实测无效），改用 --mps-mem-limit-gib",
     )
     p.add_argument(
         "--mps-low-ratio",
@@ -400,13 +462,17 @@ def main(argv: list[str] | None = None) -> int:
             "--use-qwen-emo 只追加进缺省启动命令；--server-cmd 自定义命令请把 flag "
             "写进命令串（编排器不猜用户命令的参数面）"
         )
-    extra_env = mps_env(args.mps_high_ratio, args.mps_low_ratio)
+    extra_env = reconcile_mps(args)
 
     port = port_from_server(args.server)
     server_argv = (
         shlex.split(args.server_cmd)
         if args.server_cmd
-        else default_server_argv(port, use_qwen_emo=args.use_qwen_emo)
+        else default_server_argv(
+            port,
+            use_qwen_emo=args.use_qwen_emo,
+            mps_mem_limit_gib=args.mps_mem_limit_gib,
+        )
     )
     root = index_tts_root(args.index_tts_root)
     if not root.is_dir():
