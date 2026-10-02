@@ -12,7 +12,7 @@
 
 ## 一、核心能力
 
-- **IndexTTS-2.5 声音克隆配音**：用 10–14 秒干净样本克隆你自己的音色，风格档控制语气；样本勘探与保真度验收、逐句内容寻址缓存、断点续跑零重复合成（机制见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)）。无本地模型时可用 edge 预置音色（edge-tts）兜底。
+- **两档配音（RSI-034）**：制作期默认 edge-tts 草声（免费、秒级、需联网）跑通全流程；整集评审通过后由用户显式触发，用 IndexTTS-2.5 + 本人声音重配（10–14 秒干净样本克隆，风格档控制语气；样本勘探与保真度验收、逐句内容寻址缓存、断点续跑零重复合成，机制见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)）。
 - **Remotion 全代码动画**：每个画面是一个 React 场景组件——可 review、可 diff、可编程复渲；frozen 运动层提供跨集一致的时序语汇（时长令牌 / 缓动 / 弹簧 / 错峰），主题与构图每集独立设计。
 - **抽帧 QA 门**：草渲后按幕 / 句 / 末 N 句抽帧，自动体检黑帧、重复帧、安全区侵入与字幕 WCAG 对比度，零 FAIL 才放行终渲——把「渲染缺陷靠肉眼全程盯」压缩为「机器点名 + 定点目检」。
 - **archify 动效图例**：架构图（archify Skill 产物，见「相邻 Skill」）逐章录制为视频动效；覆盖门按句级锚定率执法「图与口播互证」，整幕零锚定即 FAIL。
@@ -92,7 +92,7 @@ npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固�
 
 ## 四、快速上手（Quickstart）
 
-变量约定（完整定义见 [references/PIPELINE.md](references/PIPELINE.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下用 edge 预置音色跑一支两幕三句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)。
+变量约定（完整定义见 [references/PIPELINE.md](references/PIPELINE.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下开箱即 edge 草声跑一支两幕三句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆重配见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)。
 
 ```bash
 T=~/.claude/skills/to-video
@@ -106,9 +106,8 @@ uv run --no-project $T/scripts/scaffold.py --init-workspace $W
 cd $W
 uv run --no-project $T/scripts/scaffold.py hello-video --title "你好 to-video"
 
-# 3) mini 篇幅调整：改用 edge 预置音色 + 把时长预算窗缩到三句话的量级
-sed -i '' -e 's/^engine = "indextts"/engine = "edge"/' \
-          -e 's/^target_minutes = .*/target_minutes = [0.1, 2.0]/' "$P/pipeline.toml"
+# 3) mini 篇幅调整：把时长预算窗缩到三句话的量级（引擎开箱即 edge 草声）
+sed -i '' -e 's/^target_minutes = .*/target_minutes = [0.1, 2.0]/' "$P/pipeline.toml"
 
 # 4) 写 mini 逐字稿（narration.md 是全片单一事实源；`## Pn 幕名` + 一句一行，
 #    幕标题还会派生为顶部分段章节进度条的段内文字）
@@ -141,7 +140,7 @@ cp $T/assets/quickstart/P0.tsx $T/assets/quickstart/P1.tsx "$P/video/src/scenes/
 uv run --no-project $W/scripts/pipeline.py --project $P build
 uv run --no-project $W/scripts/pipeline.py --project $P check
 
-# 8) ⑦ 配音（edge 引擎按分集包装器契约直调，三句秒级；克隆模式见 tts --plan）
+# 8) ⑦ 配音（edge 草声按分集包装器契约直调，三句秒级；克隆升档见 references/07）
 cd "$P" && uv run --no-project --with edge-tts --with mutagen scripts/tts.py
 
 # 9) ⑨ 草渲 + 抽帧体检（先装分集依赖；产物 $P/out/draft.mp4）

@@ -86,5 +86,13 @@
   {
     "query": "把这份《Mamba 精读与通俗拆解》再补一节核心争议，改完存回 docs/",
     "should_trigger": false
+  },
+  {
+    "query": "这集视频多轮评审都过了，使用 index tts 2.5 及本人声音（风格：默认 story 段落演绎）重配本集视频",
+    "should_trigger": true
+  },
+  {
+    "query": "用 index tts 2.5 及本人声音把这篇博客合成一段朗读 mp3 就行，不用做视频",
+    "should_trigger": false
   }
 ]

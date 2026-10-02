@@ -159,10 +159,10 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | `episode.slug`                  | ✅               | —                       | 须等于工程目录名（拦手抄来的陈旧 toml）；**是否登记进 series.json 不在此校验**，那归 `verify_skeleton.py` 的孤儿警告（非阻塞） |
 | `narration.target_minutes`      | ✅               | —                       | `[下限, 上限]` 分钟；缺失会让时长预算门**点名跳过**                                                                            |
 | `narration.chars_per_min`       |                 | `280`（story 档默认层 `254`） | 机制常数：含停顿等效语速，**默认层按 `tts.style` 分档**（`config.STYLE_CHARS_PER_MIN`，仅 story 有整集实测）；本集实测校准写 toml 覆写（references/07 完成门）                                             |
-| `tts.engine`                    |                 | `indextts`              | **策略声明**（有替代项 edge，且受 `.engine` 签名护栏约束），故保留在 toml                                                      |
+| `tts.engine`                    |                 | `edge`                  | **策略声明**（草声 edge \| 终声 indextts 两档，受 `.engine` 签名护栏约束），故保留在 toml                                      |
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
-| `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎，见 VOICE-CLONING §4.5）                                                          |
+| `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎）；engine=edge 时兼作**终声档锚点**（估算口径分档＋实测门跳过，以 edge 为终声不得挂） |
 | `tts.lang`                      |                 | `ZH`                    | 机制常数（zh 主稿恒 ZH；en 版由语言自动解析为 EN，见 §五「双语渲染」）                                                          |
 | `narration.langs`               |                 | `["zh"]`                | **策略声明**：本集产出的语言版本（必含 zh）；en 需显式声明并配 `narration.en.md`                                               |
 | `narration.words_per_min`       |                 | `150`                  | 机制常数：英文含停顿等效语速（首集实测后校准）                                                                                  |
@@ -225,6 +225,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 - **路径约定**：主语言 zh 与改造前逐字节一致；en 为 `script/narration.en.{md,json}`、`video/public/audio/en/`（独立 `.engine` 护栏）、`out/captions.en.{srt,vtt}`、`out/{draft,final}.en.mp4`、`out/frames.en/`、交付 `<标题> vN.en.mp4`（版本号按语言独立）。英文时间轴由英文配音实测时长自动重排——分镜 beat 以句 id 取窗，语言无关。
 - **对齐与失鲜**：`narration.en.md` 与主稿句 id 1:1（`build --lang en` 硬对齐门）；基线锁 `narration.en.lock.json` 记录翻译时的主稿句 digest，主稿改稿后 `check --lang en` 点名失配句。重建**不自动接受**改过的主稿（gettext fuzzy 语义）：译句改写即视为已重译、自动刷新；译文无需改动时 `build --lang en --accept <ids>` 显式确认。
 - **缺省语义（昂贵命令显式化）**：`build` / `check` / `captions` / `status` 缺省跑全部声明语言；**`tts` / `render` / `deliver` / `all` 缺省只跑 zh**（声明多语言而未指定即报错提示 `--lang`），显式多值才顺序执行且完成行按语言分打；`qa` 恒单语言（按视频文件名 `.en` 后缀推断）。
+- **本人声音追配（RSI-034）**：既有 zh 集追加 en 版可在 `[tts.en]` 声明 `engine = "indextts"` + 跨语种 `ref`/`style`（触发话术与完整流程见 [references/07](./07-tts-voice.md)「双语配音」；跨语种克隆必须先试听）。
 - **骨架分代**：改 frozen 骨架文件引入语言维度属新代（工作区 `to-video.toml` 的 `[[skeleton.generation]]` 登记旧代指纹与花名册，格式见 `skeleton.toml`「骨架分代」节；`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
 
 ## 六、新集脚手架清单
@@ -236,8 +237,8 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
    落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装。（可选）`export TO_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
 1. 实例化骨架（替代旧的「`cp -r` 任一既有集」——那句话给 391 行冻结基建留了 4 个同权真理声明者；建集模式自 CWD 锚定 `$W/episodes/`，须在工作区内执行）：
    ```bash
-   uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题" \
-       --ref <样本名> --ref-sha1 <12位指纹> --style <档名>
+   uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题"
+   # 开箱即 edge 草声（无需样本）；--ref/--ref-sha1 首次重配前补齐、--style 是终声档锚点
    ```
    scaffold 按 skeleton.toml 复制 frozen 文件 + 渲染 4 个模板（package.json / theme.ts / pipeline.toml / README），**刻意不生成 scenes/**（样例留在模板里）、不改 .gitignore（ignore 规则随工作区模板落盘、已通配到分集级）、不写 series.json。跑完立刻 `uv run --no-project $T/scripts/verify_skeleton.py` 确认新集与模板零漂移。
 2. `theme.ts` 换本集概念色；`video/src/scenes/*` 与 `Main.tsx` 注册表全部新写。
