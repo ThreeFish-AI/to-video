@@ -132,6 +132,71 @@ def test_measured_budget_uses_manifest(project):
     assert "实测口径" in out
 
 
+# -------- RSI-034：实测门只对「属于当前生效引擎」的 manifest 执法 --------
+
+
+def test_draft_voice_anchor_skips_measured_budget(project):
+    """engine=edge + 终声档锚点：草声实测墙钟不对终声窗执法（跳过须点名），
+    估算口径照常执法——本窗口下若无跳过，实测 ≈0.2 分必超 [0, 0.1]。"""
+    write_board(project, BOARD_OK)
+    write_config(
+        project,
+        "[narration]\ntarget_minutes = [0.0, 0.1]\nchars_per_min = 10000\n"
+        '[tts]\nengine = "edge"\nstyle = "story"\n',
+    )
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "草声期跳过" in out
+
+
+def test_edge_final_without_anchor_enforces_measured_budget(project):
+    """以 edge 为终声（无锚点）的集：实测门照常执法——锚点跳过不是免死金牌。"""
+    write_board(project, BOARD_OK)
+    write_config(
+        project,
+        "[narration]\ntarget_minutes = [0.0, 0.1]\nchars_per_min = 10000\n"
+        '[tts]\nengine = "edge"\n',
+    )
+    rc, out = run_check(project)
+    assert rc == 1
+    assert "实测时长" in out
+
+
+def test_upgrade_midstate_marker_mismatch_skips_measured_budget(project):
+    """升档中间态（RSI-034 核心钉子）：toml 已翻 indextts、.engine 标记还是
+    edge 草声——--pre-tts 前置门不得拿旧引擎墙钟对新档窗口假红拦死重配。"""
+    write_board(project, BOARD_OK)
+    write_config(
+        project,
+        "[narration]\ntarget_minutes = [0.0, 0.1]\nchars_per_min = 10000\n"
+        '[tts]\nengine = "indextts"\nref = "voices/me-bright.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\n',
+    )
+    (project / "video/public/audio/.engine").write_text(
+        "edge|zh-CN-YunxiNeural|+4%\n", encoding="utf-8"
+    )
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "升档重配未完成" in out
+
+
+def test_marker_matching_engine_enforces_measured_budget(project):
+    """标记与当前引擎一致（重配已完成或纯 indextts 集）：实测门恢复执法。"""
+    write_board(project, BOARD_OK)
+    write_config(
+        project,
+        "[narration]\ntarget_minutes = [0.0, 0.1]\nchars_per_min = 10000\n"
+        '[tts]\nengine = "indextts"\nref = "voices/me-bright.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\n',
+    )
+    (project / "video/public/audio/.engine").write_text(
+        "indextts|indextts|story|54b699cce97f\n", encoding="utf-8"
+    )
+    rc, out = run_check(project)
+    assert rc == 1
+    assert "实测时长" in out
+
+
 def test_fade_invariant(project):
     (project / "video/src/timing.json").write_text(
         '{"fps":30,"sentenceGapSec":0.32,"sceneGapSec":0.9,"leadInSec":0.6,"tailSec":2.0,"sceneCrossFadeSec":0.9}',

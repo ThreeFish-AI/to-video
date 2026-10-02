@@ -200,8 +200,15 @@ def check_budget(
     zh：target_minutes 窗口 + chars_per_min 字数口径（行为与单语时代逐字节一致）。
     en：窗口只认 narration.en.target_minutes——缺省点名 WARN 跳过、**不继承 zh
     窗口**（英文稿的合理窗与中文不同，静默继承等于造出一个没人声明过的门）；
-    估算 = 词数 ÷ words_per_min；实测读 audio/en/manifest.json。"""
-    narr = config.for_lang(cfg, lang).get("narration", {})
+    估算 = 词数 ÷ words_per_min；实测读 audio/en/manifest.json。
+
+    实测口径只对「属于当前生效引擎」的 manifest 执法（RSI-034），两条件跳过并
+    点名：① 草声期——engine=edge 且挂终声档锚点（tts.style），edge 语速≠终声
+    档口径，草声实测对终声窗执法必然系统性偏短；② 升档中间态——.engine 标记
+    首 token 与当前 engine 不符（toml 已翻 indextts、音频还是 edge），照窗执法
+    会把重配拦死在 --pre-tts 前置门。重配完成（标记重写）后本门自动恢复。"""
+    view = config.for_lang(cfg, lang)
+    narr = view.get("narration", {})
     budget = narr.get("target_minutes")
     # 形状校验归 config.validate（FAIL 已在那里报过）；此处只管「能否作为预算窗使用」。
     # 缺失与形状非法同路处理：解包前崩溃会让 FAIL 清单一条也打不出来。
@@ -253,14 +260,36 @@ def check_budget(
         fail(msgs, f"估算时长 {est_min:.1f} 分超预算 [{lo}, {hi}]")
     manifest = langs.manifest(root, lang)
     if manifest.is_file():
-        c = load_constants(root)
         m_items = json.loads(manifest.read_text(encoding="utf-8"))
-        real_min = total_duration_in_frames(m_items, c) / c["fps"] / 60
-        print(
-            f"  实测口径：manifest {len(m_items)} 句，含时距总长 = {real_min:.1f} 分钟"
+        tts_view = view.get("tts", {})
+        engine = tts_view.get("engine", config.default("tts.engine"))
+        anchor = tts_view.get("style")
+        marker = langs.audio_dir(root, lang) / ".engine"
+        marker_engine = (
+            marker.read_text(encoding="utf-8").split("|", 1)[0].strip()
+            if marker.is_file()
+            else None
         )
-        if not lo <= real_min <= hi:
-            fail(msgs, f"实测时长 {real_min:.1f} 分超预算 [{lo}, {hi}]")
+        if engine == "edge" and isinstance(anchor, str) and anchor:
+            print(
+                "  实测口径：草声期跳过（engine=edge 且挂终声档锚点）——"
+                "预算按终声档估算口径执法，重配完成后以终声实测复核；"
+                "以 edge 为终声交付的集应删除 tts.style 锚点恢复本门"
+            )
+        elif marker_engine is not None and marker_engine != engine:
+            print(
+                f"  实测口径：跳过——manifest 属 {marker_engine} 引擎、当前生效 "
+                f"{engine}（升档重配未完成）；重配完成后本门自动恢复"
+            )
+        else:
+            c = load_constants(root)
+            real_min = total_duration_in_frames(m_items, c) / c["fps"] / 60
+            print(
+                f"  实测口径：manifest {len(m_items)} 句，含时距总长 = {real_min:.1f} 分钟"
+            )
+            if not lo <= real_min <= hi:
+                fail(msgs, f"实测时长 {real_min:.1f} 分超预算 [{lo}, {hi}]")
+        # 句 id 集一致性是文本层事实（与引擎无关），跳过实测窗时照常执法
         if {i["id"] for i in m_items} != {i["id"] for i in items}:
             fail(msgs, "manifest 与 narration.json 的句 id 集不一致——改稿后未重跑 tts")
     else:

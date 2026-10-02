@@ -21,8 +21,9 @@ schema 是「pipeline.py 与 check_script.py 里 `.get()` 调用的并集」：�
 删哪些键的判据是正交的一条线：**删机制常数，留策略声明**。
   - 机制常数（chars_per_min / lang / draft_scale / draft_jpeg_quality）四集零差异、
     没有「本集为何选它」可讲 → 从 toml 删除，默认值在此。
-  - 策略声明（engine）有可见替代项（edge），且 `.engine` 音色签名护栏让它语义
-    承重 → **保留在 toml**，它是一条决策记录而非默认值。
+  - 策略声明（engine）有可见替代项（草声 edge | 终声 indextts 两档，RSI-034），
+    且 `.engine` 音色签名护栏让它语义承重 → **保留在 toml**，它是一条决策记录
+    而非默认值。
   - 机器属性（server）→ 只给默认值 + 环境变量覆盖，永不写进受版本控制的 toml
     （沿用 references/10 对并发度已立的同一原则）。
 
@@ -80,7 +81,13 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         False,
         "英文覆写：允许 target_minutes；缺省时英文预算门点名跳过、不继承 zh 窗口",
     ),
-    ("tts.engine", str, "indextts", False, "策略声明：indextts | edge"),
+    (
+        "tts.engine",
+        str,
+        "edge",
+        False,
+        "策略声明：edge（草声默认，秒级免费需联网）| indextts（评审后升档重配）；仍须在 toml 显式声明",
+    ),
     (
         "tts.ref",
         str,
@@ -89,7 +96,14 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         "参考样本，**工作区根相对**（如 voices/me-bright.wav）",
     ),
     ("tts.ref_sha1", str, None, "engine==indextts", "12 位，同 tts.py 口径"),
-    ("tts.style", str, None, "engine==indextts", "STYLE_PRESETS 中的档名"),
+    (
+        "tts.style",
+        str,
+        None,
+        "engine==indextts",
+        "STYLE_PRESETS 中的档名；engine=edge 时可选＝终声档锚点——预算估算口径"
+        "按档分档、实测口径草声期跳过（check_script），以 edge 为终声的集不得挂锚点",
+    ),
     ("tts.lang", str, "ZH", False, "机制常数"),
     (
         "tts.en",
@@ -244,6 +258,8 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
 #: 后续四集按 254 直写全部一次过窗。显式 toml 覆写仍优先（本集实测校准走那条路）。
 #: **仅 story 有整集实测**——新档位首轮 TTS 完成后以 manifest 实测秒数回写本表
 #: （操作指引见 references/07 完成门）。住 SCHEMA 侧的默认层延伸，非第二事实源。
+#: 草声期（engine=edge）tts.style 兼作终声档锚点：分档对草声估算口径同样生效
+#: （写稿按终声语速预算），实测口径则跳过直至重配完成（RSI-034）。
 STYLE_CHARS_PER_MIN: dict[str, int] = {"story": 254}
 
 #: 环境变量覆盖：仅限「机器属性」类键，不进受版本控制的 toml

@@ -181,10 +181,13 @@ def test_scope_limits_required_key_enforcement(tmp_path):
     内容门（check_script，scope={"narration"}）**不得**因为「还没挑配音样本」
     就拒绝检查分镜覆盖性——那是把 TTS 的前置条件强加给 ④⑥ 阶段。
     这条曾经真的破过：全量校验让三个既有内容门用例直接变红。
+    RSI-034 起默认引擎是 edge（无 tts.* 键即合法草声集），条件必填改由显式
+    engine="indextts" 触发——断言口径随之调整，教学意图不变。
     """
     root = _write(
         tmp_path,
-        "[narration]\ntarget_minutes = [1.0, 2.0]\n",  # 无 episode.slug、无 tts.*
+        # 无 episode.slug；tts 只声明克隆引擎，不补 ref/ref_sha1/style
+        '[narration]\ntarget_minutes = [1.0, 2.0]\n[tts]\nengine = "indextts"\n',
     )
     _cfg, _o, narrow, _w = config.load(root, required=True, scope={"narration"})
     assert not narrow, f"内容门范围内不该有 FAIL：{narrow}"
@@ -770,6 +773,43 @@ def test_chars_per_min_tier_ignores_non_string_style():
     raw["tts"]["style"] = ["story"]
     cfg, _o = config.resolve(raw)
     assert get(cfg, "narration.chars_per_min") == 280
+
+
+# ---------------- RSI-034：edge 草声默认档与终声档锚点 ----------------
+
+
+def test_engine_default_is_edge_draft():
+    """制作期默认引擎翻转为 edge（草声档）——终声克隆只在 toml 显式声明。"""
+    assert config.default("tts.engine") == "edge"
+
+
+def test_edge_with_style_anchor_tiers_and_validates(tmp_path):
+    """engine=edge + style=story＝终声档锚点合法共存：估算口径按 254 分档
+    （tier 引擎无关），validate 零 FAIL——锚点不触发 ref/ref_sha1 条件必填。"""
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        "target_minutes = [1.0, 2.0]\n"
+        '[tts]\nengine = "edge"\nstyle = "story"\n',
+    )
+    cfg, origin, fails, _w = config.load(root, required=True)
+    assert not fails, fails
+    assert cfg["narration"]["chars_per_min"] == 254
+    assert origin["narration.chars_per_min"] == "default"
+
+
+def test_edge_with_prefilled_ref_keys_still_validates(tmp_path):
+    """edge 下显式预填 ref/ref_sha1（老用法 --ref/--ref-sha1 或提前备好重配
+    参数）同样合法：不要求也不拒绝——向后兼容零破坏。"""
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        "target_minutes = [1.0, 2.0]\n"
+        '[tts]\nengine = "edge"\nref = "voices/me-bright.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\n',
+    )
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert not fails, fails
 
 
 # ---------------- qa.max_dark_sec（RSI-020 纯底色段门阈值） ----------------
