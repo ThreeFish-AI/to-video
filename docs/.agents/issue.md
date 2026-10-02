@@ -526,3 +526,51 @@
 
 **后续防范**：① 性能优化触碰既有隔离决策时，通过「细粒度沙箱（Context）+ 监督器自愈重启（Supervisor Restart）」同时满足低开销与故障隔离；② 孤儿浏览器识别一律以「自动化沙箱特征（profile/headless-shell/headless）× 主进程（非 `--type=`）× 父进程状态（`ppid=1`）」三维判定，兼顾无头与可见孤儿且永不触碰用户日常主 profile。
 
+
+## RSI-034 tts_resume 默认 server argv 缺 --use-qwen-emo：story 档（skill 默认配音档）MPS 泄漏自愈后必败
+
+**表因**（2026-10-01，E1《刻意做小》配音实测）：story 档长跑遇 MPS 显存 OOM 后，`tts_resume.py` 自动冷重启的服务 health 显示 `supports_emo_text:false`，续跑客户端对 emo 块（`[block.*]` 台本，story 档标配）合成必然失败——自愈回路对 skill 默认配音档不闭环，须人工带 `--use-qwen-emo` 重启服务再裸跑 tts.py 才能续。
+
+**根因**：`tts_resume.py` 的 `default_server_argv()`（L73-91）硬编码 argv 不含 `--use-qwen-emo`（也不含 `--indextts-version 2.5`/`--host`）；该函数 docstring 声称与 `tts.server_launch_hint` 同构并由 `tests/test_tts_resume.py` 钉死——但 hint 本身或测试快照若同样缺 emo flag，则「单一事实源」自身不完整：`references/07-tts-voice.md` 的启动命令明确带 `--use-qwen-emo`，两处口径已漂移。
+
+**定性**：阻断性缺陷（默认档自愈失效）。
+
+**处理方式**：待子代理（G1 复现=health emo 字段翻转即可判定；G2 修复方向=server_launch_hint 补 flag + default_server_argv 同步 + 测试快照钉死）。
+
+**后续防范**：改 tts_server 启动参数时，hint / default_server_argv / 07 规格 / 测试快照四处同批走。
+
+## RSI-035 --mps-high-ratio env 兜底对「服务端缺省已设限」不生效：水位线开关两层打架
+
+**表因**（同日实测）：传 `--mps-high-ratio 0.0`（resume 注入 `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0`）冷重启服务后，OOM 报错仍为「当前上限 15.98 GiB」且 health `mps_mem_limit_gib:15.98`；直接给服务端传 `--mps-mem-limit-gib 0` 后 health 该字段变 `None`、泄漏块一次通过——env 兜底路径失效，真开关在服务端 flag。
+
+**根因**：`tts_resume.mps_env()` docstring 自述「env 仅服务自定义 --server-cmd 未带 flag 的场合」，但默认 argv 路径下 `tts_server.py` 的 `--mps-mem-limit-gib` **缺省即设进程水位线**（RSI-017 行为）——服务端缺省逻辑覆盖/无视了 resume 注入的进程 env，两层各说各话。
+
+**定性**：非阻断改进（参数存在但行为与文档承诺不符；文档已部分承认边界）。
+
+**处理方式**：待子代理（G1 复现=对比两种注入路径的 health 字段；G2 方向=resume 冷重启 argv 直接透传 `--mps-mem-limit-gib`（如新增 `--mps-mem-limit-gib` 透传参数或 mps_env 并入 argv），env 兜底降级为仅自定义 server-cmd 路径并更新 docstring）。
+
+**后续防范**：涉及「缺省已设 X」的服务端参数，客户端编排一律走 flag 透传不走 env 猜测。
+
+## RSI-036 覆盖门 cue 形态对 prettier 默认格式化零容错：多行/`{ ` 空格即解析失败
+
+**表因**（同日实测）：场景代码经 prettier 默认格式化（cue 对象多行、`{` 后空行/空格）后 `check_archify_coverage` 只识别 10/18 个 cue；`CUE_OBJ_RE = \{chapterId:...` 要求 `{` 与 `chapterId` 零空白，格式化工具的默认输出直接破坏可解析性。
+
+**根因**：`check_archify_coverage.py` L70 `CUE_OBJ_RE` 正则未容空白；计数断言（声明数=识别数）本意防静默缩水，但把「格式化副作用」也当成了静默缩水。
+
+**定性**：非阻断改进（有 FAIL 报错不静默，但每个并行撰写场景的集都要再修一轮格式）。
+
+**处理方式**：待子代理（G2 方向=`\{\s*chapterId:` 放宽 + 回归测试：多行 cue 对象/`{ ` 空格形态可解析且计数不变；G4=确认宽松化不弱化「同锚句双 cue」「dur 单参」等既有断言）。
+
+**后续防范**：对代理产出代码做正则解析的门，正则先过 prettier 默认输出形态的快照测试。
+
+## RSI-037 archify 3.0 产物与录制器断层：无官方支持路径，使用侧兼容层方案未文档化
+
+**表因**（2026-10-01，E1 实测）：archify 3.0 出的 HTML 无 guided-views 模块（JS+容器全无），`record_archify_all.py` 预检 FAIL 且指路「须用仍含该模块的版本重新出图」——但 2.x 无备份可寻（skill 非 git 历史、npm 同名包无关），指路不可执行。E1 以 80 行兼容层绕过（桥接 3.0 原生 `focus.set/view.reveal/view.centerAt` + 播放期 opacity 脉动保帧率 15→62fps），注入器幂等可复现（negentropy E1 `scripts/patch-archify-html.py`）。
+
+**根因**：录制器（`record_archify.py` L815+）硬依赖 `Archify.guidedViews` 五 API，archify 3.0 移除该模块后两侧无桥接层；录制器报错文案写成时的「重新出图」路径在 3.0 时代已不存在。
+
+**定性**：非阻断改进（有 FAIL 报错不静默；每支用 3.0 图的集都要自行重造兼容层）。
+
+**处理方式**：暂缓（G2 方案比选成本高：录制器消费 3.0 原生 focus API vs skill 内置注入器 vs 文档化使用侧方案——三条路线须对比；先由本条沉淀 E1 的可复现实例）。触发条件=下一支集再用 archify 3.0 图时一并比选。
+
+**后续防范**：升 archify major 前先跑 `record_archify_all --dry-run` 预检，断层在制作早期暴露。
