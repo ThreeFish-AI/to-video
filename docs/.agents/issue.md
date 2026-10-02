@@ -589,6 +589,8 @@
 
 复盘补（2026-10-02，PR #30 复核）：复核子代理指出引号残差——prettier 出厂默认 `singleQuote=false` 会把字符串翻双引号，只放宽空白不容引号时「容 prettier 默认格式化」只修一半（双引号形态整块零识别、报错仍指向 at/dur 写法易误诊；全机真实语料 828/828 cue 恒单引号，故此前未暴露——属承诺面内的未来风险）。修复：CUE_OBJ_RE/CUE_AT_RE/CUE_DUR_RE 三处引号放宽为 `['"]…['"]`（捕获组序不变，锚句 id 字符类 `[a-z0-9-]+` 与全部形态断言不动，declared 侧计数与引号无关不受影响）；回归钉 `test_prettier_double_quote_cues_parse`（双引号多行形态锚定统计与单引号基线逐数一致）。
 
+复盘补二（2026-10-02，PR #30 评审）：评审抓出引号放宽的同类残差——同一提取循环**第 4 处**单引号正则 `fit:\s*'(stretch|hold|trim)'`（extract_cues 函数体内、不在正则常量块）漏改：`fit: "stretch"` 双引号形态 CUE_OBJ_RE 可匹配、fit 静默解析为 None，下游 check_archify 的 `explicit_stretch` 集合漏收该 cue、「显式 stretch 越界」FAIL 不再触发——该门防的正是渲染期抛错（与 ArchifyRecap.pickFit 同构：自动挡越界降档 hold/trim，唯显式 stretch 越界才渲染期抛错），静默 None 即「少算不报错」病理。修复：fit 正则同步放宽 `['"]…['"]`（值词表 stretch|hold|trim 不动）；回归钉 `test_prettier_double_quote_fit_extracted` 直调 `extract_cues` 观测 fit（CLI 门输出不含 fit，直调单一提取器是唯一可观测面）。教训：对「容 X 格式化」类修复，验收须枚举同一数据流上的**全部**消费者/提取点逐个比对容差口径——三兄弟正则在常量块同批改，函数体内第四处漏网。
+
 ## RSI-038 archify 3.0 产物与录制器断层：无官方支持路径，使用侧兼容层方案未文档化
 
 **表因**（2026-10-01，E1 实测）：archify 3.0 出的 HTML 无 guided-views 模块（JS+容器全无），`record_archify_all.py` 预检 FAIL 且指路「须用仍含该模块的版本重新出图」——但 2.x 无备份可寻（skill 非 git 历史、npm 同名包无关），指路不可执行。E1 以 80 行兼容层绕过（桥接 3.0 原生 `focus.set/view.reveal/view.centerAt` + 播放期 opacity 脉动保帧率 15→62fps），注入器幂等可复现（negentropy E1 `scripts/patch-archify-html.py`）。

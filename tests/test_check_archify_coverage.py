@@ -14,6 +14,9 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_archify_coverage.py"
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from check_archify_coverage import extract_cues  # noqa: E402 - 直调观测 fit（CLI 门输出不含）
+
 NARRATION = [
     {"id": "p0-01", "scene": "P0", "text": "甲"},
     {"id": "p0-02", "scene": "P0", "text": "乙"},
@@ -376,6 +379,24 @@ def test_prettier_double_quote_cues_parse(tmp_path):
     assert rc == 0, out
     assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
     assert "FAIL 0" in out and "WARN 0" in out, out
+
+
+def test_prettier_double_quote_fit_extracted(tmp_path):
+    """RSI-037 回归补二：引号放宽曾漏同循环第 4 处单引号正则（fit）——
+    `fit: "stretch"` 此前静默解析为 None，下游 check_archify 的 explicit_stretch
+    集合漏收、「显式 stretch 越界」FAIL 不再触发（该门防的正是渲染期抛错）。
+    直调单一提取器 extract_cues 观测 fit 字段（CLI 门输出不含 fit）。"""
+    scenes = tmp_path / "scenes"
+    scenes.mkdir()
+    (scenes / "P0X.tsx").write_text(
+        SCENE_P0_PRETTIER.replace(
+            "durationInFrames: dur('p0-01'),",
+            'durationInFrames: dur("p0-01"),\n        fit: "stretch",',
+        ),
+        encoding="utf-8",
+    )
+    fits = {cid: fit for _f, _slug, cid, _sid, fit in extract_cues(scenes)}
+    assert fits == {"ch1": "stretch", "ch2": None}  # 未写 fit 的 cue 仍 None
 
 
 # ---------------- skip 语义 ----------------

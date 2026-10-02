@@ -120,7 +120,7 @@ def extract_cues(scenes_dir: Path) -> list[Cue]:
                         f"FAIL: {sm.group(1)}/{c.group(1)} 锚句 {am.group(1)} 与时长句 "
                         f"{dm.group(1)} 不一致——cue 窗必须落在同一个句 id 上。"
                     )
-                fm = re.search(r"fit:\s*'(stretch|hold|trim)'", obj)
+                fm = re.search(r"""fit:\s*['"](stretch|hold|trim)['"]""", obj)
                 out.append(
                     (
                         f.stem,
