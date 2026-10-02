@@ -89,7 +89,10 @@ def init_workspace(ws: Path, force: bool) -> int:
     )
     print("\n接下来**必须**人工完成的（脚手架刻意不代做）：")
     print("  1. series.json 登记第一个系列（id/title/sourceKind/rule/episodes）")
-    print("  2. voices/：prospect_ref 选段 → prepare_ref 裁样 → 把指纹写进 refs.toml")
+    print(
+        "  2. （可选，首次重配前完成）voices/：prospect_ref 选段 → prepare_ref 裁样"
+        " → 指纹写进 refs.toml（edge 草声建集不需要样本）"
+    )
     print(
         "  3. to-video.toml：按需声明 check_series 的工程级受检面与系列 id 集；"
         "骨架合法偏离走其 [skeleton] 登记"
@@ -98,7 +101,7 @@ def init_workspace(ws: Path, force: bool) -> int:
     print(
         "\n  建集：uv run --no-project "
         f"{Path(__file__).resolve()} <slug>-video --title 本集标题"
-        " --ref <样本名> --ref-sha1 <12位指纹> --style <档名>"
+        "（开箱即 edge 草声，无需样本；--style 是终声档锚点）"
     )
     return 0
 
@@ -111,16 +114,24 @@ def main() -> int:
     ap.add_argument(
         "--title", help="本集标题（写入 README 与 package.json；建集模式必填）"
     )
-    ap.add_argument("--ref", default="me-bright", help="参考样本名（见 refs.py list）")
-    #: 占位符**必须自身合规**（12 位）：config.validate 的位数检查是全节执法，
-    #: 而 pipeline.py 对每个子命令都以 scope=None 校验——一个 11 位的占位会让刚
-    #: 实例化的新集连 `build`（Stage ③，与 TTS 无关）都跑不起来。指纹不符仍由
-    #: doctor 与 tts.py 的 --expect-ref-sha1 硬拦，占位不会被误当成真值。
-    ap.add_argument("--ref-sha1", default="TODOTODOTODO", help="样本 12 位指纹")
+    ap.add_argument(
+        "--ref",
+        default="me-bright",
+        help="参考样本名（见 refs.py list；仅终声克隆需要——edge 草声建集不需要，重配前补齐）",
+    )
+    #: ref/ref_sha1 以注释形态预置进 pipeline.toml（重配前才需要），不参与
+    #: config 校验；占位仍保持 12 位形状，解注释即合规。指纹不符由 doctor 与
+    #: tts.py 的 --expect-ref-sha1 硬拦，占位不会被误当成真值。
+    ap.add_argument(
+        "--ref-sha1",
+        default="TODOTODOTODO",
+        help="样本 12 位指纹（仅终声克隆需要，重配前补齐）",
+    )
     ap.add_argument(
         "--style",
         default="story",
-        help="风格预设档名（默认 story 段落演绎：块合成+台本，见 VOICE-CLONING §4.5）",
+        help="终声档锚点（默认 story 段落演绎）：edge 草声期仅作预算门估算口径"
+        "与重配预置，engine=indextts 时生效（见 VOICE-CLONING §4.5）",
     )
     ap.add_argument("--force", action="store_true", help="目标已存在时仍继续（危险）")
     ap.add_argument(

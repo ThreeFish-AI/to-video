@@ -8,7 +8,7 @@
 - 前置：参考音色样本（prepare_ref.py 产出）+ 已启动的 tts_server.py。
 
 用法（任意目录执行，$T/$V 锚定见 references/PIPELINE.md）：
-  # 单档试听（科普推荐档）
+  # 单档试听（story＝新集终声档默认；此处以 sunny 为例）
   uv run --no-project --with mutagen $T/scripts/tts_sample.py \
       --ref $V/me-bright.wav --style sunny --play
   # 全风格 A/B（STYLE_PRESETS 逐档各合成一遍，含各自的 alpha/语速/束宽）

@@ -1809,7 +1809,8 @@ async def main() -> None:
         # （两引擎摘要必然不同，且 {id}.mp3 单槽位），故此处硬失败而非忽略。
         if args.plan:
             parser.error(
-                "--plan 仅对 --engine indextts 生效（是否漏写 --engine indextts？）"
+                "--plan 仅对 --engine indextts 生效（edge 草声秒级无需排期；"
+                "克隆若漏写 --engine indextts 请补上）"
             )
         # 克隆专属参数分两类处置。**带值参数硬失败**：漏写 --engine indextts 的典型手型
         # 就是「照抄文档打了 --ref/--style 却丢了 --engine」，而 {id}.mp3 是单槽位、

@@ -111,7 +111,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | ----- | ---------------- | --------------------------------------------------- | ----------------------- |
 | ③     | `build`          | narration.md → narration.json + video/src/chapters.json | 纯函数               |
 | ④⑥    | `check`          | narration.json + storyboard.md + pipeline.toml → 门 | —                       |
-| ⑦     | `tts [--plan]`   | narration.json + 参考样本 → 逐句 mp3 + manifest     | sidecar 摘要 / 逐句续跑 |
+| ⑦     | `tts`（克隆档另加 `--plan`） | narration.json（克隆档另需参考样本）→ 逐句 mp3 + manifest | sidecar 摘要 / 逐句续跑 |
 | ⑦+    | `captions`       | manifest + timing.json → out/captions.{srt,vtt}     | 纯函数                  |
 | ⑨     | `render` + `qa`  | src + audio → draft.mp4 + 抽帧体检                  | 渲染否 / 抽帧是         |
 | ⑩     | `render --final` + `deliver` | 同上 → final.mp4 + 归档副本（前置：⑨ 零 FAIL）  | 否                      |
@@ -121,12 +121,12 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | 脚本 | 用途 | 工程内等价调用 |
 | ---- | ---- | -------------- |
 | [scripts/build_narration.py](../scripts/build_narration.py) | narration.md → narration.json + chapters.json（章节条标签）+ 时长估算 | `uv run --no-project scripts/build_narration.py` |
-| [scripts/tts.py](../scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 预置音色 / indextts 声音克隆；风格推荐位 sunny 明快阳光，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
+| [scripts/tts.py](../scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 草声默认 / indextts 终声克隆；终声档默认 story 段落演绎，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期仅克隆档） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
 | [scripts/tts_server.py](../scripts/tts_server.py) | IndexTTS 推理服务（声音克隆后端，**运行于 index-tts 环境**，非本仓） | 在 `~/tools/index-tts` 内启动，见 [VOICE-CLONING.md §二](./VOICE-CLONING.md) |
 | [scripts/tts_sample.py](../scripts/tts_sample.py) | 单句声音小样试听（直调 IndexTTS 服务合成一句话 + 全风格 A/B，定稿风格前的必经关口） | 无工程薄包装，从 $T 调用：`uv run --no-project --with mutagen $T/scripts/tts_sample.py --ref <样本.wav> --all-styles --play`，见 [VOICE-CLONING.md §5.1](./VOICE-CLONING.md) |
 | [scripts/prepare_ref.py](../scripts/prepare_ref.py) | 参考音色样本裁剪/规范化（长录音 → **10–14s** 干净 WAV；硬上限 15s——上游超出即静默前截） | 无工程薄包装（与具体工程无关），从 $T 调用：`uv run --no-project --with soundfile --with numpy $T/scripts/prepare_ref.py <源音频>` |
 | [scripts/prospect_ref.py](../scripts/prospect_ref.py) | 参考样本选段勘探（按 F0/起伏/音节率/限带质心筛「更亮更轻快」的候选起点）+ `--accept` **保真度验收**（削波/底噪/动态/有效带宽/超 15s，与风格分正交；损伤事后无法弥补故只否决不加权） | 无工程薄包装，从 $T 调用：`uv run --no-project --with soundfile --with numpy $T/scripts/prospect_ref.py <源音频…>`，见 [VOICE-CLONING.md §3.2](./VOICE-CLONING.md) |
-| [scripts/pipeline.py](../scripts/pipeline.py) | **单入口编排**（上表） | `uv run --no-project $T/scripts/pipeline.py --project $P tts --plan` |
+| [scripts/pipeline.py](../scripts/pipeline.py) | **单入口编排**（上表） | `uv run --no-project $T/scripts/pipeline.py --project $P tts` |
 | [scripts/timeline.py](../scripts/timeline.py) | 时间轴 Python 侧实现（与 timing.ts 同构，直读 timing.json） | 被 qa_frames/captions/check_script 复用 |
 | [scripts/check_script.py](../scripts/check_script.py) | ④⑥ 内容门：beat 覆盖性 / 时长预算双口径 / SceneFade 不变式 / 画面文字复述口播（缺省 FAIL）/ `--check-scenes` 分镜↔代码互比 / `--pron-gate` 语义读音门（FAIL，RSI-014）/ `--term-density` 术语密度预算（WARN，RSI-015，见 04 B 节） | `uv run --no-project scripts/check_script.py --check-scenes` |
 | [scripts/archify_lead.py](../scripts/archify_lead.py) | 场记板白闪**实测**回写各章真实 `lead_sec`（录制器恒写 0.0，漏跑＝白闪帧播进成片——全 0 由覆盖门点名 WARN）；webm 前段含页面加载非故事起点、墙钟估算带 ±0.3s，故只在像素上找白闪末帧 | `uv run --no-project --with pillow $T/scripts/archify_lead.py --project $P` |
@@ -159,10 +159,10 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | `episode.slug`                  | ✅               | —                       | 须等于工程目录名（拦手抄来的陈旧 toml）；**是否登记进 series.json 不在此校验**，那归 `verify_skeleton.py` 的孤儿警告（非阻塞） |
 | `narration.target_minutes`      | ✅               | —                       | `[下限, 上限]` 分钟；缺失会让时长预算门**点名跳过**                                                                            |
 | `narration.chars_per_min`       |                 | `280`（story 档默认层 `254`） | 机制常数：含停顿等效语速，**默认层按 `tts.style` 分档**（`config.STYLE_CHARS_PER_MIN`，仅 story 有整集实测）；本集实测校准写 toml 覆写（references/07 完成门）                                             |
-| `tts.engine`                    |                 | `indextts`              | **策略声明**（有替代项 edge，且受 `.engine` 签名护栏约束），故保留在 toml                                                      |
+| `tts.engine`                    |                 | `edge`                  | **策略声明**（草声 edge \| 终声 indextts 两档，受 `.engine` 签名护栏约束），故保留在 toml                                      |
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
-| `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎，见 VOICE-CLONING §4.5）                                                          |
+| `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎）；engine=edge 时兼作**终声档锚点**（估算口径分档＋实测门跳过，以 edge 为终声不得挂） |
 | `tts.lang`                      |                 | `ZH`                    | 机制常数（zh 主稿恒 ZH；en 版由语言自动解析为 EN，见 §五「双语渲染」）                                                          |
 | `narration.langs`               |                 | `["zh"]`                | **策略声明**：本集产出的语言版本（必含 zh）；en 需显式声明并配 `narration.en.md`                                               |
 | `narration.words_per_min`       |                 | `150`                  | 机制常数：英文含停顿等效语速（首集实测后校准）                                                                                  |
@@ -225,6 +225,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 - **路径约定**：主语言 zh 与改造前逐字节一致；en 为 `script/narration.en.{md,json}`、`video/public/audio/en/`（独立 `.engine` 护栏）、`out/captions.en.{srt,vtt}`、`out/{draft,final}.en.mp4`、`out/frames.en/`、交付 `<标题> vN.en.mp4`（版本号按语言独立）。英文时间轴由英文配音实测时长自动重排——分镜 beat 以句 id 取窗，语言无关。
 - **对齐与失鲜**：`narration.en.md` 与主稿句 id 1:1（`build --lang en` 硬对齐门）；基线锁 `narration.en.lock.json` 记录翻译时的主稿句 digest，主稿改稿后 `check --lang en` 点名失配句。重建**不自动接受**改过的主稿（gettext fuzzy 语义）：译句改写即视为已重译、自动刷新；译文无需改动时 `build --lang en --accept <ids>` 显式确认。
 - **缺省语义（昂贵命令显式化）**：`build` / `check` / `captions` / `status` 缺省跑全部声明语言；**`tts` / `render` / `deliver` / `all` 缺省只跑 zh**（声明多语言而未指定即报错提示 `--lang`），显式多值才顺序执行且完成行按语言分打；`qa` 恒单语言（按视频文件名 `.en` 后缀推断）。
+- **本人声音追配（RSI-034）**：既有 zh 集追加 en 版可在 `[tts.en]` 声明 `engine = "indextts"` + 跨语种 `ref`/`style`（触发话术与完整流程见 [references/07](./07-tts-voice.md)「双语配音」；跨语种克隆必须先试听）。
 - **骨架分代**：改 frozen 骨架文件引入语言维度属新代（工作区 `to-video.toml` 的 `[[skeleton.generation]]` 登记旧代指纹与花名册，格式见 `skeleton.toml`「骨架分代」节；`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
 
 ## 六、新集脚手架清单
@@ -236,8 +237,8 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
    落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装。（可选）`export TO_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
 1. 实例化骨架（替代旧的「`cp -r` 任一既有集」——那句话给 391 行冻结基建留了 4 个同权真理声明者；建集模式自 CWD 锚定 `$W/episodes/`，须在工作区内执行）：
    ```bash
-   uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题" \
-       --ref <样本名> --ref-sha1 <12位指纹> --style <档名>
+   uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题"
+   # 开箱即 edge 草声（无需样本）；--ref/--ref-sha1 首次重配前补齐、--style 是终声档锚点
    ```
    scaffold 按 skeleton.toml 复制 frozen 文件 + 渲染 4 个模板（package.json / theme.ts / pipeline.toml / README），**刻意不生成 scenes/**（样例留在模板里）、不改 .gitignore（ignore 规则随工作区模板落盘、已通配到分集级）、不写 series.json。跑完立刻 `uv run --no-project $T/scripts/verify_skeleton.py` 确认新集与模板零漂移。
 2. `theme.ts` 换本集概念色；`video/src/scenes/*` 与 `Main.tsx` 注册表全部新写。

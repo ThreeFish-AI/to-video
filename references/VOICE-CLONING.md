@@ -465,7 +465,7 @@ uv run --no-project --with mutagen scripts/tts.py --engine indextts \
 cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 video/package.json
 ```
 
-引擎/风格/样本任一变化都会改写每句时长，合成后**必须重跑草渲**让 Remotion 时间轴重算。
+引擎/风格/样本任一变化都会改写每句时长，合成后**必须重跑草渲**让 Remotion 时间轴重算。edge ↔ indextts 换档同理＝digest 全异、整集重录：`.engine` 护栏硬拦（须显式 `--allow-voice-switch`），预算门实测口径在换档中间态自动让路、重配完成即恢复；完整重配流程见 [07-tts-voice.md](./07-tts-voice.md)「重配」。
 
 ### 5.4 take 验收与重掷协议（句尾英文词 · 标注 + 重掷 + 无偏验证）
 
@@ -520,7 +520,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 
 - **模型许可**：IndexTTS-2.5 按 [bilibili 模型使用许可协议](https://github.com/index-tts/index-tts/blob/main/LICENSE)（bilibili Model Use License）发布——**个人/研究用途可用；商用需联系 indexspeech@bilibili.com**。制作对外发布的视频前请自行评估许可范围。
 - **声音权利**：克隆他人声音必须获得本人书面同意；`$V/`（工作区 `voices/`）下样本已被工作区根 `.gitignore` 忽略，绝不入库。
-- **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；当前默认引擎仍为 edge，行为与历史完全一致。
+- **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；制作期草声默认走 edge（RSI-034 两档策略，见 07-tts-voice.md）。
 
 ## 九、备选方案与参考文献
 
@@ -528,7 +528,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 
 | 方案 | 克隆 | 风格控制 | Mac 部署 | 备注 |
 |---|---|---|---|---|
-| edge-tts | ❌ 仅预置 | 仅 rate | 无需部署 | 本管线默认引擎（零成本回退） |
+| edge-tts | ❌ 仅预置 | 仅 rate | 无需部署 | 草声默认档（秒级免费；终声克隆见 IndexTTS-2.5） |
 | **IndexTTS-2.5** | ✅ 单样本零样本 | ✅ 向量+强度+语速 | ✅ MPS fp32 | **主方案**；中英日西阿 |
 | IndexTTS-2 | ✅ | ✅ 向量（无语速） | ✅ fp16 成熟 | 服务端一键回退档（`--indextts-version 2`） |
 | index-tts-2.5-mlx（社区 MLX 移植） | ✅ | ❌ 砍掉全部情感控制 | ✅ 最省内存 | 0.1.1（2026-08-14）**已支持 2.5**、自带 int8 GPT 权重、uvx 一键；但主动放弃 `emo_vector`/`emo_audio_prompt`/`emo_text` 与束搜索 ⇒ 本 skill 风格体系与 alpha 标定全部失效，不可直接替换（评估前置动作见进阶篇 §6） |

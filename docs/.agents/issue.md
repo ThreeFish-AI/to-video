@@ -526,3 +526,17 @@
 
 **后续防范**：① 性能优化触碰既有隔离决策时，通过「细粒度沙箱（Context）+ 监督器自愈重启（Supervisor Restart）」同时满足低开销与故障隔离；② 孤儿浏览器识别一律以「自动化沙箱特征（profile/headless-shell/headless）× 主进程（非 `--type=`）× 父进程状态（`ppid=1`）」三维判定，兼顾无头与可见孤儿且永不触碰用户日常主 profile。
 
+
+## RSI-034 配音默认档为 IndexTTS 克隆：制作期被小时级长跑阻塞，评审后重配/多语言追配无显式轨道，升档中间态预算门假红
+
+**表因**：用户提出（2026-10-02）——① `tts.engine` 默认 `indextts`（config.py SCHEMA），新集建集即要求样本指纹（scaffold 写 `TODOTODOTODO` 占位、登记 refs.toml），首轮 `tts` 就是 2.5–3.5 小时克隆长跑，而此时逐字稿还在多轮改稿评审回路里，每轮都付克隆成本（README quickstart 甚至靠 sed 手翻 edge 才能免克隆跑通——README.md:110）；② 「整集评审通过后，用 IndexTTS-2.5 + 本人声音重配本集（story 段落演绎，其余内容零变更）」「额外为本集配英文配音」两类用户诉求在 SKILL 路由与 07 规格里无入口，只有散落的「重制存量集」手工配方；③ toml 已翻 `indextts`、音频目录还是 edge 草声时，`tts --pre-tts` 前置预算门拿旧引擎 manifest 的墙钟对按 story 254 字/分标定的 target_minutes 窗执法，语速差导致假 FAIL，把重配拦死在启动前。
+
+**根因**：① 引擎只有「克隆为主、edge 兜底」的单档语义，缺「草声（制作迭代载体，秒级免费）↔ 终声（交付音色，小时级）」的两档生命周期——成本结构与使用时机错配；② 预算门实测口径假设 manifest 恒属当前生效引擎，未建模「换引擎中间态」；③ 重配/追配无路由行与规格章节，安全闸（`.engine` 签名护栏 + `--allow-voice-switch`）已存在但没有被流程化承接。
+
+**定性**：非阻断改进（用户点名启动）。
+
+**方案比选**：四案——① 仅改文档教每集手改 toml（否决：README sed 即现状痛点证据，缺省值语义未变，每个新集仍默认长跑）；② 新增 `tts.draft` 布尔草稿键（否决：与 style 锚点语义重复，重配要改两个键，第二意图源）；③ 实测门按语速比缩放窗口（否决：edge 无整集实测口径，造第二事实源）；④ `tts.engine` 默认翻 `edge` + `tts.style` 在 edge 期兼作「终声档锚点」（估算门分档机制既有且引擎无关——config.py tier 只读 `tts.style`）+ 实测门双条件跳过（草声锚点在 / `.engine` 标记首 token ≠ 当前生效 engine，后者消掉升档中间态假红，升格为「实测门只对当前生效引擎的 manifest 执法」不变量）（采纳：零新 SCHEMA 键、零新子命令，重配/追配两条触发流全骑既有轨道：`.engine` 护栏、`--allow-voice-switch`、tts-store 按_digest 恢复、双语 `[tts.en]` 混引擎）。
+
+**处理方式**：`config.py`（默认翻转 + 锚点语义）；`check_script.py`（预算门实测口径双条件跳过，各打一行点名）；`pipeline.toml.tmpl`/`scaffold.py`（草声模板：engine=edge、ref/ref_sha1 注释预置、style 标注锚点）；`SKILL.md`（任务表新增「评审后重配音」路由行 + 工作流/⑦ 速查改写，gate 与 stages.toml 双址同步、阶段更名「TTS 配音：草声与克隆档位」）；`references/07-tts-voice.md`（决策树第 0 闸引擎分支 +「重配（评审后升档）」节 + 双语克隆追配要点 + 完成门双条件语义）；`VOICE-CLONING.md`/`PIPELINE.md`/`README.md`（两档策略对齐，quickstart 删 sed 行）；新增 `tests/test_voice_tiers.py` 锚定 + `test_config`/`test_check_script` 回归（含升档中间态钉子）；trigger-evals +1 正（重配话术）/1 负（近邻不触发）。独立验证代理四门对抗核验全过（887 用例 0 失败、15/15 不变量、升档中间态假红 origin/main 实机复现 vs HEAD 修复实证），其抓出的 2 处 MUST-FIX（PIPELINE §四 `tts --plan` 范例 edge 分集复制即跑失败、⑦ 行参考样本未分档）+ 8 项承诺面内漏网已修复（ef338a3）。[PR #29](https://github.com/ThreeFish-AI/to-video/pull/29)（ef5bb57/4c55607/d71a319/ef338a3）；合并后待办：trigger-evals 新旧对拍（同名遮蔽须合并后做）。
+
+**后续防范**：① 成本差数量级悬殊的同类引擎必须显式分档（草声/终声生命周期），默认档取便宜者，贵的档只由用户显式触发；② 一切「按 manifest 实测执法」的门必须先核 manifest 属不属于当前生效配置——换引擎/换档中间态是常态而非异常；③ 显式触发型重配的安全闸复用既有 `.engine` 护栏与 `--allow-voice-switch`，不另造门；④ 文档声明「默认引擎」处（VOICE-CLONING/PIPELINE/README）与 SCHEMA 默认值必须同 commit 对齐，防再出现「文档说 edge、机制默认 indextts」的 Split-Brain。
