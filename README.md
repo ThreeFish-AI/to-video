@@ -126,7 +126,7 @@ EOF
 cat > "$P/script/storyboard.md" <<'EOF'
 | 镜号 | 句区间 | 画面 | 动效 |
 | --- | --- | --- | --- |
-| 0-A | p0-01..p0-02 | 核心意象冲击入场 | ScaleIn + FadeUp |
+| 0-A | p0-01..p0-02 | accent 视觉锚冲击入场 + 错峰词卡 | FadeUp |
 | 1-A | p1-01 | 章节进度条放大解剖图（与顶部条逐帧同步） | FadeUp |
 EOF
 

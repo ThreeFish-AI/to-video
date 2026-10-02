@@ -1,8 +1,11 @@
 // Quickstart 最小场景组件（根 README「快速上手」的 cp 源）。
 // 动效全部来自 frozen 运动层与 cards 原语：FadeUp = spring 淡入上移，delay 做错峰。
+// 开场形态对齐 06「开篇首镜视听合力定式」（RSI-039）：首秒是高反差 accent 视觉锚
+// 快速弹簧入场，不是静止文字墙——frozen 词表内无冲击原语，模板级升级须动
+// skeleton + 全集同步（另走 RSI），故以 oversized accent Pill 作核心意象；
+// 真实制作规格见 references/08-remotion-implementation.md。
 // 解析器契约：`const w = (fromId, toId?) => beatWindow(...)` 与 at() 的字面形态勿改
-// （check_script.py 的 SCENE_CALL_RE 只认 w('id','id')）。真实制作规格见
-// references/08-remotion-implementation.md。
+// （check_script.py 的 SCENE_CALL_RE 只认 w('id','id')）。
 import React from 'react';
 import {AbsoluteFill, Sequence} from 'remotion';
 import {FadeUp, Pill} from '../components/cards';
@@ -18,11 +21,15 @@ export const P0: React.FC<{scene: SceneRange}> = ({scene}) => {
   return (
     <AbsoluteFill>
       <Sequence {...bA} name="0-A 开场">
-        <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center', gap: 52}}>
+        <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center', gap: 56}}>
+          {/* 首秒核心意象：oversized accent 锚（ok 绿对深底高反差）快速入场，非静止文字卡 */}
           <FadeUp>
-            <div style={{color: theme.text, fontSize: 88, fontWeight: 700, fontFamily: theme.sans}}>
-              你好，to-video
-            </div>
+            <Pill
+              color={theme.ok}
+              style={{fontSize: 56, fontWeight: 700, padding: '20px 48px'}}
+            >
+              to-video
+            </Pill>
           </FadeUp>
           <div style={{display: 'flex', gap: 24}}>
             <FadeUp delay={say02}>
