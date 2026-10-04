@@ -18,8 +18,9 @@
   edge：    uv run --no-project --with edge-tts --with mutagen $T/scripts/tts.py \
                 --project $P [--narration-lang zh] [--voice zh-CN-YunxiNeural] [--rate +4%] [--force]
   indextts：uv run --no-project --with mutagen $T/scripts/tts.py \
-                --project $P --engine indextts --ref <参考样本.wav> \
+                --project $P --engine indextts --final-voice --ref <参考样本.wav> \
                 [--style passionate] [--server http://127.0.0.1:8766] [--force]
+                （--final-voice＝本人显式要求的具名授权，RSI-040：缺此 flag 的实跑硬失败）
   情感三来源（互斥）：--style/--emo-vector 向量注入 · --emo-ref <另一段录音> 语调迁移
                 （更自然）· --emo-text "轻快爽朗、自信阳光" 自然语言（需服务端 --use-qwen-emo）
   （工程内薄包装等价于在工程目录下运行 scripts/tts.py）
@@ -65,6 +66,9 @@ HTTP_TIMEOUT = 600  # MPS fp32 长句可达数分钟；须覆盖队列等待
 MANUAL = str(
     Path(__file__).resolve().parents[1] / "references" / "VOICE-CLONING.md"
 )  # skill 根 references/
+SPEC_07 = str(
+    Path(__file__).resolve().parents[1] / "references" / "07-tts-voice.md"
+)  # 人为触发原则 SSOT（RSI-040）；与 MANUAL 同构派生，不 import 兄弟模块
 
 # --plan 排期估算用的实测常数（MPS fp32，长跑折算口径：含降频、机器争用与逐句开销）。
 # RTF_1BEAM 来自三集 596 句连续跑 8.5 小时 / 40.2 分钟纯语音；RTF_MULTIBEAM 由同句
@@ -520,6 +524,31 @@ def check_voice_marker(out_dir: Path, signature: str, allow_switch: bool) -> Non
 
 def write_voice_marker(out_dir: Path, signature: str) -> None:
     (out_dir / ENGINE_MARKER).write_text(signature + "\n", encoding="utf-8")
+
+
+def enforce_final_voice_gate(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    """人为触发原则主闸（RSI-040）：IndexTTS 声音克隆只在本人显式点名时启用。
+
+    --final-voice 是具名授权声明——每次非 --plan 的 indextts 实跑都必须在命令行
+    在场（zh/en 每语言各算一次独立要求），缺席即拒。刻意先于工程文件读取调用
+    （先于 narration 存在性、ref 校验、.engine 比对、健康检查与连服）：.engine
+    护栏拦不住本闸针对的两种形态（首次启用无标记放行、同签名重跑放行），授权
+    证据只能来自命令行本身。--plan 是纯本地预演（不连服不合成），免闸；纯缓存
+    命中的幂等重跑同样要 flag（防「缓存命中掩护下的签名外改写」灰区）。
+    与 clone_only 族同用 parser.error；缺 flag 形态在 tts_resume 入口预检即拦，
+    不会进入冷重启循环（循环内自愈语义保持 RSI-022 原样）。
+    """
+    if args.engine == "indextts" and not args.plan and not args.final_voice:
+        parser.error(
+            "IndexTTS 声音克隆须本人显式点名才可启用，本次命令缺 --final-voice 授权。\n"
+            "  · 缺省配音一律 edge 草声：省略 --engine 即秒级直跑；\n"
+            "  · 若本人确已要求本次用 Index TTS（中英每语言各算一次独立要求），"
+            "请显式加 --final-voice；\n"
+            "  · 只排期不实跑用 --plan，无需授权。\n"
+            f"纪律与触发话术见 {SPEC_07}"
+        )
 
 
 # ---------------- 引擎一：edge-tts（历史路径，保持字节级一致） ----------------
@@ -1676,6 +1705,15 @@ async def main() -> None:
         help="[indextts] 只打印合成计划（各束宽句数、缓存命中/待合成、耗时估算）并退出，不连服务",
     )
     idx.add_argument(
+        "--final-voice",
+        action="store_true",
+        help="[indextts] 终稿配音具名授权（RSI-040 人为触发原则）：本人显式要求本次用"
+        " Index TTS 才可带上——每次非 --plan 合成、zh/en 每语言各算一次独立要求；"
+        "缺省 edge 草声，缺此 flag 的 indextts 实跑直接硬失败（见 references/07-tts-voice.md）。"
+        "与 --allow-voice-switch 分工：本 flag＝使用授权（每次实跑都要）；"
+        "彼 flag＝音色签名变化的防误闸（换引擎/风格/样本时才需要）",
+    )
+    idx.add_argument(
         "--engine-tag",
         default="indextts",
         help="[indextts] 缓存标记；模型升级后自定义以失效旧缓存",
@@ -1849,6 +1887,9 @@ async def main() -> None:
                 "--interval-silence": args.interval_silence is not None,
                 "--no-text-normalization": args.no_text_normalization,
                 "--seed": args.seed is not None,
+                # RSI-040：授权 flag 同属克隆专属——edge 下给了授权却没给 --engine，
+                # 照跑会把「本人要的终稿声音」静默降级成 edge 草声，且留下假授权痕迹。
+                "--final-voice": args.final_voice,
             }.items()
             if val
         ]
@@ -1874,6 +1915,10 @@ async def main() -> None:
                 f"提示：以下参数仅对 --engine indextts 生效，已忽略: {' '.join(benign)}",
                 file=sys.stderr,
             )
+
+    # ── 人为触发原则（RSI-040）：先于一切工程文件读取 ──────────────────
+    # 缺 --final-voice 的 indextts 实跑在此硬失败（见上方函数 docstring）。
+    enforce_final_voice_gate(parser, args)
 
     root = Path(args.project).resolve()
     # 后缀规则内联（与 langs.narration_json / langs.audio_dir 同构，见 LANG_MIRROR 注）：

@@ -239,6 +239,93 @@ def test_tts_forwards_no_store_flag(monkeypatch, tmp_path):
     assert "--no-store" in commands[0]
 
 
+def test_tts_forwards_final_voice_flag(monkeypatch, tmp_path):
+    """RSI-040 具名授权透传：final_voice=True 时 tts.py 命令带 --final-voice；
+    缺省不带（edge 草声日常流零多余 token）。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            {"tts": {"engine": "edge"}},
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+            final_voice=True,
+        )
+        == 0
+    )
+    assert "--final-voice" in commands[0]
+    commands.clear()
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            {"tts": {"engine": "edge"}},
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+        )
+        == 0
+    )
+    assert "--final-voice" not in commands[0]
+
+
+def test_all_never_forwards_final_voice(monkeypatch, tmp_path):
+    """all 一键链结构性永不实跑克隆（RSI-040）：链内任何命令不得带 --final-voice。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    monkeypatch.setattr(pipeline, "cmd_build", lambda *a, **k: 0)
+    monkeypatch.setattr(pipeline, "cmd_check", lambda *a, **k: 0)
+    monkeypatch.setattr(pipeline, "cmd_render", lambda *a, **k: 0)
+    assert pipeline.cmd_all(tmp_path, {"tts": {"engine": "edge"}}) == 0
+    assert any("tts.py" in " ".join(c) for c in commands), (
+        "存在性 guard：all 链内确有 tts.py 命令，否则本测试空转绿灯"
+    )
+    assert not any("--final-voice" in c for c in commands)
+
+
+def test_all_rejects_indextts_engine_at_entry(monkeypatch, tmp_path, capsys):
+    """all 是草声链专用：indextts 集在入口 fail-fast（先于 build/check 白跑），
+    错误指路 tts 子命令显式授权路径。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    monkeypatch.setattr(pipeline, "cmd_build", lambda *a, **k: 0)
+    rc = pipeline.cmd_all(tmp_path, {"tts": {"engine": "indextts"}})
+    assert rc != 0
+    assert commands == []  # 未跑任何子步骤
+    out = capsys.readouterr().out
+    assert "--final-voice" in out and "07-tts-voice" in out  # 指路授权路径
+
+
+def test_pipeline_cli_registers_final_voice_flag():
+    """tts 子命令 --help 须注册 --final-voice（用户可发现的授权面）。"""
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "tts", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "--final-voice" in result.stdout
+
+
 def test_pipeline_cli_registers_forwarded_flags():
     for subcommand, flag in (("check", "--check-motion"), ("tts", "--no-store")):
         result = subprocess.run(

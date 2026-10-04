@@ -85,7 +85,7 @@ def _mock_loop(monkeypatch, healthy_seq, rc_seq, restart_ok=True):
     return calls
 
 
-FWD = ["--engine", "indextts", "--project", "ep-x"]
+FWD = ["--engine", "indextts", "--final-voice", "--project", "ep-x"]
 
 
 @pytest.fixture()
@@ -500,6 +500,27 @@ def test_require_indextts_rejects_non_indextts():
     for bad in ([], ["--project", "x"], ["--engine", "edge"]):
         with pytest.raises(SystemExit):
             tts_resume.require_indextts(bad)  # 缺省/edge：无服务端可自愈
+
+
+def test_require_final_voice_gates_forwarded_args():
+    """RSI-040 入口预检：--plan 豁免、含 flag 放行、缺 flag 拒（与 tts.py 主闸同口径）。"""
+    tts_resume.require_final_voice(["--engine", "indextts", "--plan"])
+    tts_resume.require_final_voice(
+        ["--engine", "indextts", "--final-voice", "--project", "x"]
+    )
+    with pytest.raises(SystemExit) as e:
+        tts_resume.require_final_voice(["--engine", "indextts", "--project", "x"])
+    assert "--final-voice" in str(e.value)  # 可操作提示而非裸拒
+
+
+def test_main_missing_final_voice_exits_before_any_restart(monkeypatch):
+    """缺授权在入口拦：先于健康检查与任何冷重启（同「值校验先于杀服」纪律）——
+    不杀可能健康的服务、不空等模型加载。"""
+    calls = _mock_loop(monkeypatch, healthy_seq=[True], rc_seq=[0])
+    with pytest.raises(SystemExit) as e:
+        tts_resume.main(["--", "--engine", "indextts", "--project", "ep-x"])
+    assert "--final-voice" in str(e.value)
+    assert calls["restart"] == 0 and calls["tts"] == 0
 
 
 def test_require_client_deps_hints_with_incantation(monkeypatch):

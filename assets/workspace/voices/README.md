@@ -28,9 +28,10 @@ uv run --no-project --with soundfile $T/scripts/prepare_ref.py \
 uv run --no-project --with mutagen $T/scripts/tts_sample.py \
     --ref $V/me-bright.wav --all-styles --play
 
-# 3) 定稿后全量合成：
+# 3) 定稿后全量合成（--final-voice＝本人显式点名的具名授权，RSI-040 人为触发，
+#    见 $T/references/07-tts-voice.md；缺省一律 edge 草声）：
 uv run --no-project --with mutagen $T/scripts/tts.py \
-    --project $P --engine indextts \
+    --project $P --engine indextts --final-voice \
     --ref $V/me-bright.wav --style sunny
 ```
 
