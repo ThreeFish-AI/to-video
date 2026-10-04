@@ -111,17 +111,17 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | ----- | ---------------- | --------------------------------------------------- | ----------------------- |
 | ③     | `build`          | narration.md → narration.json + video/src/chapters.json | 纯函数               |
 | ④⑥    | `check`          | narration.json + storyboard.md + pipeline.toml → 门 | —                       |
-| ⑦     | `tts`（克隆档另加 `--plan`） | narration.json（克隆档另需参考样本）→ 逐句 mp3 + manifest | sidecar 摘要 / 逐句续跑 |
+| ⑦     | `tts`（克隆档另加 `--plan`；实跑加 `--final-voice`） | narration.json（克隆档另需参考样本）→ 逐句 mp3 + manifest | sidecar 摘要 / 逐句续跑 |
 | ⑦+    | `captions`       | manifest + timing.json → out/captions.{srt,vtt}     | 纯函数                  |
 | ⑨     | `render` + `qa`  | src + audio → draft.mp4 + 抽帧体检                  | 渲染否 / 抽帧是         |
 | ⑩     | `render --final` + `deliver` | 同上 → final.mp4 + 归档副本（前置：⑨ 零 FAIL）  | 否                      |
 
-`status` 为派生式新鲜度表（无状态文件——幂等已由内容摘要提供，再存阶段状态即第二事实源）；`doctor` 自检配置/时序 SSOT/样本指纹/IndexTTS 服务与自动化浏览器孤儿（`--clean-browsers` 回收）。
+`status` 为派生式新鲜度表（无状态文件——幂等已由内容摘要提供，再存阶段状态即第二事实源）；`doctor` 自检配置/时序 SSOT/样本指纹/IndexTTS 服务与自动化浏览器孤儿（`--clean-browsers` 回收）。`all` 一键链（build→check→tts→captions→render）是**草声链专用**：indextts 集在入口即拒（RSI-040——克隆只由本人显式触发，重配走 `tts --final-voice`，见 [07-tts-voice.md](./07-tts-voice.md)）。
 
 | 脚本 | 用途 | 工程内等价调用 |
 | ---- | ---- | -------------- |
 | [scripts/build_narration.py](../scripts/build_narration.py) | narration.md → narration.json + chapters.json（章节条标签）+ 时长估算 | `uv run --no-project scripts/build_narration.py` |
-| [scripts/tts.py](../scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 草声默认 / indextts 终声克隆；终声档默认 story 段落演绎，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期仅克隆档） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
+| [scripts/tts.py](../scripts/tts.py) | 逐句配音合成 + 时长 manifest（幂等，双引擎：edge 草声默认 / indextts 终声克隆；终声档默认 story 段落演绎，`--steady` 混合档让关键句单独升束宽，`--plan` 预演排期仅克隆档；indextts 实跑须 `--final-voice` 具名授权——RSI-040 人为触发，缺即硬失败） | `uv run --no-project --with edge-tts --with mutagen scripts/tts.py`（克隆模式免 edge-tts，见 [VOICE-CLONING.md](./VOICE-CLONING.md)） |
 | [scripts/tts_server.py](../scripts/tts_server.py) | IndexTTS 推理服务（声音克隆后端，**运行于 index-tts 环境**，非本仓） | 在 `~/tools/index-tts` 内启动，见 [VOICE-CLONING.md §二](./VOICE-CLONING.md) |
 | [scripts/tts_sample.py](../scripts/tts_sample.py) | 单句声音小样试听（直调 IndexTTS 服务合成一句话 + 全风格 A/B，定稿风格前的必经关口） | 无工程薄包装，从 $T 调用：`uv run --no-project --with mutagen $T/scripts/tts_sample.py --ref <样本.wav> --all-styles --play`，见 [VOICE-CLONING.md §5.1](./VOICE-CLONING.md) |
 | [scripts/prepare_ref.py](../scripts/prepare_ref.py) | 参考音色样本裁剪/规范化（长录音 → **10–14s** 干净 WAV；硬上限 15s——上游超出即静默前截） | 无工程薄包装（与具体工程无关），从 $T 调用：`uv run --no-project --with soundfile --with numpy $T/scripts/prepare_ref.py <源音频>` |
@@ -144,7 +144,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | [scripts/pron_marks.py](../scripts/pron_marks.py) | 发音标注 `<原文\|读音>` 的解析与校验（纯函数库，无 IO）：多音字/英文专名的精确读音控制；被 `build_narration.py` 用于硬失败拦非法标注 | 库，不直接调用；语法与规则见其模块文档，台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md) |
 | [scripts/tts_progress.py](../scripts/tts_progress.py) | IndexTTS 长跑**旁路**监视：按逐句 mp3 的 mtime 序列重建墙钟进度 + 滚动秒/字 vs 基线（与合成进程零耦合、退出码恒 0——监视器不打断长跑；越阈先分因：负载竞争可继续只重排期，热节流才须中止验证环境） | 长跑期间另开终端：`uv run --no-project $T/scripts/tts_progress.py --project $P` |
 | [scripts/tts_bench.py](../scripts/tts_bench.py) | 合成耗时基准与**测量环境体检**（**运行于 index-tts 环境**，同 tts_server.py）：A/A 复现性判定 + 分段计时 + 换页/分配器诊断。本机漂移已定因为热节流，做任何耗时 A/B 前先用它确认环境合格 | 在 `~/tools/index-tts` 内：`./.venv/bin/python $T/scripts/tts_bench.py --check-only`；A/A 见 [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) |
-| [scripts/tts_resume.py](../scripts/tts_resume.py) | IndexTTS 长跑**自愈编排**（RSI-022，纯标准库）：健康检查（`/health`，`ok` 为真）→ 不健康或客户端失败后**按端口**冷重启服务（kill 判据=作用面，只杀该端口 LISTEN，勿 pkill -f）→ 以**真实退出码**（subprocess.run 直取 returncode，禁 ``cmd \| tail; $?`` 管道尾食）续跑 tts.py（幂等缓存从断点续）；连续 N 轮失败（`--max-restarts`，缺省 3）放弃并非零退出；入口硬门禁客户端依赖（mutagen 缺即大声退出，不进循环——否则首句合成成功、测时长才崩）；`--` 之后参数原样转发 tts.py | 工作区内：`uv run --no-project --with mutagen $T/scripts/tts_resume.py -- --engine indextts --project $P --ref $V/<样本>.wav --expect-ref-sha1 <指纹>`；服务启动命令缺省从 tts.py 同构派生（`--server-cmd` 覆写、根走 `TO_VIDEO_INDEX_TTS_ROOT`）；服务端能力透传 `--use-qwen-emo`（`--emo-text` 自然语言情感的长跑必传，缺省不带——story 档块情感走台本向量，RSI-035）；MPS 显存上限走 `--mps-mem-limit-gib` flag 直传（0=禁用 high watermark；缺省命令路径 env 兜底被服务端缺省 setter 覆盖、实测无效，RSI-036——`--mps-high-ratio` env 兜底仅 `--server-cmd` 自定义命令生效且须配对，RSI-017） |
+| [scripts/tts_resume.py](../scripts/tts_resume.py) | IndexTTS 长跑**自愈编排**（RSI-022，纯标准库）：健康检查（`/health`，`ok` 为真）→ 不健康或客户端失败后**按端口**冷重启服务（kill 判据=作用面，只杀该端口 LISTEN，勿 pkill -f）→ 以**真实退出码**（subprocess.run 直取 returncode，禁 ``cmd \| tail; $?`` 管道尾食）续跑 tts.py（幂等缓存从断点续）；连续 N 轮失败（`--max-restarts`，缺省 3）放弃并非零退出；入口硬门禁客户端依赖（mutagen 缺即大声退出，不进循环——否则首句合成成功、测时长才崩）；`--` 之后参数原样转发 tts.py——**入口预检：转发参数缺 `--final-voice` 即拒（先于任何冷重启；RSI-040 人为触发——授权缺失不出现在循环内，循环保持 RSI-022 既有自愈语义不变）** | 工作区内：`uv run --no-project --with mutagen $T/scripts/tts_resume.py -- --engine indextts --final-voice --project $P --ref $V/<样本>.wav --expect-ref-sha1 <指纹>`；服务启动命令缺省从 tts.py 同构派生（`--server-cmd` 覆写、根走 `TO_VIDEO_INDEX_TTS_ROOT`）；服务端能力透传 `--use-qwen-emo`（`--emo-text` 自然语言情感的长跑必传，缺省不带——story 档块情感走台本向量，RSI-035）；MPS 显存上限走 `--mps-mem-limit-gib` flag 直传（0=禁用 high watermark；缺省命令路径 env 兜底被服务端缺省 setter 覆盖、实测无效，RSI-036——`--mps-high-ratio` env 兜底仅 `--server-cmd` 自定义命令生效且须配对，RSI-017） |
 | [scripts/record_archify.py](../scripts/record_archify.py) | archify 图解录制器：Playwright 驱动系统 Chrome 的**无头**实例，逐章录 mp4/webm + 末帧 PNG + sidecar（单 browser 跨章复用、每章独立 context；生命周期纪律见 §十） | `uv run --with playwright $T/scripts/record_archify.py <图.html> /dev/null <sidecar.json> --mode chapter --all-chapters --out-dir <目录>`（批量重录走下行） |
 | [scripts/record_archify_all.py](../scripts/record_archify_all.py) | archify 逐图批量重录驱动：默认**进程内跨图复用单 Headless Chrome 实例 + 单图异常隔离重启 supervisor**（`--reuse-browser` 缺省开启，`--no-reuse-browser` 退回逐图独立子进程；见 §十）；含产物新鲜度 / 章节集对齐跳过判据与帧率基线比对 | `uv run --with playwright $T/scripts/record_archify_all.py --project $P` |
 
@@ -159,7 +159,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | `episode.slug`                  | ✅               | —                       | 须等于工程目录名（拦手抄来的陈旧 toml）；**是否登记进 series.json 不在此校验**，那归 `verify_skeleton.py` 的孤儿警告（非阻塞） |
 | `narration.target_minutes`      | ✅               | —                       | `[下限, 上限]` 分钟；缺失会让时长预算门**点名跳过**                                                                            |
 | `narration.chars_per_min`       |                 | `280`（story 档默认层 `254`） | 机制常数：含停顿等效语速，**默认层按 `tts.style` 分档**（`config.STYLE_CHARS_PER_MIN`，仅 story 有整集实测）；本集实测校准写 toml 覆写（references/07 完成门）                                             |
-| `tts.engine`                    |                 | `edge`                  | **策略声明**（草声 edge \| 终声 indextts 两档，受 `.engine` 签名护栏约束），故保留在 toml                                      |
+| `tts.engine`                    |                 | `edge`                  | **策略声明**（草声 edge \| 终声 indextts 两档，受 `.engine` 签名护栏约束；indextts 实跑须 `--final-voice` 具名授权——RSI-040 人为触发），故保留在 toml |
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
 | `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎）；engine=edge 时兼作**终声档锚点**（估算口径分档＋实测门跳过，以 edge 为终声不得挂） |
@@ -225,7 +225,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 - **路径约定**：主语言 zh 与改造前逐字节一致；en 为 `script/narration.en.{md,json}`、`video/public/audio/en/`（独立 `.engine` 护栏）、`out/captions.en.{srt,vtt}`、`out/{draft,final}.en.mp4`、`out/frames.en/`、交付 `<标题> vN.en.mp4`（版本号按语言独立）。英文时间轴由英文配音实测时长自动重排——分镜 beat 以句 id 取窗，语言无关。
 - **对齐与失鲜**：`narration.en.md` 与主稿句 id 1:1（`build --lang en` 硬对齐门）；基线锁 `narration.en.lock.json` 记录翻译时的主稿句 digest，主稿改稿后 `check --lang en` 点名失配句。重建**不自动接受**改过的主稿（gettext fuzzy 语义）：译句改写即视为已重译、自动刷新；译文无需改动时 `build --lang en --accept <ids>` 显式确认。
 - **缺省语义（昂贵命令显式化）**：`build` / `check` / `captions` / `status` 缺省跑全部声明语言；**`tts` / `render` / `deliver` / `all` 缺省只跑 zh**（声明多语言而未指定即报错提示 `--lang`），显式多值才顺序执行且完成行按语言分打；`qa` 恒单语言（按视频文件名 `.en` 后缀推断）。
-- **本人声音追配（RSI-034）**：既有 zh 集追加 en 版可在 `[tts.en]` 声明 `engine = "indextts"` + 跨语种 `ref`/`style`（触发话术与完整流程见 [references/07](./07-tts-voice.md)「双语配音」；跨语种克隆必须先试听）。
+- **本人声音追配（RSI-034）**：既有 zh 集追加 en 版可在 `[tts.en]` 声明 `engine = "indextts"` + 跨语种 `ref`/`style`（触发话术与完整流程见 [references/07](./07-tts-voice.md)「双语配音」；跨语种克隆必须先试听；**en 的克隆配音是独立的一次人工显式要求**——实跑 `tts --lang en --final-voice`，RSI-040）。
 - **骨架分代**：改 frozen 骨架文件引入语言维度属新代（工作区 `to-video.toml` 的 `[[skeleton.generation]]` 登记旧代指纹与花名册，格式见 `skeleton.toml`「骨架分代」节；`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
 
 ## 六、新集脚手架清单

@@ -18,7 +18,7 @@
 
 ## 一、总览与架构
 
-**能力**：用一段 **10–14 秒**（硬上限 15 秒）的本人录音作为参考音色，零样本（zero-shot）克隆出本人音色，逐句合成整集配音；并通过情感向量注入轻快、自信、正能量等风格。整集要跑数小时，故**定稿前先用单句小样试听择优**（§5.1），再全量合成（§5.2）。
+**能力**：用一段 **10–14 秒**（硬上限 15 秒）的本人录音作为参考音色，零样本（zero-shot）克隆出本人音色，逐句合成整集配音；并通过情感向量注入轻快、自信、正能量等风格。整集克隆合成**须本人显式点名**（`--final-voice` 具名授权，RSI-040 人为触发原则见 [07-tts-voice.md](./07-tts-voice.md)；zh/en 每语言各算一次独立要求）；整集要跑数小时，故**定稿前先用单句小样试听择优**（§5.1），再全量合成（§5.2）。
 
 **架构**（管线脚本轻依赖 与 重型推理环境 完全解耦）：
 
@@ -289,7 +289,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 
 5. **最后定束宽**：想让语气更"稳/可信"就上 3 束（`--style sunny-steady`），代价是整集墙钟 ×2–5；赶工或改稿频繁期用 1 束的 `sunny`。
 
-**推荐位（2026-09-25 起）**：默认 **`story`（段落演绎，§4.5）**——逐句档里 `sunny`（明快阳光）是备选：改稿频繁期可用它快速迭代（块缓存改一句重录整块，逐句缓存改一句只重录一句），定稿再回 `story`。`sunny-steady` 为 14 个存量集的锁定档，不再推荐新集使用。以上均配 `$V/me-bright.wav`。**任何情况下都先跑小样确认，再全量合成。**
+**推荐位（2026-09-25 起）**：默认 **`story`（段落演绎，§4.5）**——逐句档里 `sunny`（明快阳光）是备选：改稿频繁期可用它快速迭代（块缓存改一句重录整块，逐句缓存改一句只重录一句），定稿再回 `story`。`sunny-steady` 为 14 个存量集的锁定档，不再推荐新集使用。以上均配 `$V/me-bright.wav`。**任何情况下都先跑小样确认，再全量合成**（全量合成另须本人显式点名——`--final-voice`，RSI-040）。
 
 ### 4.5 段落演绎（story 档，默认）与配音台本
 
@@ -302,7 +302,7 @@ GPT 声码段的束搜索宽度，**缺省随风格**（多数预设 1、`sunny-
 - **停顿**：切分时句界静音正中丢弃恰好 `sentenceGapSec`，时间轴再加回同值 ⇒ 听感＝自然停顿原值；块末尾垫 0.18s + 0.32s 句距 ＝ 0.5s 块间停顿。**不改时间轴、不改 frozen 模板。**
 - **缓存**：块＝缓存单位（摘要含块后缀）——**改一句重录整块**（无台本段偶尔连带同窗邻块，至多 7 句；14 集对拍 94.7% 仅本块）；插/删句会重排同一段内其后各窗——台本块起点是硬边界，可把波及收在段内；seed 固定 4242（定档 take 可复现）。
 - **换 take（重掷）**：块是重掷单位——台本 `[take] <句id> = N`（1–999）把该句所在块的种子 +N，只重录这一块；定稿值留在台本，即可复现的 canonical（同块只许一条，`--plan` 即报错）。`--seed-offset` 叠加在全局种子上，是**整集口径**（全部块换摘要、整集重录，`.engine` 签名不含 seed、护栏不拦），只用于整集 A/B。
-- **重制存量集**（旧档 → story）：改 pipeline.toml `style = "story"` + 补写该集 cues.toml + 显式 `--allow-voice-switch`。
+- **重制存量集**（旧档 → story）：改 pipeline.toml `style = "story"` + 补写该集 cues.toml + 显式 `--allow-voice-switch --final-voice`（后者＝本人显式点名的具名授权，RSI-040）。
 - `--steady` 与 story 冲突（逐句升束 vs 一个请求一块），硬拒；显式 `--num-beams` 仍可。EN 版回退逐句，`--steady` 照常可用。
 - 切分失败自动逐句兜底（沿用块情绪、尾垫只给末句；产物仍按块成员摘要缓存，复跑直接命中；当次 manifest 标 `blockSplit: "fallback"`）；服务端 `/health` 的 `supports_blocks` 预检——IndexTTS-2 与上游 low_vram 路径（CUDA 显存 <10 GB 自动开启，`/health` 回报 `low_vram`）不支持且重启不会变，报错点名成因并给出换档出路（本集改逐句档 `sunny`）；仅字段缺失才提示服务端代码过旧。
 
@@ -412,8 +412,8 @@ cd $P   # 工程内薄包装等价于中心脚本；风格取 5.1 试听定稿�
 uv run --no-project --with mutagen scripts/tts.py --engine indextts \
     --ref <样本绝对路径>/me-bright.wav --style sunny --plan
 
-# 1) 全量合成
-uv run --no-project --with mutagen scripts/tts.py --engine indextts \
+# 1) 全量合成（--final-voice＝本人显式点名的具名授权，RSI-040）
+uv run --no-project --with mutagen scripts/tts.py --engine indextts --final-voice \
     --ref <样本绝对路径>/me-bright.wav --style sunny
 ```
 
@@ -426,7 +426,7 @@ uv run --no-project --with mutagen scripts/tts.py --engine indextts \
 ```bash
 uv run --no-project --with mutagen scripts/tts.py --engine indextts \
     --ref <样本绝对路径>/me-bright.wav --style sunny \
-    --steady 'P0,p3-25b,p5-01' [--steady-beams 3] --plan   # 先 --plan 核对命中句数，再去掉 --plan 实跑
+    --steady 'P0,p3-25b,p5-01' [--steady-beams 3] --plan   # 先 --plan 核对命中句数，再去掉 --plan、加 --final-voice 实跑
 ```
 
 选择器语法（逗号分隔、大小写不敏感、**任一项匹配不到句子直接报错**，避免拼错后静默按低束宽跑完）：
@@ -465,7 +465,7 @@ uv run --no-project --with mutagen scripts/tts.py --engine indextts \
 cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 video/package.json
 ```
 
-引擎/风格/样本任一变化都会改写每句时长，合成后**必须重跑草渲**让 Remotion 时间轴重算。edge ↔ indextts 换档同理＝digest 全异、整集重录：`.engine` 护栏硬拦（须显式 `--allow-voice-switch`），预算门实测口径在换档中间态自动让路、重配完成即恢复；完整重配流程见 [07-tts-voice.md](./07-tts-voice.md)「重配」。
+引擎/风格/样本任一变化都会改写每句时长，合成后**必须重跑草渲**让 Remotion 时间轴重算。edge ↔ indextts 换档同理＝digest 全异、整集重录：**授权与变化是两道闸**——`--final-voice`（RSI-040 人为触发，每次实跑都在场）+ `.engine` 护栏（须显式 `--allow-voice-switch`），预算门实测口径在换档中间态自动让路、重配完成即恢复；完整重配流程见 [07-tts-voice.md](./07-tts-voice.md)「重配」。
 
 ### 5.4 take 验收与重掷协议（句尾英文词 · 标注 + 重掷 + 无偏验证）
 
@@ -520,7 +520,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 
 - **模型许可**：IndexTTS-2.5 按 [bilibili 模型使用许可协议](https://github.com/index-tts/index-tts/blob/main/LICENSE)（bilibili Model Use License）发布——**个人/研究用途可用；商用需联系 indexspeech@bilibili.com**。制作对外发布的视频前请自行评估许可范围。
 - **声音权利**：克隆他人声音必须获得本人书面同意；`$V/`（工作区 `voices/`）下样本已被工作区根 `.gitignore` 忽略，绝不入库。
-- **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；制作期草声默认走 edge（RSI-034 两档策略，见 07-tts-voice.md）。
+- **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；制作期草声默认走 edge（RSI-034 两档策略），克隆仅本人显式点名（`--final-voice`，RSI-040 人为触发），见 07-tts-voice.md。
 
 ## 九、备选方案与参考文献
 

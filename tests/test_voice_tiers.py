@@ -22,6 +22,10 @@ def test_skill_router_has_revoice_entry():
         "SKILL.md 任务表缺「评审后重配音」入口——用户显式触发重配/追配时无路由，"
         "只能重走全流程或手改 toml（RSI-034 表因）"
     )
+    assert "--final-voice" in text, (
+        "SKILL.md 须出现 --final-voice（RSI-040 人为触发：重配路由/不变量承载"
+        "具名授权，agent 与用户都有可发现的授权面）"
+    )
 
 
 def test_stage7_spec_has_revoice_section_and_triggers():
@@ -31,6 +35,10 @@ def test_stage7_spec_has_revoice_section_and_triggers():
     assert "重配（评审后升档" in text, "07 缺「重配（评审后升档）」节"
     assert "重配本集视频" in text, "07 缺 zh 重配触发话术"
     assert "额外为本集视频配置英文配音" in text, "07 缺 en 追配触发话术"
+    # RSI-040 人为触发原则锚点
+    assert "人为触发" in text, "07 缺「人为触发原则」表述（RSI-040）"
+    assert "--final-voice" in text, "07 缺具名授权 flag 的机器闸表述（RSI-040）"
+    assert "不得主动" in text, "07 缺「agent 不得主动提议 IndexTTS」纪律（RSI-040）"
 
 
 def test_scaffold_template_defaults_to_edge_draft():
@@ -48,5 +56,9 @@ def test_stage7_gate_is_engine_branched():
     stage = next(s for s in data["stage"] if s["id"] == "tts-voice")
     assert "edge" in stage["gate"] and "indextts" in stage["gate"], (
         "⑦ 门未按引擎分支——edge 草声会被克隆前置（refs/试听/排期）错拦"
+    )
+    assert "--final-voice" in stage["gate"], (
+        "⑦ 门缺「本人显式授权（--final-voice）」——RSI-040 人为触发原则的机器闸"
+        "须在通过门声明（与 SKILL.md 速查双址逐字同步）"
     )
     assert "草声" in stage["name"], "⑦ 阶段名应体现草声与克隆档位"

@@ -86,7 +86,8 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         str,
         "edge",
         False,
-        "策略声明：edge（草声默认，秒级免费需联网）| indextts（评审后升档重配）；仍须在 toml 显式声明",
+        "策略声明：edge（草声默认，秒级免费需联网）| indextts（本人显式点名后升档重配，"
+        "实跑须 --final-voice 具名授权——RSI-040 人为触发）；仍须在 toml 显式声明",
     ),
     (
         "tts.ref",

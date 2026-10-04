@@ -82,11 +82,16 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
    录制器要起 Remotion 打包浏览器，`node_modules` 半残会在录制中途裸 traceback。构建许可配在
    `video/pnpm-workspace.yaml` 的 `allowBuilds`——加 `--ignore-workspace` 会把它一并忽略，
    直接以 `ERR_PNPM_IGNORED_BUILDS` 中断安装留下半残。
-3. **TTS 恢复（分钟级，服务须在线）**：先起 IndexTTS 服务（[VOICE-CLONING §二](VOICE-CLONING.md)），
-   原参数重跑 `pipeline.py tts`——机器级 tts-store 按 digest 逐句回收、整集零重合成（缓存口径见
-   [VOICE-CLONING §六](VOICE-CLONING.md)）。换 worktree 须先从旧工作区/私有录音恢复 `voices/`
-   并过 `refs.py verify`（参考音频不随 git 走）；换机则随行拷贝 tts-store 目录（或以
-   `TO_VIDEO_TTS_STORE` 指位），否则此步退化为 2 小时量级整集重合成。
+3. **TTS 恢复（按引擎分派，RSI-040）**：
+   - **edge 终声集**（合法路径，见 [07「两档生命周期」](07-tts-voice.md)）：无需 IndexTTS
+     服务，原参数重跑 `pipeline.py tts`（秒级幂等回收）。
+   - **indextts 集**：先起 IndexTTS 服务（[VOICE-CLONING §二](VOICE-CLONING.md)）→
+     `pipeline.py tts --plan` 对账——**零待合成**：原参数照带 `--final-voice` 重跑
+     `pipeline.py tts`（机器级 tts-store 按 digest 逐句回收、整集零重合成，缓存口径见
+     [VOICE-CLONING §六](VOICE-CLONING.md)；RSI-040 延续条款：恢复操作照带授权即可）；
+     **有待合成**（store 丢失即整集重合成）＝新的一次显式要求，先向本人确认再跑。
+     换 worktree 须先从旧工作区/私有录音恢复 `voices/` 并过 `refs.py verify`（参考音频
+     不随 git 走）；换机则随行拷贝 tts-store 目录（或以 `TO_VIDEO_TTS_STORE` 指位）。
 4. **archify 全量重录（~45 分钟）**：`uv run --with playwright python
    $T/scripts/record_archify_all.py --project $P`（串行是刻意的：多实例互抢 CPU/GPU 资源
    会掉帧——headless 无前台焦点——静默污染产物；浏览器进程纪律见

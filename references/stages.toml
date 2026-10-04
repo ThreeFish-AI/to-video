@@ -87,7 +87,7 @@ name = "TTS 配音：草声与克隆档位"
 skill = "references/07-tts-voice.md"
 kind = "tooled"
 commands = ["tts", "captions"]
-gate = "edge 草声直行；indextts 另过 refs 指纹门 + 试听定档 + ETA 排期"
+gate = "edge 草声直行；indextts 另过本人显式授权（--final-voice）+ refs 指纹门 + 试听定档 + ETA 排期"
 
 [[stage]]
 id = "remotion-scenes"

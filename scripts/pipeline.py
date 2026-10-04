@@ -648,6 +648,7 @@ def cmd_tts(
     allow_voice_switch: bool = False,
     skip_pre_tts: bool = False,
     no_store: bool = False,
+    final_voice: bool = False,
     langs: list[str] | None = None,
 ) -> int:
     def per(lang: str) -> int:
@@ -716,6 +717,11 @@ def cmd_tts(
             cmd.append("--allow-voice-switch")
         if no_store:
             cmd.append("--no-store")
+        if final_voice:
+            # RSI-040 具名授权透传：indextts 实跑（非 --plan）必须由本人显式要求，
+            # flag 即可审计的意图声明。刻意不按 engine 过滤——edge + 该 flag 交给
+            # tts.py clone_only 族硬失败（漏改 toml 引擎的 typo 检测同款）。
+            cmd.append("--final-voice")
         return run(cmd, cwd=root)
 
     return per_lang("tts", langs or declared_langs(cfg), per)
@@ -922,11 +928,26 @@ def cmd_all(root: Path, cfg: dict, langs: list[str] | None = None) -> int:
     语言语义：all 属昂贵命令，缺省只跑主语言（声明多语言须显式 --lang）；
     显式多值时逐语言跑完整链（每语言一条独立产物链，语言完成行由各步分打）。"""
     lang_list = langs or declared_langs(cfg)
+    # RSI-040 入口预检（fail-fast UX，执法 SSOT 在 tts.py 主闸）：all 是草声链专用——
+    # indextts 集在 tts 步会被缺 --final-voice 硬拦，先在这里报清楚，免得 build+check
+    # 白跑后才在 tts 步拿到一段没有 all 上下文的报错。
+    for lang in lang_list:
+        engine = tts_view(cfg, lang).get("engine", config.default("tts.engine"))
+        if engine == "indextts":
+            print(
+                f"❌ all 一键链不串联克隆长跑（语言 {lang} 的 tts.engine=indextts，"
+                "RSI-040：克隆只由本人显式触发）。其余子命令（build/check/render/qa）"
+                "可单跑；终声操作走 tts 子命令显式授权：pipeline.py tts --final-voice"
+                "（跨会话整集重配＝新的一次显式要求；流程见 references/07-tts-voice.md「重配」）"
+            )
+            return 2
     for lang in lang_list:
         t0 = time.time()
         for step in (
             lambda: cmd_build(root, cfg, langs=[lang]),
             lambda: cmd_check(root, cfg, langs=[lang]),
+            # 刻意不带 final_voice：一键链永不实跑克隆（RSI-040——indextts 集已被
+            # 上方入口预检拦下；重配只走 tts 子命令显式授权路径）。
             lambda: cmd_tts(
                 root,
                 cfg,
@@ -1166,6 +1187,12 @@ def main() -> None:
         help="放行音色签名变更（两遍法换档经单入口时须带上，否则被 .engine 护栏硬拦）",
     )
     p.add_argument(
+        "--final-voice",
+        action="store_true",
+        help="终稿配音具名授权（RSI-040 人为触发原则）：indextts 实跑必带（--plan 除外），"
+        "每次/每语言各对应一次本人显式要求；all 一键链刻意永不带上——克隆只由本人显式触发",
+    )
+    p.add_argument(
         "--skip-pre-tts",
         action="store_true",
         help="跳过 pre-TTS 前置门（预算/读法陷阱/标注合法性）。直调 $P/scripts/tts.py"
@@ -1266,6 +1293,7 @@ def main() -> None:
             args.allow_voice_switch,
             args.skip_pre_tts,
             args.no_store,
+            args.final_voice,
             lang_list,
         ),
         "captions": lambda: cmd_captions(root, cfg, lang_list),

@@ -20,8 +20,9 @@
 
 用法（`--` 之后的参数原样转发 tts.py；须与 tts.py 同解释器依赖面 --with mutagen）：
     uv run --no-project --with mutagen $T/scripts/tts_resume.py \
-        -- --engine indextts --project $P --ref $V/<样本>.wav \
+        -- --engine indextts --final-voice --project $P --ref $V/<样本>.wav \
         --expect-ref-sha1 <指纹> [--seed 4242] …
+    （--final-voice＝本人显式点名的具名授权，RSI-040：入口预检缺它即拒、先于任何冷重启）
 用法定义见 references/PIPELINE.md §三（脚本表）。
 """
 
@@ -352,6 +353,21 @@ def require_indextts(forwarded: list[str]) -> None:
         )
 
 
+def require_final_voice(forwarded: list[str]) -> None:
+    """人为触发原则入口预检（RSI-040）：非 --plan 的 indextts 长跑必须带具名授权
+    --final-voice——缺失在此拦，先于健康检查与任何冷重启（同「值校验先于杀服」
+    纪律），与 tts.py 主闸同口径；--plan 豁免同主闸。"""
+    if "--plan" in forwarded:
+        return
+    if "--final-voice" not in forwarded:
+        sys.exit(
+            "❌ 转发参数缺 --final-voice：IndexTTS 声音克隆须本人显式点名才可启用"
+            "（每次合成、zh/en 每语言各算一次独立要求），缺省一律 edge 草声。"
+            "若本人确已要求，请在 `--` 之后的 tts.py 参数里显式加 --final-voice"
+            "（排期用 --plan 无需授权）；纪律见 references/07-tts-voice.md"
+        )
+
+
 def require_client_deps() -> None:
     """入口硬门禁：tts_resume 以当前解释器（sys.executable）跑 tts.py，mutagen
     缺失时不预检会**首句合成成功、写完 mp3 测时长才崩**（RSI-022 表因②，
@@ -461,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
             "缺少转发给 tts.py 的参数（-- 之后，至少须有 --engine indextts --project …）"
         )
     require_indextts(forwarded)
+    require_final_voice(forwarded)
     require_client_deps()
     if args.use_qwen_emo and args.server_cmd:
         sys.exit(
