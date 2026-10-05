@@ -363,12 +363,32 @@ def _custom_samples(
             continue
         seen_frames.add(source_frame)
         unique_samples.append((name, timestamp))
-    # 时间序规范序（请求序下末位不一定是时间轴最后样本）：check_frames 的渐黑
-    # 豁免只认列表末位，多请求组合时须保证末位即时间轴最后样本。
+    # 时间序规范序（请求序下末位不一定是时间轴末样本）：check_frames 的渐黑豁免
+    # 只认列表末位，豁免是否成立由 _fade_exempt_last 按帧位另判。
     unique_samples.sort(key=lambda item: item[1])
     if not unique_samples:
         parser.error("过渡/loop 请求在 --scene 过滤后没有可抽取样本")
     return unique_samples
+
+
+def _fade_exempt_last(
+    board_fade: bool,
+    samples: list[tuple[str, float]],
+    tl: dict[str, tuple[float, float]],
+    fps: int,
+    offset: float,
+) -> bool:
+    """渐黑豁免按帧位判定：末位样本落入末句窗口（渐黑的作用域）才豁免。
+
+    check_frames 的豁免只认列表末位；自定义请求不覆盖片尾时末位只是普通边界帧，
+    按位次豁免会把真实黑帧吞成绿色体检。作用域与普通路径对齐——其末位采样本就
+    是末句中点。
+    """
+    if not board_fade or not samples or fps <= 0 or not tl:
+        return False
+    last_frame = _source_frame(samples[-1][1] + offset, fps)
+    final_start = _source_frame(list(tl.values())[-1][0], fps)
+    return last_frame >= final_start
 
 
 def frame_diff(a: Path, b: Path) -> dict:
@@ -926,15 +946,18 @@ def main() -> None:
             extracted.append(name)
             print(f"{name} @ {timestamp:.2f}s -> {dst.relative_to(root)}")
         if args.check:
-            # 渐黑豁免与另两条 --check 路径同构（样本已按时间序，末位即时间轴
-            # 最后样本）；缺分镜表时 tail_row_has_fade 返回 False，不炸不豁免。
+            # 渐黑豁免按帧位判定（_fade_exempt_last）：请求集不覆盖片尾时末位只是
+            # 普通边界帧，不得豁免；缺分镜表时 tail_row_has_fade 返回 False，不炸不豁免。
             board_fade = tail_row_has_fade(root / "script" / "storyboard.md")
+            fade_exempt = _fade_exempt_last(
+                board_fade, samples, tl, constants["fps"], offset
+            )
             msgs: list[str] = []
             check_frames(
                 out,
                 extracted,
                 args.scale,
-                board_fade,
+                fade_exempt,
                 msgs,
                 freeze_check=False,
                 subtitle_check=False,
