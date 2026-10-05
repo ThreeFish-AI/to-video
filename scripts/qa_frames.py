@@ -363,6 +363,9 @@ def _custom_samples(
             continue
         seen_frames.add(source_frame)
         unique_samples.append((name, timestamp))
+    # 时间序规范序（请求序下末位不一定是时间轴最后样本）：check_frames 的渐黑
+    # 豁免只认列表末位，多请求组合时须保证末位即时间轴最后样本。
+    unique_samples.sort(key=lambda item: item[1])
     if not unique_samples:
         parser.error("过渡/loop 请求在 --scene 过滤后没有可抽取样本")
     return unique_samples
@@ -923,12 +926,15 @@ def main() -> None:
             extracted.append(name)
             print(f"{name} @ {timestamp:.2f}s -> {dst.relative_to(root)}")
         if args.check:
+            # 渐黑豁免与另两条 --check 路径同构（样本已按时间序，末位即时间轴
+            # 最后样本）；缺分镜表时 tail_row_has_fade 返回 False，不炸不豁免。
+            board_fade = tail_row_has_fade(root / "script" / "storyboard.md")
             msgs: list[str] = []
             check_frames(
                 out,
                 extracted,
                 args.scale,
-                False,
+                board_fade,
                 msgs,
                 freeze_check=False,
                 subtitle_check=False,

@@ -101,3 +101,24 @@ def test_custom_sampling_accepts_transition_inside_tail_frames():
     )
 
     assert samples[-1][1] == 6.0
+
+
+def test_custom_samples_return_chronological_order_across_requests():
+    """多请求组合时末位必须是时间轴最后样本：check_frames 的渐黑豁免只认列表末位，
+    请求序（transition 先于 loop）会把 loop 末帧 149 放在末位，时间轴最后的
+    过渡 after 帧 180 伸入 tailSec 渐黑区时反而拿不到豁免。"""
+    parser = argparse.ArgumentParser()
+    samples = _custom_samples(
+        TIMELINE,
+        [("p1-01", 30)],
+        [("p0-01", "p0-03")],
+        None,
+        30,
+        0.0,
+        parser,
+        tail_frames=60,
+    )
+
+    timestamps = [timestamp for _name, timestamp in samples]
+    assert timestamps == sorted(timestamps)
+    assert samples[-1][1] == 6.0
