@@ -171,6 +171,15 @@ def test_tail_row_has_fade_false_without_marker(tmp_path):
     assert not tail_row_has_fade(tmp_path / "absent.md")  # 缺文件不炸、不豁免
 
 
+def test_tail_row_fade_ignores_visual_lock_column(tmp_path):
+    board = tmp_path / "storyboard.md"
+    board.write_text(
+        "| 6-G 原文卡 | p6-14..15 | … | 卡片停留 | 禁止：提前渐黑 |\n",
+        encoding="utf-8",
+    )
+    assert not tail_row_has_fade(board)
+
+
 def declared_action(script: str, flag: str) -> str | None:
     """→ 源码里 `add_argument("<flag>", …)` 声明的 action 字面量（无则 None）。
 

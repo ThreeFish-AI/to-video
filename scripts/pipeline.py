@@ -59,6 +59,19 @@ from langs import suffix as lang_suffix  # noqa: E402
 MANUAL = str(paths.SKILL / "references" / "VOICE-CLONING.md")  # skill 根哨兵派生
 
 
+def _qa_transition_arg(value: str) -> str:
+    if not re.fullmatch(r".+:[1-9][0-9]*", value):
+        raise argparse.ArgumentTypeError("--transition 格式必须为 SID:N，N 为正整数")
+    return value
+
+
+def _qa_loop_arg(value: str) -> str:
+    parts = value.split("..")
+    if len(parts) != 2 or not all(parts):
+        raise argparse.ArgumentTypeError("--loop 格式必须为 FROM..TO")
+    return value
+
+
 # ---------------- 语言维度（执行层） ----------------
 #
 # 「语言」是与阶段序列正交的维度：机制在 langs.py、策略在 pipeline.toml 的
@@ -884,6 +897,8 @@ def cmd_qa(
     beat_heads: int | None = None,
     compare: list[str] | None = None,
     lang: str | None = None,
+    transition: list[str] | None = None,
+    loop: list[str] | None = None,
 ) -> int:
     cmd = ["uv", "run", "--no-project"]
     if check or compare:
@@ -897,12 +912,16 @@ def cmd_qa(
     ]
     for s in scene or []:
         cmd += ["--scene", s]
-    if last_n:
+    if last_n is not None:
         cmd += ["--last-n", str(last_n)]
-    if beat_heads:
+    if beat_heads is not None:
         cmd += ["--beat-heads", str(beat_heads)]
     if compare:
         cmd += ["--compare", *compare]
+    for transition_spec in transition or []:
+        cmd += ["--transition", transition_spec]
+    for loop_spec in loop or []:
+        cmd += ["--loop", loop_spec]
     if check:
         cmd += ["--check"]
         # 字幕带/亮块间隔是全分辨率像素常数：草渲（0.5x）不折算则带高×2、间隔×2，
@@ -1222,6 +1241,20 @@ def main() -> None:
         metavar=("A.mp4", "B.mp4"),
         help="A/B 对拍（重制/重构回归归因；advisory）",
     )
+    p.add_argument(
+        "--transition",
+        action="append",
+        metavar="SID:N",
+        type=_qa_transition_arg,
+        help="按句起点抽取过渡边界帧，N 为必填正整数；可重复传",
+    )
+    p.add_argument(
+        "--loop",
+        action="append",
+        metavar="FROM..TO",
+        type=_qa_loop_arg,
+        help="按同幕连续句区间抽取首尾帧；可重复传",
+    )
     p.add_argument("--check", action="store_true", help="自动体检")
     p.add_argument(
         "--scale",
@@ -1311,6 +1344,8 @@ def main() -> None:
             getattr(args, "beat_heads", None),
             getattr(args, "compare", None),
             lang_list[0],
+            getattr(args, "transition", None),
+            getattr(args, "loop", None),
         ),
         "all": lambda: cmd_all(root, cfg, lang_list),
         "clean-samples": lambda: cmd_clean_samples(root, cfg),

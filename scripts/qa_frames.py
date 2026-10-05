@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -62,7 +63,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config  # noqa: E402
 import langs  # noqa: E402
-from timeline import blend, compute, load_constants  # noqa: E402
+from timeline import blend, compute, js_round, load_constants  # noqa: E402
 
 #: theme.ts 中颜色令牌（'#RRGGBB' 字面量）；bg 单独作为对比基准
 THEME_COLOR_RE = re.compile(
@@ -179,6 +180,198 @@ def beat_head_samples(
     return samples
 
 
+def _scene_key(sentence_id: str) -> str:
+    return sentence_id.rsplit("-", 1)[0].lower()
+
+
+def _source_frame(timestamp: float, fps: int) -> int:
+    return math.floor(timestamp * fps + 0.5)
+
+
+def _timeline_end_frame(tl: dict[str, tuple[float, float]], fps: int) -> int:
+    return _timeline_end_frame_with_tail(tl, fps, 0)
+
+
+def _timeline_end_frame_with_tail(
+    tl: dict[str, tuple[float, float]], fps: int, tail_frames: int
+) -> int:
+    return max(
+        (_source_frame(start + span, fps) for start, span in tl.values()),
+        default=0,
+    ) + max(0, tail_frames)
+
+
+def _frame_samples(
+    candidates: list[tuple[str, int]],
+    fps: int,
+    offset: float,
+    lower_frame: int,
+    upper_frame: int,
+) -> list[tuple[str, float]]:
+    if lower_frame > upper_frame:
+        return []
+    samples: list[tuple[str, float]] = []
+    seen_frames: set[int] = set()
+    for name, frame in candidates:
+        clipped_frame = min(max(frame, lower_frame), upper_frame)
+        if clipped_frame / fps < offset - 1e-9:
+            continue
+        if clipped_frame in seen_frames:
+            continue
+        seen_frames.add(clipped_frame)
+        samples.append((name, max(0.0, clipped_frame / fps - offset)))
+    return samples
+
+
+def transition_samples(
+    tl: dict[str, tuple[float, float]],
+    anchor_id: str,
+    frames: int,
+    fps: int,
+    offset: float = 0.0,
+    tail_frames: int = 0,
+) -> list[tuple[str, float]]:
+    """返回句起点过渡窗口的边界样本，使用 timeline 的帧坐标。"""
+    if anchor_id not in tl or frames <= 0 or fps <= 0:
+        return []
+    start_frame = _source_frame(tl[anchor_id][0], fps)
+    total_frames = _timeline_end_frame_with_tail(tl, fps, tail_frames)
+    candidates = [
+        (f"{anchor_id}-t{frames}-before", start_frame - 1),
+        (f"{anchor_id}-t{frames}-start", start_frame),
+        (f"{anchor_id}-t{frames}-mid", start_frame + frames // 2),
+        (f"{anchor_id}-t{frames}-end", start_frame + frames - 1),
+        (f"{anchor_id}-t{frames}-after", start_frame + frames),
+    ]
+    return _frame_samples(candidates, fps, offset, 0, total_frames - 1)
+
+
+def loop_samples(
+    tl: dict[str, tuple[float, float]],
+    from_id: str,
+    to_id: str,
+    fps: int,
+    offset: float = 0.0,
+) -> list[tuple[str, float]]:
+    """返回同幕 manifest 区间的首两帧与末两帧样本。"""
+    sentence_ids = list(tl)
+    if (
+        fps <= 0
+        or from_id not in tl
+        or to_id not in tl
+        or _scene_key(from_id) != _scene_key(to_id)
+    ):
+        return []
+    from_index = sentence_ids.index(from_id)
+    to_index = sentence_ids.index(to_id)
+    if from_index > to_index:
+        return []
+    start_frame = _source_frame(tl[from_id][0], fps)
+    end_frame = _source_frame(tl[to_id][0] + tl[to_id][1], fps)
+    candidates = [
+        (f"{from_id}-l-head0", start_frame),
+        (f"{from_id}-l-head1", start_frame + 1),
+        (f"{to_id}-l-tail0", end_frame - 2),
+        (f"{to_id}-l-tail1", end_frame - 1),
+    ]
+    return _frame_samples(candidates, fps, offset, start_frame, end_frame - 1)
+
+
+def _parse_transition(value: str) -> tuple[str, int]:
+    match = re.fullmatch(r"(.+):([1-9][0-9]*)", value)
+    if not match:
+        raise argparse.ArgumentTypeError("--transition 格式必须为 SID:N，N 为正整数")
+    return match.group(1), int(match.group(2))
+
+
+def _parse_loop(value: str) -> tuple[str, str]:
+    parts = value.split("..")
+    if len(parts) != 2 or not all(parts):
+        raise argparse.ArgumentTypeError("--loop 格式必须为 FROM..TO")
+    return parts[0], parts[1]
+
+
+def _custom_samples(
+    tl: dict[str, tuple[float, float]],
+    transitions: list[tuple[str, int]],
+    loops: list[tuple[str, str]],
+    scenes: list[str] | None,
+    fps: int,
+    offset: float,
+    parser: argparse.ArgumentParser,
+    tail_frames: int = 0,
+) -> list[tuple[str, float]]:
+    sentence_ids = list(tl)
+    total_frames = _timeline_end_frame_with_tail(tl, fps, tail_frames)
+    scene_keys = {scene.lower() for scene in scenes or []}
+    offset_frame = max(0, math.ceil(offset * fps - 1e-9))
+    for anchor_id, frames in transitions:
+        if anchor_id not in tl:
+            parser.error(f"--transition 未知句 id: {anchor_id}")
+        start_frame = _source_frame(tl[anchor_id][0], fps)
+        if start_frame + frames >= total_frames:
+            parser.error(f"--transition {anchor_id}:{frames} 超出时间轴范围")
+        candidate_frames = [
+            max(0, start_frame - 1),
+            start_frame,
+            start_frame + frames // 2,
+            start_frame + frames - 1,
+            start_frame + frames,
+        ]
+        if any(frame < offset_frame for frame in candidate_frames):
+            parser.error(
+                f"--transition {anchor_id}:{frames} 被 --offset 裁掉边界帧，"
+                "请降低 offset 或改用对应视频时间轴"
+            )
+    for from_id, to_id in loops:
+        if from_id not in tl:
+            parser.error(f"--loop 未知句 id: {from_id}")
+        if to_id not in tl:
+            parser.error(f"--loop 未知句 id: {to_id}")
+        if _scene_key(from_id) != _scene_key(to_id):
+            parser.error(f"--loop 必须位于同一幕: {from_id}..{to_id}")
+        if sentence_ids.index(from_id) > sentence_ids.index(to_id):
+            parser.error(f"--loop 区间反序: {from_id}..{to_id}")
+        start_frame = _source_frame(tl[from_id][0], fps)
+        end_frame = _source_frame(tl[to_id][0] + tl[to_id][1], fps)
+        loop_frames = [start_frame, start_frame + 1, end_frame - 2, end_frame - 1]
+        if any(frame < offset_frame for frame in loop_frames):
+            parser.error(
+                f"--loop {from_id}..{to_id} 被 --offset 裁掉边界帧，"
+                "请降低 offset 或改用对应视频时间轴"
+            )
+
+    samples: list[tuple[str, float]] = []
+    for anchor_id, frames in transitions:
+        if scene_keys and _scene_key(anchor_id) not in scene_keys:
+            parser.error(f"--transition {anchor_id}:{frames} 不属于 --scene 过滤范围")
+        request_samples = transition_samples(
+            tl, anchor_id, frames, fps, offset, tail_frames
+        )
+        if not request_samples:
+            parser.error(f"--transition {anchor_id}:{frames} 在当前 offset 下没有样本")
+        samples.extend(request_samples)
+    for from_id, to_id in loops:
+        if scene_keys and _scene_key(from_id) not in scene_keys:
+            parser.error(f"--loop {from_id}..{to_id} 不属于 --scene 过滤范围")
+        request_samples = loop_samples(tl, from_id, to_id, fps, offset)
+        if not request_samples:
+            parser.error(f"--loop {from_id}..{to_id} 在当前 offset 下没有样本")
+        samples.extend(request_samples)
+
+    unique_samples: list[tuple[str, float]] = []
+    seen_frames: set[int] = set()
+    for name, timestamp in samples:
+        source_frame = _source_frame(timestamp + offset, fps)
+        if source_frame in seen_frames:
+            continue
+        seen_frames.add(source_frame)
+        unique_samples.append((name, timestamp))
+    if not unique_samples:
+        parser.error("过渡/loop 请求在 --scene 过滤后没有可抽取样本")
+    return unique_samples
+
+
 def frame_diff(a: Path, b: Path) -> dict:
     """两帧的差异摘要（纯函数，供 --compare 与单测）。
 
@@ -206,7 +399,13 @@ def frame_diff(a: Path, b: Path) -> dict:
 
 
 def extract_frame(
-    ffmpeg: list[str], video: Path, cwd: Path, ts: float, dst: Path
+    ffmpeg: list[str],
+    video: Path,
+    cwd: Path,
+    ts: float,
+    dst: Path,
+    *,
+    precise: bool = False,
 ) -> None:
     """单帧抽取。两个非显然的怪癖都刻在参数上（remotion 内置 ffmpeg 的编译裁剪所致）：
 
@@ -222,7 +421,11 @@ def extract_frame(
                 *ffmpeg,
                 "-y",
                 "-ss",
-                f"{ts:.3f}",
+                (
+                    f"{math.floor(ts * 1_000_000) / 1_000_000:.6f}"
+                    if precise
+                    else f"{ts:.3f}"
+                ),
                 "-i",
                 str(video),
                 "-frames:v",
@@ -364,7 +567,11 @@ def tail_row_has_fade(board: Path) -> bool:
         for ln in board.read_text(encoding="utf-8").splitlines()
         if ln.strip().startswith("|")
     ]
-    return bool(rows) and any("渐黑" in ln for ln in rows[-2:])
+    recent_cells = [
+        [cell.strip() for cell in row.strip().strip("|").split("|")[:4]]
+        for row in rows[-2:]
+    ]
+    return bool(rows) and any("渐黑" in " | ".join(cells) for cells in recent_cells)
 
 
 def check_frames(
@@ -579,11 +786,28 @@ def main() -> None:
         default=0.0,
         help="时间轴整体偏移（草渲与终渲时间基准不一致时用）",
     )
+    parser.add_argument(
+        "--transition",
+        action="append",
+        type=_parse_transition,
+        metavar="SID:N",
+        help="按句起点抽取过渡边界帧，N 为必填正整数；可重复传",
+    )
+    parser.add_argument(
+        "--loop",
+        action="append",
+        type=_parse_loop,
+        metavar="FROM..TO",
+        help="按同幕连续句区间抽取首尾帧；可重复传",
+    )
     parser.add_argument("video", nargs="?", help="渲染产物 mp4 路径")
     parser.add_argument("ids", nargs="*", help="句 id 列表")
     args = parser.parse_args()
 
     root = Path(args.project).resolve()
+
+    if (args.transition or args.loop) and (args.stills_plan or args.check_theme):
+        parser.error("--transition/--loop 不能与 --stills-plan/--check-theme 组合")
 
     # --compare 自带两个视频路径，不消费普通模式的 <video> 位置参数；argparse 仍会
     # 把 compare 后的首个裸句 id 填进 video，须在选择器计数前归还给 ids。
@@ -603,9 +827,23 @@ def main() -> None:
         print(f">> --check-theme · FAIL {sum(m.startswith('FAIL') for m in msgs)}")
         sys.exit(1 if any(m.startswith("FAIL") for m in msgs) else 0)
 
+    custom_sampling = bool(args.transition or args.loop)
     selectors = sum(bool(x) for x in (args.scene, args.last_n, args.ids))
-    if args.beat_heads:
-        if args.last_n or args.ids:
+    if custom_sampling:
+        if (
+            args.beat_heads is not None
+            or args.last_n is not None
+            or args.ids
+            or args.compare
+        ):
+            parser.error(
+                "--transition/--loop 只可与 --scene 组合，不能与"
+                " --beat-heads/--last-n/句 id/--compare 组合"
+            )
+        if not args.video:
+            parser.error("--transition/--loop 需要 <video>")
+    elif args.beat_heads is not None:
+        if args.last_n is not None or args.ids:
             parser.error("--beat-heads 只可与 --scene 组合过滤幕")
         if not args.video:
             parser.error("--beat-heads 需要 <video>")
@@ -665,6 +903,48 @@ def main() -> None:
 
     video = Path(args.video).resolve()
     out = root / "out" / f"frames{langs.suffix(args.lang)}"
+    if custom_sampling:
+        constants = load_constants(root)
+        samples = _custom_samples(
+            tl,
+            args.transition or [],
+            args.loop or [],
+            args.scene,
+            constants["fps"],
+            offset,
+            parser,
+            js_round(constants["tailSec"] * constants["fps"]),
+        )
+        out.mkdir(parents=True, exist_ok=True)
+        ffmpeg = ["pnpm", "exec", "remotion", "ffmpeg"]
+        extracted: list[str] = []
+        for name, timestamp in samples:
+            dst = out / f"{name}.png"
+            extract_frame(ffmpeg, video, root / "video", timestamp, dst, precise=True)
+            extracted.append(name)
+            print(f"{name} @ {timestamp:.2f}s -> {dst.relative_to(root)}")
+        if args.check:
+            msgs: list[str] = []
+            check_frames(
+                out,
+                extracted,
+                args.scale,
+                False,
+                msgs,
+                freeze_check=False,
+                subtitle_check=False,
+            )
+            for message in msgs:
+                print(f"  {message}")
+            failures = sum(message.startswith("FAIL") for message in msgs)
+            print(
+                f">> 过渡/loop 抽帧体检 · FAIL {failures} · "
+                f"WARN {sum(message.startswith('WARN') for message in msgs)}"
+                "（仅检查黑帧与字幕安全区；morph/loop 连续性须人工验收）"
+            )
+            sys.exit(1 if failures else 0)
+        print("（morph/loop 连续性与速度须人工验收；本次未启用自动像素门）")
+        return
     if args.beat_heads:
         from check_script import parse_storyboard  # noqa: PLC0415 - 同目录模块
 

@@ -3,11 +3,11 @@
 > Stage ⑧：把 `script/storyboard.md` 的分镜规格实现为 `video/src/scenes/` 场景组件，直至草渲抽帧 QA 通过、终渲出片。
 > 本文件是实现代理的提示词规格，与 references/01–06（内容层）衔接。
 
-**目录**：输入 · 骨架复制适配策略 · 事实条 · 本集之外可复用的视觉母题 · 运动层（frozen，含铁律） · 3D 点缀 · 场景组件模式 · 双语 i18n · 顶部章节进度条 · theme.ts 色彩契约设计规则 · 渲染缺陷自检清单（七条红线） · 命令闭环 · 系列身份视觉：五层 Harness 栈
+**目录**：输入 · 骨架复制适配策略 · 事实条 · 本集之外可复用的视觉母题 · 运动层（frozen，含铁律） · Motion Blur opt-in · 3D 点缀 · 场景组件模式 · 双语 i18n · 顶部章节进度条 · theme.ts 色彩契约设计规则 · 渲染缺陷自检清单（七条红线） · 命令闭环 · Transition/Loop QA · 系列身份视觉：五层 Harness 栈
 
 ## 输入
 
-- `script/storyboard.md`（分镜规格：镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效）
+- `script/storyboard.md`（分镜规格：镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效；可选 `Visual Lock` 仅供人工验收）
 - `video/public/audio/manifest.json`（TTS 产物：每句实测时长）
 - 任一既有集工程的 `video/` 骨架（脚手架来源；与发布顺序无关）
 
@@ -114,6 +114,10 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
 - **评审面**：`./node_modules/.bin/remotion still src/motion/gallery.tsx MotionGallery
   ../out/motion-gallery.png --frame=30`——全部模型 × 变体一屏秒级出图；纯函数单测
   `node --test scripts/motion.test.ts`（Node ≥ 23.6 原生跑 TS）。
+
+### Motion Blur opt-in（默认关闭）
+
+Motion Blur 只在场景明确 opt-in 时启用；本规格不新增依赖、不实现新的 blur backend，也不改变默认 `30fps` 或时间 SSOT。它只能作用于被明确隔离的运动视觉层，字幕、字幕背景、角标、关键文字和其他需清晰阅读的层必须保持 crisp，并在合成后置于 blur 层之上。禁止对整帧做 temporal mix（`tmix`）或把字幕一起模糊；Motion Blur 也不能替代 Morph Continuity 的建模与人工 QA。
 
 ## 3D 点缀（`@remotion/three`，2026-09 EP1 落地）
 
@@ -282,6 +286,8 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
   元素」——「镜里挂了 archify」不构成回答（空镜 = 镜有画但句无锚，四镜共 ~68s 近乎空屏曾全绿漏网）。
 
 ## 命令闭环（工具一律 `./node_modules/.bin/` 直调，防 workspace 污染）
+
+`qa --transition SID:N` 与 `qa --loop FROM..TO` 是按句锚定的纯抽帧模式：时间窗口从实际 manifest/timeline 与场景代码窗口推导，不改时间 SSOT，不按音乐 BPM 猜帧。若实现使用「动作句 + duration 帧」，QA 必须抄录代码实际窗口；不得另造 duration 或覆盖 `timing.json`。这两种模式不自动判断主体位置或速度，`--check` 仅保留黑帧与安全区检查，冻帧和字幕缺失检查关闭，最终必须人工验收；完整参数与互斥关系见 [09-render-qa.md](./09-render-qa.md)。
 
 ```bash
 cd video

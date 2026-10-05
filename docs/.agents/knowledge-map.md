@@ -33,6 +33,7 @@
 | [modeling-experience-distillation.md](../research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
 | [prose-refinement.md](../research/prose-refinement.md) | ⑤ 成文优化的语料取证、理论依据（IEEE 引用）与方案比选（落位 / 插入位置 / 执法力度） |
 | [dependency-policy-and-asset-tools.md](../research/dependency-policy-and-asset-tools.md) | 依赖版本策略比选、HyperFrames 复核（vs Remotion）与 text-to-cad 评估（RSI-016 循证） |
+| [motion-engineering.md](../research/motion-engineering.md) | Visual Lock、Morph Continuity、过渡/循环抽帧验收与 Motion Blur opt-in 的方案依据 |
 
 ## 资产
 
