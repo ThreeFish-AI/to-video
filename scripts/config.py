@@ -433,6 +433,15 @@ def validate(
             if need:
                 fails.append(f"缺少必填键 {dotted}")
             continue
+        if isinstance(val, bool) and typ is not bool:
+            # bool 是 int 的子类：不显式排除会被下方「整数不苛求」分支收编
+            # （数值键写 true → 1.0 静默放行，直调 tts.py 到 argparse 才以英文
+            # 报错、编排器路径更是静默变 1.0）——TOML 的 true/false 不是数值，
+            # 配置门就给可读 FAIL（RSI-044 核验注记 1）。
+            fails.append(
+                f"{dotted} 类型应为 {typ.__name__}，实际 bool（TOML 的 true/false 不是数值）"
+            )
+            continue
         if typ is float and isinstance(val, int):
             val = float(val)  # TOML 的 1 与 1.0 是不同类型，此处不苛求
         if not isinstance(val, typ):

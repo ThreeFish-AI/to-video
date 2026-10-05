@@ -925,3 +925,27 @@ def test_duration_factor_en_override_whitelist_excludes_it(tmp_path):
     )
     _cfg, _o, fails, _w = config.load(root, required=True)
     assert any("tts.en.duration_factor" in f and "未知" in f for f in fails), fails
+
+
+def test_duration_factor_bool_is_readable_fail_at_config_gate(tmp_path):
+    """TOML `duration_factor = true` 须在配置门给可读 FAIL——bool 是 int 子类，
+    无显式排除会被「整数不苛求」分支收编成 1.0 静默放行（直调 tts.py 到 argparse
+    才以英文报错，编排器路径更是静默变 1.0）。核验注记 1。"""
+    root = _write(tmp_path, _MIN_INDEXTTS + "duration_factor = true\n")
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any(
+        "tts.duration_factor" in f and "bool" in f and "不是数值" in f for f in fails
+    ), fails
+    # bool 键自身不受误伤（archify.forbid_inset 既有真集用法）
+
+
+def test_bool_key_itself_still_accepts_bool(tmp_path):
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        'target_minutes = [1.0, 2.0]\n[tts]\nengine = "edge"\n'
+        "[archify]\nforbid_inset = true\n",
+    )
+    cfg, _o, fails, _w = config.load(root, required=True)
+    assert not fails, fails
+    assert cfg["archify"]["forbid_inset"] is True
