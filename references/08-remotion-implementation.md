@@ -67,11 +67,11 @@ uv run --no-project $T/scripts/verify_skeleton.py --strict  # 有未登记漂移
 
 | 母题 | 出处 | 适用 |
 |---|---|---|
-| 终端窗口 + 打字机 | [claude-code-explained-video](https://github.com/ThreeFish-AI/negentropy/blob/master/apps/negentropy-influence/episodes/claude-code-explained-video/video/src/components/motifs.tsx) `Terminal` | 任何「人机对话/命令行」痛点开场 |
+| 终端窗口 + 打字机 | [claude-code-memory-video](https://github.com/ThreeFish-AI/negentropy/blob/feature/1.x.x/apps/negentropy-influence/episodes/claude-code-memory-video/video/src/components/motifs.tsx) `Terminal` | 任何「人机对话/命令行」痛点开场 |
 | **恒定视觉锚**（环形循环） | 同上 `LoopRing` | 建模方法见 [手册 M-001](MODELING-PLAYBOOK.md)（实现要点：`strokeWidth` 取绝对像素、不随 size 缩放） |
 | 字典分发表 | 同上 `DispatchTable` | 键值查表、注册表、路由表 |
 | 闸门路由 | 同上 `GateRouter` | 多级判定/准入/过滤管线 |
-| 插槽注册板 | 同上 `SlotRing` | 扩展点、生命周期钩子、插件位 |
+| 插槽注册板 | 已退役（随 ep1 换题重制 negentropy #1183 合入后全系列绝迹；需要时从其重制前 git 历史取回）`SlotRing` | 扩展点、生命周期钩子、插件位 |
 
 借用方式仍是**复制该文件后裁剪、追加进本集的 motifs.tsx**，不做跨集 import。
 「反枚举并列项」模式（N 个并列概念不给 N 色，panel 底 + 编号、激活时才染色）
