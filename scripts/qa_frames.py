@@ -188,10 +188,6 @@ def _source_frame(timestamp: float, fps: int) -> int:
     return math.floor(timestamp * fps + 0.5)
 
 
-def _timeline_end_frame(tl: dict[str, tuple[float, float]], fps: int) -> int:
-    return _timeline_end_frame_with_tail(tl, fps, 0)
-
-
 def _timeline_end_frame_with_tail(
     tl: dict[str, tuple[float, float]], fps: int, tail_frames: int
 ) -> int:
@@ -843,6 +839,9 @@ def main() -> None:
         if not args.video:
             parser.error("--transition/--loop 需要 <video>")
     elif args.beat_heads is not None:
+        if args.beat_heads < 1:
+            # 显式 0/负数在此硬失败——下游消费是 truthy，0 会静默零抽帧并打出绿色体检。
+            parser.error("--beat-heads 帧数必须 ≥ 1")
         if args.last_n is not None or args.ids:
             parser.error("--beat-heads 只可与 --scene 组合过滤幕")
         if not args.video:

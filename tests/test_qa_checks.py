@@ -180,6 +180,22 @@ def test_tail_row_fade_ignores_visual_lock_column(tmp_path):
     assert not tail_row_has_fade(board)
 
 
+def test_beat_heads_explicit_zero_fails_at_argparse_gate(monkeypatch, capsys):
+    """显式 --beat-heads 0 必须参数闸硬失败：gate 用 is not None 后，0 若放行
+    会被下游 truthy 消费吞成静默零抽帧 + 绿色体检（merge-base 上是硬错误）。"""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["qa_frames.py", "--beat-heads", "0", "draft.mp4"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        qa_frames.main()
+
+    assert exc.value.code == 2
+    assert "≥ 1" in capsys.readouterr().err
+
+
 def declared_action(script: str, flag: str) -> str | None:
     """→ 源码里 `add_argument("<flag>", …)` 声明的 action 字面量（无则 None）。
 
