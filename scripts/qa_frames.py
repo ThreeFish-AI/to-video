@@ -21,7 +21,7 @@ A/B 对拍（有帧时 advisory；零匹配帧硬失败，供重制/重构回归
                                    之外的一切差异都应被归因后再接受
 
 自动体检（--check，惰性依赖 pillow+numpy）：
-    黑帧/早渐黑    帧平均相对亮度 < 0.02 → FAIL（仅末 beat 且分镜末行写「渐黑」时豁免）
+    黑帧/早渐黑    帧平均相对亮度 < 0.02 → FAIL（仅末 beat 且分镜末行前 4 列写「渐黑」时豁免）
     字幕区侵入     字幕框**上方**的安全带（y∈[H-160, H-132)）内出现宽度 ≥24px 的亮块
                    → WARN（对应 references/08 渲染缺陷清单第 2 条「角标 bottom ≥ 150」）
     冻帧           同幕相邻采样帧 16×16 灰度均值哈希 Hamming 距离 0 → WARN
@@ -185,7 +185,9 @@ def _scene_key(sentence_id: str) -> str:
 
 
 def _source_frame(timestamp: float, fps: int) -> int:
-    return math.floor(timestamp * fps + 0.5)
+    # 帧号与 Remotion 帧栅格逐位一致的不变量收敛在 js_round（JS Math.round 语义），
+    # 抽帧坐标属同一契约面，不另写一份 floor(x+0.5)。
+    return js_round(timestamp * fps)
 
 
 def _timeline_end_frame_with_tail(
@@ -273,14 +275,16 @@ def loop_samples(
     return _frame_samples(candidates, fps, offset, start_frame, end_frame - 1)
 
 
-def _parse_transition(value: str) -> tuple[str, int]:
+#: transition/loop 的 CLI 格式契约唯一实现；pipeline.py 子命令转发复用同源解析，
+#: 两层各写一份正则即「解析规则分叉即 split-brain」。
+def parse_transition(value: str) -> tuple[str, int]:
     match = re.fullmatch(r"(.+):([1-9][0-9]*)", value)
     if not match:
         raise argparse.ArgumentTypeError("--transition 格式必须为 SID:N，N 为正整数")
     return match.group(1), int(match.group(2))
 
 
-def _parse_loop(value: str) -> tuple[str, str]:
+def parse_loop(value: str) -> tuple[str, str]:
     parts = value.split("..")
     if len(parts) != 2 or not all(parts):
         raise argparse.ArgumentTypeError("--loop 格式必须为 FROM..TO")
@@ -574,8 +578,10 @@ def mean_hash(gray) -> int:
 
 
 def tail_row_has_fade(board: Path) -> bool:
-    """分镜表**最后一个表格行**（`| … |`）是否含「渐黑」——末 beat 渐黑豁免判据。
+    """分镜表**末两个表格行**（`| … |`）**前 4 列**（镜/句区间/画面/动效）含「渐黑」——末 beat 渐黑豁免判据。
 
+    只认前 4 列：可选 Visual Lock 散文列的「禁止：提前渐黑」是约束不是事实声明，
+    全行匹配会误开豁免（test_tail_row_fade_ignores_visual_lock_column 钉住）。
     按表格行而非文件末行：分镜表末尾常跟「字幕规范/实现映射」散文节，
     文件末 5 行判定会让豁免永不命中（EP1/EP2 实测如此，渐黑行距文件末约 10 行）。
     """
@@ -808,14 +814,14 @@ def main() -> None:
     parser.add_argument(
         "--transition",
         action="append",
-        type=_parse_transition,
+        type=parse_transition,
         metavar="SID:N",
         help="按句起点抽取过渡边界帧，N 为必填正整数；可重复传",
     )
     parser.add_argument(
         "--loop",
         action="append",
-        type=_parse_loop,
+        type=parse_loop,
         metavar="FROM..TO",
         help="按同幕连续句区间抽取首尾帧；可重复传",
     )
@@ -1050,7 +1056,8 @@ def main() -> None:
         print(f"{sid} @ {ts:.2f}s -> {dst.relative_to(root)}")
 
     if args.check:
-        # 末 beat 渐黑豁免：分镜**最后一个表格行**含「渐黑」字样时，最后一个抽帧允许黑。
+        # 末 beat 渐黑豁免：分镜**末两个表格行**的**前 4 列**含「渐黑」字样时，最后一个
+        # 抽帧允许黑（列范围与行窗口的判据 SSOT 在 tail_row_has_fade docstring）。
         # 按表格行而非文件末行——分镜表末尾常跟「字幕规范/实现映射」散文节，文件末行
         # 判定会让豁免永不命中（EP1/EP2 实测如此）。
         board = root / "script" / "storyboard.md"

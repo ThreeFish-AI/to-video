@@ -6,9 +6,9 @@ import pytest
 
 from qa_frames import (
     _custom_samples,
-    _parse_loop,
-    _parse_transition,
     loop_samples,
+    parse_loop,
+    parse_transition,
     transition_samples,
 )
 
@@ -66,11 +66,11 @@ def test_loop_samples_preserve_manifest_order_and_same_scene_boundary():
 )
 def test_transition_parser_requires_positive_integer_window(value: str):
     with pytest.raises(argparse.ArgumentTypeError):
-        _parse_transition(value)
+        parse_transition(value)
 
 
 def test_loop_parser_keeps_complete_sentence_ids():
-    assert _parse_loop("p0-01..p0-03") == ("p0-01", "p0-03")
+    assert parse_loop("p0-01..p0-03") == ("p0-01", "p0-03")
 
 
 def test_custom_sampling_rejects_offset_that_removes_transition_boundary():

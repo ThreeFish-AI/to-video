@@ -58,18 +58,9 @@ from langs import suffix as lang_suffix  # noqa: E402
 
 MANUAL = str(paths.SKILL / "references" / "VOICE-CLONING.md")  # skill 根哨兵派生
 
-
-def _qa_transition_arg(value: str) -> str:
-    if not re.fullmatch(r".+:[1-9][0-9]*", value):
-        raise argparse.ArgumentTypeError("--transition 格式必须为 SID:N，N 为正整数")
-    return value
-
-
-def _qa_loop_arg(value: str) -> str:
-    parts = value.split("..")
-    if len(parts) != 2 or not all(parts):
-        raise argparse.ArgumentTypeError("--loop 格式必须为 FROM..TO")
-    return value
+# transition/loop 的 CLI 格式契约 SSOT 在 qa_frames：子命令转发与本层 argparse
+# 共用同源解析，杜绝「pipeline 放行 / qa_frames 拒绝」的规则分叉。
+from qa_frames import parse_loop, parse_transition  # noqa: E402
 
 
 # ---------------- 语言维度（执行层） ----------------
@@ -1245,14 +1236,14 @@ def main() -> None:
         "--transition",
         action="append",
         metavar="SID:N",
-        type=_qa_transition_arg,
+        type=parse_transition,
         help="按句起点抽取过渡边界帧，N 为必填正整数；可重复传",
     )
     p.add_argument(
         "--loop",
         action="append",
         metavar="FROM..TO",
-        type=_qa_loop_arg,
+        type=parse_loop,
         help="按同幕连续句区间抽取首尾帧；可重复传",
     )
     p.add_argument("--check", action="store_true", help="自动体检")
