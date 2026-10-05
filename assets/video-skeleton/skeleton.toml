@@ -121,6 +121,10 @@ frozen = [
   "video/src/motion/index.ts",
   "video/src/motion/gallery.tsx",
   "video/scripts/motion.test.ts",
+  # SVG visual renderer：共享的是 frame → geometry 的机制，人物形状与色板仍由场景持有。
+  "video/src/visual/index.ts",
+  "video/src/components/VisualLayer.tsx",
+  "video/tests/unit/visual.test.ts",
 ]
 # 时序常数 SSOT：timing.ts 经 resolveJsonModule 同步 import，Python 侧
 # timeline.py 直读同一文件。覆写许可存在但四集从未行使过。

@@ -40,6 +40,7 @@
 | 路径 | 内容 |
 |---|---|
 | [assets/video-skeleton/](../../assets/video-skeleton/) | 分集 Remotion 骨架模板（档位与漂移判据见其 `skeleton.toml`） |
+| [SVG Visual Renderer](../../assets/video-skeleton/video/src/visual/index.ts) | frame-driven SVG path draw/Morph/path-follow；React 封装见 [VisualLayer.tsx](../../assets/video-skeleton/video/src/components/VisualLayer.tsx)，行为测试通过 `pnpm test:visual` 运行 |
 | [assets/workspace/](../../assets/workspace/) | 内容工作区模板（`scaffold.py --init-workspace` 实例化） |
 | [assets/quickstart/](../../assets/quickstart/) | README Quickstart 的两幕示例场景 |
 | [docs/assets/](../assets/) | 架构图（archify HTML / PNG）、mermaid 源、Demo 动图 |

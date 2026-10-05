@@ -949,6 +949,47 @@ MOTION_FILES = (
     "video/scripts/motion.test.ts",
 )
 
+VISUAL_FILES = (
+    "video/src/visual/index.ts",
+    "video/src/components/VisualLayer.tsx",
+    "video/tests/unit/visual.test.ts",
+)
+
+
+def test_visual_renderer_is_frozen_and_complete():
+    """SVG visual renderer 的文件面齐全且全部归 frozen 档。"""
+    frozen = set(skeleton()["classes"].get("frozen", []))
+    missing = [rel for rel in VISUAL_FILES if rel not in frozen]
+    assert not missing, f"SVG visual renderer 未归 frozen：{missing}"
+    for rel in VISUAL_FILES:
+        assert (TEMPLATE / rel).is_file(), f"模板缺 {rel}"
+
+
+def test_visual_renderer_is_frame_driven_and_theme_agnostic():
+    """Visual Renderer 只能从当前 frame 推导几何，颜色仍由场景传入。"""
+    for rel in VISUAL_FILES[:2]:
+        src = (TEMPLATE / rel).read_text(encoding="utf-8")
+        assert "Date.now" not in src
+        assert "Math.random" not in src
+        assert "requestAnimationFrame" not in src
+        assert "setTimeout" not in src
+        assert "setInterval" not in src
+        assert "theme." not in src
+
+
+def test_draw_path_controls_geometry_props():
+    """DrawPath 的几何属性由 Renderer 控制，调用方只能注入视觉样式。"""
+    src = (TEMPLATE / "video/src/components/VisualLayer.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "Omit<React.SVGProps<SVGPathElement>, 'd' | 'pathLength' | 'strokeDasharray' | 'strokeDashoffset' | 'style'>"
+        in src
+    )
+    assert "d: path" in src
+    assert "strokeDasharray: state.strokeDasharray" in src
+    assert "strokeDashoffset: state.strokeDashoffset" in src
+
 
 def test_motion_layer_is_frozen_and_complete():
     """运动层文件面齐全且全部归 frozen 档——「共享的是运动机制」这一边界的机器化。

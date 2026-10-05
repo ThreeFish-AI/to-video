@@ -33,6 +33,9 @@ uv run --no-project $T/scripts/verify_skeleton.py --strict  # 有未登记漂移
 - 幕间转场**不用** `@remotion/transitions` 的 TransitionSeries：其总时长 = Σ序列 − Σ转场，会把视觉层整体左移而旁白（manifest 帧号绝对定位的独立层）不动 → 逐幕递增失同步。用 `SceneFade`（只花幕间既有静默，from/总时长零改动；不变式 `2×sceneCrossFadeSec ≤ sentenceGap+sceneGap` 由 check_script.py 强制）。
 - 字体可复现性：三集用 macOS 系统字体栈（PingFang SC/Songti SC/SF Mono），未内嵌 CJK 字体——**渲染仅限 macOS 主机**。重启触发器：渲染迁 Linux/CI；**Remotion 5.0（跨 major，走 RSI，见 [PIPELINE.md §九](./PIPELINE.md)）**——fitText 的 validateFontIsLoaded 默认翻 true（届时须内嵌子集字体，注意 pre-commit --maxkb=1024）、numberOfSharedAudioTags 默认将改 0（涉 NarrationAudio，4.0.527 changelog 预告）、license 条款微调（升级窗口复读 LICENSE）。
 - 路径描画优先 `@remotion/paths`（evolvePath/getPointAtLength）——它是「pathLength 与 px 版 strokeDasharray 互斥」红线的官方正解；线型样式（虚线/点线）另置静态叠加路径，勿与描画动画挤在同一元素。
+- **SVG Visual Renderer（P0）**：共享层位于 [`video/src/visual/index.ts`](../assets/video-skeleton/video/src/visual/index.ts)，React 封装位于 [`VisualLayer.tsx`](../assets/video-skeleton/video/src/components/VisualLayer.tsx)。`pathDrawAtFrame`、`pathMorphAtFrame`、`pathFollowAtFrame` 都只接收当前 `frame` 与显式 `VisualTiming`，时间轴仍由 Remotion 持有；人物路径、身份锚点和色板由各集场景注入，不进入 frozen 机制层。模板可直接运行 `pnpm test:visual`。
+- **Renderer Contract**：`frame → derive geometry → SVG props → DOM/字幕 overlay`。路径原语必须在窗口前后钳制到终态；Morph 必须保留明确的起始态、终止态和可抽检的中间态；沿路径跟随使用路径切线计算旋转，不得用 timer、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态。
+- **实现边界**：`@remotion/paths` 与全部 `remotion` / `@remotion/*` 精确同版；`pathLength` 与像素版 `strokeDasharray` 不在同一元素混用；SVG 是主体与文字附近的首选 Renderer，Canvas 2D / Three.js 仍为后续单集 opt-in，不改变唯一 Remotion Runtime。
 - **Lottie 资产渲染边界（`@remotion/lottie`）**：chrome-headless-shell + ANGLE 后端下，
   fetch + `delayRender` + `@remotion/lottie` 的组合（上游 LottieEmphasis 形态）对**特定 JSON**
   初始化挂死——`Waiting for Lottie animation to load` 的 delayRender 永不解除，表象为

@@ -652,3 +652,17 @@
 **后续防范**：复杂变形必须先声明参考/保持/禁止三类可观测约束；过渡验收不得以单张 beat 中点代替边界与中间态采样；loop 只验标记主体的端点位置与速度连续性，不把字幕、章节条或全帧像素相等误当作 loop 判据；不得用音乐 BPM 替代旁白句边界时间轴。
 
 **同类问题影响**：适用于 UI 状态演进、机制流程动画、片头循环装置和高风险字幕交接；普通科普镜头无需强制 Morph、Motion Blur 或 loop 检查。
+
+## RSI-042 SVG Visual Renderer 缺少统一的 frame-to-geometry 原语
+
+**表因**：分集可以手写 SVG `strokeDasharray`、路径 Morph 和沿路径定位，但每集各自实现会重复处理窗口边界、路径长度、切线旋转与非法输入；文章中的“逐笔绘制”和连续 Morph 尚未沉淀为可复用机制。
+
+**根因**：既有 `src/motion/` 只提供数值运动 hook，不承载 SVG 几何；模板没有明确的 Renderer Contract，也没有与 Remotion 版本一致的 SVG path 工具依赖。
+
+**定性**：非阻断改进（新增 opt-in SVG 能力；不改变唯一 Remotion 时间轴、默认 30fps、既有场景和 Canvas/Three.js 策略）。
+
+**处理方式**：模板新增精确同版 `@remotion/paths`；新增 frozen `src/visual/index.ts` 的 path draw/Morph/path-follow 纯函数，以及 `components/VisualLayer.tsx` 的 Remotion frame-driven 封装；测试位于 `video/tests/unit/visual.test.ts`，并通过模板 `pnpm test:visual` 运行；补充边界测试、骨架档位测试，并在 [08 实现规范](../../references/08-remotion-implementation.md) 与 [09 QA 规范](../../references/09-render-qa.md) 建立 Renderer Contract 和 Morph 中间态抽样要求。
+
+**后续防范**：SVG Renderer 不得拥有自己的时间轴；路径主体、身份锚点和色板由场景注入；不得使用 `timer`、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态；`pathLength` 与像素版 `strokeDasharray` 不得在同一元素混用；模板新增 `@remotion/*` 必须与 Remotion 全家桶精确同版并同步 lockfile。
+
+**同类问题影响**：适用于人物描边、机制线路、UI 状态 Morph 和沿路径移动的标签/角色；需要体积、内外结构或大量粒子时仍应分别评估 Three.js 或 Canvas 2D，不把 SVG 原语泛化成所有画面类型的默认答案。
