@@ -58,9 +58,21 @@ from langs import suffix as lang_suffix  # noqa: E402
 
 MANUAL = str(paths.SKILL / "references" / "VOICE-CLONING.md")  # skill 根哨兵派生
 
-# transition/loop 的 CLI 格式契约 SSOT 在 qa_frames：子命令转发与本层 argparse
-# 共用同源解析，杜绝「pipeline 放行 / qa_frames 拒绝」的规则分叉。
+# transition/loop 的 CLI 格式契约 SSOT 在 qa_frames：本层 argparse 复用同源解析做
+# 前置校验，杜绝「pipeline 放行 / qa_frames 拒绝」的规则分叉。
 from qa_frames import parse_loop, parse_transition  # noqa: E402
+
+
+def _validate_only(parse):
+    """把「解析并转换」的 type 函数降为「只校验、保持原串」：子命令只做 argv 转发，
+    qa_frames 会按同一契约重新解析；返回元组会让 cmd 拼装与 run() 的 join 崩溃。"""
+
+    def check(value: str) -> str:
+        parse(value)  # 非法值抛 ArgumentTypeError，由 argparse 报错
+        return value
+
+    check.__name__ = parse.__name__
+    return check
 
 
 # ---------------- 语言维度（执行层） ----------------
@@ -1236,14 +1248,14 @@ def main() -> None:
         "--transition",
         action="append",
         metavar="SID:N",
-        type=parse_transition,
+        type=_validate_only(parse_transition),
         help="按句起点抽取过渡边界帧，N 为必填正整数；可重复传",
     )
     p.add_argument(
         "--loop",
         action="append",
         metavar="FROM..TO",
-        type=parse_loop,
+        type=_validate_only(parse_loop),
         help="按同幕连续句区间抽取首尾帧；可重复传",
     )
     p.add_argument("--check", action="store_true", help="自动体检")
