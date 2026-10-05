@@ -75,10 +75,10 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 | ③ 逐字稿 | `narration.md` ★单一事实源 | [03](references/03-narration.md) | `build` | build_narration.py 通过（narration.json 是派生物） |
 | ④ 双重校验 | 真实性回溯 + 易懂性 | [04](references/04-verification.md) | `check` | RISKY=0 且 REWRITE=0 |
 | ⑤ 成文优化 | 四稿按结构→衔接→句子→词句四层 pass 改成人写模样；只改表达不改事实 | [05](references/05-prose-refinement.md) | —（authored；改后 `build` + `check`，无分镜时 `check_script.py --pre-tts`） | 成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0 |
-| ⑥ 分镜表 | 镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效；beat 覆盖性 | [06](references/06-storyboard.md) | `check --check-scenes` | beat 覆盖率无缺句（--check-scenes 分镜↔代码互比） |
+| ⑥ 分镜表 | 前四列 + 可选 Visual Lock；Morph 见 06 | [06](references/06-storyboard.md) | `check --check-scenes` | beat 覆盖率无缺句（--check-scenes 分镜↔代码互比） |
 | ⑦ TTS 配音 | edge 草声直配（制作期）；IndexTTS-2.5 克隆本人点名后升档（manifest 契约一致） | [07](references/07-tts-voice.md) | `tts` / `captions` | edge 草声直行；indextts 另过本人显式授权（--final-voice）+ refs 指纹门 + 试听定档 + ETA 排期 |
 | ⑧ Remotion 场景 | 代码动画实现；动效走 `src/motion/` 运动模型 | [08](references/08-remotion-implementation.md) | 工程内直调 `tsc --noEmit` 与 motion 测试 | tsc --noEmit 零错误 + 七条渲染红线 + 运动层铁律 |
-| ⑨ 草渲 + 抽帧 QA | 半分辨率快速迭代 | [09](references/09-render-qa.md) | `render` + `qa` | qa --check 自动体检零 FAIL（含尾幕渐黑必查） |
+| ⑨ 草渲 + 抽帧 QA | 草渲与 Transition/Loop 抽帧 | [09](references/09-render-qa.md) | `render` + `qa` | qa --check 自动体检零 FAIL（含尾幕渐黑必查） |
 | ⑩ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 + 按系列/标题 vN 归档 | [10](references/10-final-render.md) | `render --final` + `captions` + `deliver` | 实测时长落在 pipeline.toml 的预算窗内 |
 
 ## 关键不变量

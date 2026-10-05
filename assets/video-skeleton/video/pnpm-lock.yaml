@@ -20,6 +20,9 @@ importers:
       '@remotion/media':
         specifier: 4.0.529
         version: 4.0.529(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@remotion/paths':
+        specifier: 4.0.529
+        version: 4.0.529(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.0.0
         version: 19.2.8

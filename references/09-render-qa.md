@@ -2,7 +2,9 @@
 
 > 草渲的意义：半分辨率快速出片，把「时长/分镜/画面」问题在终渲前暴露。渲染缺陷的**七条红线**沉淀在 [08-remotion-implementation.md](./08-remotion-implementation.md)（SSOT，此处不复制）；本文件覆盖抽帧与自动体检的操作契约。
 
-**目录**：命令闭环 · 双语集 · 自动体检判据与处置 · 人工目检清单 · ★ 分幕音画复检（TTS 长跑期间做） · 修复回路
+**目录**：命令闭环 · Transition/Loop 抽帧契约 · 双语集 · 自动体检判据与处置 · 人工目检清单 · ★ 分幕音画复检（TTS 长跑期间做） · 修复回路
+
+使用 SVG Visual Renderer 的镜头，除 beat 头部和句中抽帧外，必须执行 `--transition` 抽样，覆盖路径描画起点、Morph 中间态、终点和文字交接；不得以首尾两张静帧替代中间态验收。`Visual Lock` 中的身份锚点、禁止项和连续性要求仍由人工对照。
 
 ## 命令闭环
 
@@ -39,6 +41,15 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
     --project $P $P/out/draft.mp4 --beat-heads 4 --check --scale 0.5
 
+# 过渡抽帧：SID:N 中 N 必填且为正整数；可重复传，可与 --scene 过滤
+uv run --no-project $T/scripts/pipeline.py --project $P qa \
+    --video out/draft.mp4 --transition p0-02:12 --check
+
+# loop 抽帧：完整句 id 区间；可重复传，也可与 --transition、--scene 组合
+uv run --no-project $T/scripts/pipeline.py --project $P qa \
+    --video out/draft.mp4 --scene P0 --transition p0-02:12 \
+    --loop p0-01..p0-02 --check
+
 # A/B 对拍（重制/重构回归）：同帧号抽两版逐帧差异，按差异像素占比降序；
 # advisory（有匹配帧时退出码 0；零匹配硬失败）——「意图变更之外的一切差异」都须归因后才能接受
 uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
@@ -48,6 +59,26 @@ uv run --no-project --with pillow --with numpy $T/scripts/qa_frames.py \
 #    改动触及跨幕常驻元素（顶栏徽标/角标/水印）时，抽帧必须额外覆盖一个「非改动幕」作对照
 #    （该轮改的是 P0/P6 的层板，坏的却是 P1–P6 的常驻条——只看改动幕会全过）
 ```
+
+## Transition/Loop 抽帧契约
+
+这两种模式是**直接句锚定的纯抽帧**，不读取 `Visual Lock` 元数据，也不新增机器标签。两个参数都可重复传，彼此可组合；均允许附加 `--scene Pn` 过滤。它们与 `--beat-heads`、`--last-n`、裸句 id、`--compare` 互斥；`--transition` 的 `N` 没有默认值，必须是正整数。未知句 id、跨幕或反序 loop、过渡窗口超出视频时间轴，以及过滤后没有样本，均硬失败，不静默跳过。
+
+### `--transition SID:N`
+
+- 从 `SID` 句首开始取 `N` 帧过渡窗口，并采样「起点前 1 帧 / 起点 / 中点 / 末帧 / 末帧后 1 帧」；边界重合时去重。
+- 起点与窗口来自实际 `manifest`/timeline 和场景代码的真实动作窗口；原实现若是「动作句 + duration 帧」，先抄代码窗口再运行 QA，不改时间 SSOT，不用音乐 BPM。
+- 例：`--transition p0-02:12` 表示句首起 12 帧，不是 12 秒，也不表示 12 个节拍。
+
+### `--loop FROM..TO`
+
+- `FROM..TO` 必须是同一幕、按时间顺序的完整句 id 区间；采样该区间首两帧与末两帧。末个编码帧是 `T-1`，不是 `T`。
+- 人工验收要求周期函数满足 `f(T)=f(0)`，并检查首尾速度的方向、幅度和节奏连续；移动元素不应为了像素相等而强行 `last == first`，可用位置回到同态、速度连续和接缝无跳变作为判据。
+- Loop 只针对分镜明确标记的主体，不针对包含章节条、字幕或其他 overlay 的整帧做 pixel 一致性检查；字幕/关键文字仍须保持可读。
+
+### 自动门与人工门边界
+
+纯抽帧本身**不判主体位置、形态或速度**。在这两种模式加 `--check` 时，只检查黑帧和字幕安全区侵入；冻帧与字幕缺失检查关闭，Morph Continuity、过渡接缝、loop 周期和速度连续性必须人工验收。人工至少查看 transition 的前/起/中/末/后五类样本，以及 loop 的首两帧和末两帧；必要时补看字幕、章节条和关键文字隔离。
 
 ## 双语集（en 版）
 

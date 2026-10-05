@@ -636,3 +636,33 @@
 **处理方式**：`scripts/tts.py`（`--final-voice` flag + 主闸置于工程文件读取之前 + edge 侧 clone_only 族收编 + SPEC_07 指针 + docstring 示例）；`scripts/pipeline.py`（tts 子命令透传、`cmd_all` 入口 fail-fast 预检与结构性永不透传、报错引擎中性防误导已重配集）；`scripts/tts_resume.py`（`require_final_voice` 入口预检先于任何冷重启；循环内自愈语义保持 RSI-022 原样——曾试加「退出码 2 不冷重启」短路，评审判定误泛化后回撤：`tts.py` 对能力失配（如缺 `--use-qwen-emo`、服务端过旧）亦用 `parser.error` 退出 2，其既定修复恰是冷重启）；`scripts/config.py`（SCHEMA `tts.engine` 说明对齐）；`scripts/tts_sample.py`（docstring 纪律注 + 运行时「下一步」hint 补 flag）；`references/07-tts-voice.md`（人为触发原则段、升档闸前置、延续条款——同任务延续免新要求，跨会话以 `--plan` 对账划界：零待合成属恢复操作照带 flag、有待合成即整集重配＝新显式要求、双语独立要求、示例命令全量更新、顺手修正「第 4 步试听」→「闸 3」编号笔误）；`references/10-final-render.md`（TTS 恢复按引擎分派：edge 集免服务直跑，indextts 集零待合成回收 vs 有待合成＝新显式要求）；`SKILL.md` + `references/stages.toml`（gate 双址同步 + 关键不变量 + 预算瘦身守 8000）；`assets/video-skeleton/pipeline.toml.tmpl` 注释 / `assets/workspace/voices/README.md`（scaffold 克隆食谱）/ PIPELINE.md / VOICE-CLONING.md / README.md 同 commit 对齐；tests（test_engine_guard +5，含顺序不变量钉 `test_wrong_signature_marker_cannot_preempt_gate`——错签名不得抢跑授权闸 / test_tts_resume +2 与 FWD 补 flag / test_stages +4 含 all 存在性 guard / test_voice_tiers 锚点）；evals.json id1/id3 负例断言。两轮评审：Round1 三镜头（代码/文档/测试）7 缺陷（存量可执行文案漏 flag ×5、evals id1 示例误导、all 测试空转绿灯）+ Round2 核验与 Staff 终审 4 缺陷（rc==2 误泛化、07/10 跨会话语义矛盾、cmd_all 报错处方误导、台账失实）全数修复。四门核验表见 PR 描述。[PR #33](https://github.com/ThreeFish-AI/to-video/pull/33)（ff986c2）；合并后待办：trigger-evals 新旧对拍（同名遮蔽须合并后做，与 RSI-034 待办合并）。
 
 **后续防范**：① 授权型开关必须是命令行级瞬时声明（在场即证、缺席即拒），不得落持久配置或进程环境；与变化检测闸互补不互替。② 残余面登记：`tts_sample.py`/`tts_bench.py` 未加机器闸（试听/基准是升档闸的组成部分，文档纪律约束在「用户已显式要求终声」上下文内使用）；HTTP 直连 `tts_server.py` 可绕客户端闸（本闸是 agent 纪律闸不是能力锁）；拷至 ~/tools/index-tts venv 的旧版 tts.py 副本无闸（更新滞后残余）。③ 成本差数量级悬殊的操作（本例：秒级 vs 小时级）默认档之外的一切启用路径，须逐一排查「首次」「同状态重跑」两类变化检测天然盲区。
+
+## RSI-041 分镜缺少逐镜视觉锁定与过渡边界验收契约
+
+**表因**：文章复盘暴露出，复杂 Morph 或连续状态变形若只写「画面有质感」，缺少可执行的参考、保持、禁止约束；现有抽帧 QA 主要覆盖 beat 头部、句中点和尾句，对形变边界的中间态、文字交接和循环速度连续性没有统一排期入口。
+
+**根因**：Stage ⑥ 的四列表格把视觉意图与动效意图分开，但没有逐镜 Visual Lock 字段；Stage ⑨ 的采样器按叙事句选点，未提供针对过渡窗口与 loop 端点的专用采样模式。
+
+**定性**：非阻断改进（质量门增强；不改变默认 30fps、句边界时序或现有抽帧判据）。
+
+**处理方式**：Stage ⑥ 增加可选 Visual Lock 列与 Morph Continuity 约束；Stage ⑨ 新增 `--transition` 与 `--loop` 抽帧入口，复用 manifest/timing 单一事实源，显式拒绝非法或越界请求；Motion Blur 仅作为 opt-in 规范，不新增默认渲染后端；补充纯函数、参数互斥和转发测试。
+
+**评审加固**：独立 Staff Review 发现并修复五类边界缺陷：Visual Lock 第五列不得改变既有渐黑豁免；`--offset` 不得把被裁掉的边界帧替换成伪样本；过渡范围必须包含 timing 的 `tailSec`；显式 `0` 参数仍须参与互斥校验；过渡/loop 的渐黑豁免须按帧位判定（`_fade_exempt_last`：末位样本落入末句窗口才豁免）——check_frames 的豁免只认列表末位，请求集不覆盖片尾时末位只是普通边界帧，按位次豁免会把真实黑帧吞成绿色体检（注释「末位即时间轴最后样本」只在请求集覆盖尾幕时成立）。另将新模式 seek 精度提高到微秒文本精度，9 个合成视频样本均与请求帧号对齐。
+
+**后续防范**：复杂变形必须先声明参考/保持/禁止三类可观测约束；过渡验收不得以单张 beat 中点代替边界与中间态采样；loop 只验标记主体的端点位置与速度连续性，不把字幕、章节条或全帧像素相等误当作 loop 判据；不得用音乐 BPM 替代旁白句边界时间轴。
+
+**同类问题影响**：适用于 UI 状态演进、机制流程动画、片头循环装置和高风险字幕交接；普通科普镜头无需强制 Morph、Motion Blur 或 loop 检查。
+
+## RSI-042 SVG Visual Renderer 缺少统一的 frame-to-geometry 原语
+
+**表因**：分集可以手写 SVG `strokeDasharray`、路径 Morph 和沿路径定位，但每集各自实现会重复处理窗口边界、路径长度、切线旋转与非法输入；文章中的“逐笔绘制”和连续 Morph 尚未沉淀为可复用机制。
+
+**根因**：既有 `src/motion/` 只提供数值运动 hook，不承载 SVG 几何；模板没有明确的 Renderer Contract，也没有与 Remotion 版本一致的 SVG path 工具依赖。
+
+**定性**：非阻断改进（新增 opt-in SVG 能力；不改变唯一 Remotion 时间轴、默认 30fps、既有场景和 Canvas/Three.js 策略）。
+
+**处理方式**：模板新增精确同版 `@remotion/paths`；新增 frozen `src/visual/index.ts` 的 path draw/Morph/path-follow 纯函数，以及 `components/VisualLayer.tsx` 的 Remotion frame-driven 封装；测试位于 `video/tests/unit/visual.test.ts`，并通过模板 `pnpm test:visual` 运行；补充边界测试、骨架档位测试，并在 [08 实现规范](../../references/08-remotion-implementation.md) 与 [09 QA 规范](../../references/09-render-qa.md) 建立 Renderer Contract 和 Morph 中间态抽样要求。
+
+**后续防范**：SVG Renderer 不得拥有自己的时间轴；路径主体、身份锚点和色板由场景注入；不得使用 `timer`、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态；`pathLength` 与像素版 `strokeDasharray` 不得在同一元素混用；模板新增 `@remotion/*` 必须与 Remotion 全家桶精确同版并同步 lockfile。
+
+**同类问题影响**：适用于人物描边、机制线路、UI 状态 Morph 和沿路径移动的标签/角色；需要体积、内外结构或大量粒子时仍应分别评估 Three.js 或 Canvas 2D，不把 SVG 原语泛化成所有画面类型的默认答案。

@@ -171,6 +171,44 @@ def test_tail_row_has_fade_false_without_marker(tmp_path):
     assert not tail_row_has_fade(tmp_path / "absent.md")  # 缺文件不炸、不豁免
 
 
+def test_tail_row_fade_ignores_visual_lock_column(tmp_path):
+    board = tmp_path / "storyboard.md"
+    board.write_text(
+        "| 6-G 原文卡 | p6-14..15 | … | 卡片停留 | 禁止：提前渐黑 |\n",
+        encoding="utf-8",
+    )
+    assert not tail_row_has_fade(board)
+
+
+def test_beat_heads_explicit_zero_fails_at_argparse_gate(monkeypatch, capsys):
+    """显式 --beat-heads 0 必须参数闸硬失败：gate 用 is not None 后，0 若放行
+    会被下游 truthy 消费吞成静默零抽帧 + 绿色体检（merge-base 上是硬错误）。"""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["qa_frames.py", "--beat-heads", "0", "draft.mp4"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        qa_frames.main()
+
+    assert exc.value.code == 2
+    assert "≥ 1" in capsys.readouterr().err
+
+
+def test_fade_exempt_last_requires_final_sentence_window():
+    """渐黑豁免按帧位判定：check_frames 只豁免列表末位，自定义请求不覆盖片尾时
+    末位是普通边界帧，按位次豁免会把真实黑帧吞成绿色体检（RSI-041 评审加固）。"""
+    tl = {"p0-01": (0.0, 1.0), "p1-01": (5.0, 1.0)}
+    early = [("p0-02-t6-after", 1.2)]
+    assert not qa_frames._fade_exempt_last(True, early, tl, 30, 0.0)
+    tail = [("p1-01-t30-after", 6.0)]
+    assert qa_frames._fade_exempt_last(True, tail, tl, 30, 0.0)
+    loop_tail = [("p1-01-l-tail1", 179 / 30)]
+    assert qa_frames._fade_exempt_last(True, loop_tail, tl, 30, 0.0)
+    assert not qa_frames._fade_exempt_last(False, tail, tl, 30, 0.0)
+
+
 def declared_action(script: str, flag: str) -> str | None:
     """→ 源码里 `add_argument("<flag>", …)` 声明的 action 字面量（无则 None）。
 

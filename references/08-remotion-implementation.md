@@ -3,11 +3,11 @@
 > Stage ⑧：把 `script/storyboard.md` 的分镜规格实现为 `video/src/scenes/` 场景组件，直至草渲抽帧 QA 通过、终渲出片。
 > 本文件是实现代理的提示词规格，与 references/01–06（内容层）衔接。
 
-**目录**：输入 · 骨架复制适配策略 · 事实条 · 本集之外可复用的视觉母题 · 运动层（frozen，含铁律） · 3D 点缀 · 场景组件模式 · 双语 i18n · 顶部章节进度条 · theme.ts 色彩契约设计规则 · 渲染缺陷自检清单（七条红线） · 命令闭环 · 系列身份视觉：五层 Harness 栈
+**目录**：输入 · 骨架复制适配策略 · 事实条 · 本集之外可复用的视觉母题 · 运动层（frozen，含铁律） · Motion Blur opt-in · 3D 点缀 · 场景组件模式 · 双语 i18n · 顶部章节进度条 · theme.ts 色彩契约设计规则 · 渲染缺陷自检清单（七条红线） · 命令闭环 · Transition/Loop QA · 系列身份视觉：五层 Harness 栈
 
 ## 输入
 
-- `script/storyboard.md`（分镜规格：镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效）
+- `script/storyboard.md`（分镜规格：镜号 ↔ 句 id 区间 ↔ 画面 ↔ 动效；可选 `Visual Lock` 仅供人工验收）
 - `video/public/audio/manifest.json`（TTS 产物：每句实测时长）
 - 任一既有集工程的 `video/` 骨架（脚手架来源；与发布顺序无关）
 
@@ -33,6 +33,9 @@ uv run --no-project $T/scripts/verify_skeleton.py --strict  # 有未登记漂移
 - 幕间转场**不用** `@remotion/transitions` 的 TransitionSeries：其总时长 = Σ序列 − Σ转场，会把视觉层整体左移而旁白（manifest 帧号绝对定位的独立层）不动 → 逐幕递增失同步。用 `SceneFade`（只花幕间既有静默，from/总时长零改动；不变式 `2×sceneCrossFadeSec ≤ sentenceGap+sceneGap` 由 check_script.py 强制）。
 - 字体可复现性：三集用 macOS 系统字体栈（PingFang SC/Songti SC/SF Mono），未内嵌 CJK 字体——**渲染仅限 macOS 主机**。重启触发器：渲染迁 Linux/CI；**Remotion 5.0（跨 major，走 RSI，见 [PIPELINE.md §九](./PIPELINE.md)）**——fitText 的 validateFontIsLoaded 默认翻 true（届时须内嵌子集字体，注意 pre-commit --maxkb=1024）、numberOfSharedAudioTags 默认将改 0（涉 NarrationAudio，4.0.527 changelog 预告）、license 条款微调（升级窗口复读 LICENSE）。
 - 路径描画优先 `@remotion/paths`（evolvePath/getPointAtLength）——它是「pathLength 与 px 版 strokeDasharray 互斥」红线的官方正解；线型样式（虚线/点线）另置静态叠加路径，勿与描画动画挤在同一元素。
+- **SVG Visual Renderer（P0）**：共享层位于 [`video/src/visual/index.ts`](../assets/video-skeleton/video/src/visual/index.ts)，React 封装位于 [`VisualLayer.tsx`](../assets/video-skeleton/video/src/components/VisualLayer.tsx)。`pathDrawAtFrame`、`pathMorphAtFrame`、`pathFollowAtFrame` 都只接收当前 `frame` 与显式 `VisualTiming`，时间轴仍由 Remotion 持有；人物路径、身份锚点和色板由各集场景注入，不进入 frozen 机制层。模板可直接运行 `pnpm test:visual`。
+- **Renderer Contract**：`frame → derive geometry → SVG props → DOM/字幕 overlay`。路径原语必须在窗口前后钳制到终态；Morph 必须保留明确的起始态、终止态和可抽检的中间态；沿路径跟随使用路径切线计算旋转，不得用 timer、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态。
+- **实现边界**：`@remotion/paths` 与全部 `remotion` / `@remotion/*` 精确同版；`pathLength` 与像素版 `strokeDasharray` 不在同一元素混用；SVG 是主体与文字附近的首选 Renderer，Canvas 2D / Three.js 仍为后续单集 opt-in，不改变唯一 Remotion Runtime。
 - **Lottie 资产渲染边界（`@remotion/lottie`）**：chrome-headless-shell + ANGLE 后端下，
   fetch + `delayRender` + `@remotion/lottie` 的组合（上游 LottieEmphasis 形态）对**特定 JSON**
   初始化挂死——`Waiting for Lottie animation to load` 的 delayRender 永不解除，表象为
@@ -114,6 +117,10 @@ md5 门执法——判据与「不读 theme token」约束见 tests/test_skeleto
 - **评审面**：`./node_modules/.bin/remotion still src/motion/gallery.tsx MotionGallery
   ../out/motion-gallery.png --frame=30`——全部模型 × 变体一屏秒级出图；纯函数单测
   `node --test scripts/motion.test.ts`（Node ≥ 23.6 原生跑 TS）。
+
+### Motion Blur opt-in（默认关闭）
+
+Motion Blur 只在场景明确 opt-in 时启用；本规格不新增依赖、不实现新的 blur backend，也不改变默认 `30fps` 或时间 SSOT。它只能作用于被明确隔离的运动视觉层，字幕、字幕背景、角标、关键文字和其他需清晰阅读的层必须保持 crisp，并在合成后置于 blur 层之上。禁止对整帧做 temporal mix（`tmix`）或把字幕一起模糊；Motion Blur 也不能替代 Morph Continuity 的建模与人工 QA。
 
 ## 3D 点缀（`@remotion/three`，2026-09 EP1 落地）
 
@@ -282,6 +289,8 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
   元素」——「镜里挂了 archify」不构成回答（空镜 = 镜有画但句无锚，四镜共 ~68s 近乎空屏曾全绿漏网）。
 
 ## 命令闭环（工具一律 `./node_modules/.bin/` 直调，防 workspace 污染）
+
+`qa --transition SID:N` 与 `qa --loop FROM..TO` 是按句锚定的纯抽帧模式：时间窗口从实际 manifest/timeline 与场景代码窗口推导，不改时间 SSOT，不按音乐 BPM 猜帧。若实现使用「动作句 + duration 帧」，QA 必须抄录代码实际窗口；不得另造 duration 或覆盖 `timing.json`。这两种模式不自动判断主体位置或速度，`--check` 仅保留黑帧与安全区检查，冻帧和字幕缺失检查关闭，最终必须人工验收；完整参数与互斥关系见 [09-render-qa.md](./09-render-qa.md)。
 
 ```bash
 cd video

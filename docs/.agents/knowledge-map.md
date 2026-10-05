@@ -33,12 +33,14 @@
 | [modeling-experience-distillation.md](../research/modeling-experience-distillation.md) | 建模经验有界沉淀的理论、证据（IEEE 引用）与方案比选 |
 | [prose-refinement.md](../research/prose-refinement.md) | ⑤ 成文优化的语料取证、理论依据（IEEE 引用）与方案比选（落位 / 插入位置 / 执法力度） |
 | [dependency-policy-and-asset-tools.md](../research/dependency-policy-and-asset-tools.md) | 依赖版本策略比选、HyperFrames 复核（vs Remotion）与 text-to-cad 评估（RSI-016 循证） |
+| [motion-engineering.md](../research/motion-engineering.md) | Visual Lock、Morph Continuity、过渡/循环抽帧验收与 Motion Blur opt-in 的方案依据 |
 
 ## 资产
 
 | 路径 | 内容 |
 |---|---|
 | [assets/video-skeleton/](../../assets/video-skeleton/) | 分集 Remotion 骨架模板（档位与漂移判据见其 `skeleton.toml`） |
+| [SVG Visual Renderer](../../assets/video-skeleton/video/src/visual/index.ts) | frame-driven SVG path draw/Morph/path-follow；React 封装见 [VisualLayer.tsx](../../assets/video-skeleton/video/src/components/VisualLayer.tsx)，行为测试通过 `pnpm test:visual` 运行 |
 | [assets/workspace/](../../assets/workspace/) | 内容工作区模板（`scaffold.py --init-workspace` 实例化） |
 | [assets/quickstart/](../../assets/quickstart/) | README Quickstart 的两幕示例场景 |
 | [docs/assets/](../assets/) | 架构图（archify HTML / PNG）、mermaid 源、Demo 动图 |
