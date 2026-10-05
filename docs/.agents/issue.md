@@ -666,3 +666,17 @@
 **后续防范**：SVG Renderer 不得拥有自己的时间轴；路径主体、身份锚点和色板由场景注入；不得使用 `timer`、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态；`pathLength` 与像素版 `strokeDasharray` 不得在同一元素混用；模板新增 `@remotion/*` 必须与 Remotion 全家桶精确同版并同步 lockfile。
 
 **同类问题影响**：适用于人物描边、机制线路、UI 状态 Morph 和沿路径移动的标签/角色；需要体积、内外结构或大量粒子时仍应分别评估 Three.js 或 Canvas 2D，不把 SVG 原语泛化成所有画面类型的默认答案。
+
+## RSI-044 tts.duration_factor 无配置通道：可执行参数只活在散文里，「唯一来源」承诺对它失效
+
+**表因**（2026-10-05，negentropy ep1 复盘发现）：以 `--duration-factor 1.24` 录制全片配音的集（story 风格预设默认 df=1.0，实测校准 1.24 才落入时长硬窗），其 `pipeline.toml` 文件头声明「本集可执行参数的**唯一来源**」、README ③ 又写「配音参数全部取自 pipeline.toml，勿在命令行另写」——而 df 无处可写，只能以「⚠️ 例外注记」形式活在两处散文注释里。复现断裂实锤（`--plan` 对账实证，零合成）：以 df=1.24 摘要写桩集内缓存后，照编排器口径重跑（无 df token → tts.py 回落 story 预设 1.0）整块缓存全失配（「待合成 1 块 / 3 句 · 已整块缓存 0 块」），直调 `tts.py --duration-factor 1.24` 则整块命中（「待合成 0 块 / 0 句」）——141 句全集即整集重配（小时级），且回落 1.0 后实测时长门 FAIL。配置层同证：`duration_factor = 1.24` 写进 toml 后 `config.resolve` 原样透传（未声明、无来源登记），`config.validate` 仅 WARN「未知键 tts.duration_factor（无人读取）」。
+
+**根因**：df 是合法的 per-episode 可执行参数（进 `digest_indextts` 摘要、影响全部合成结果），但 SCHEMA 从未给它键位——「SCHEMA 是默认值唯一来源、toml 只写偏离」的制度对它结构性缺位；ep1 的 R11 收口（pipeline.toml+README 注「重录须直调 tts.py」）是止血不是修复：散文例外条款正是 ISSUE-161 立论要消灭的形态（可执行参数不落散文文档），且每支校准集都要各自维护一份例外注记，承诺破缺持续累积。
+
+**定性**：非阻断改进（有 `--plan` 对账与注记兜底不静默；但承诺破缺 + 复现路径依赖人读注释，属「契约不清致代理误用」族）。
+
+**处理方式**：候选比选四案——(a) SCHEMA 增键 + 编排器透传（采纳）；(b) 仅文档化「须直调」（否决：维持承诺破缺，ep1 现状即此案的反证）；(c) 命名风格预设承载慢速档（否决：df 是**连续的** per-episode 时长硬窗校准值，非可跨集复用的离散听感档位；离散化会为每个新校准值改机制仓 + 孪生档污染 STYLE_PRESETS 生产/候选分界——预设承载跨集风格、SCHEMA 键承载本集校准，两机制正交）；(d) 环境变量（否决：`ENV_OVERRIDES` 既定立场「仅机器属性」，env 覆盖使同一 toml 两机产出不同摘要，与缓存确定性直接冲突）。落地：`scripts/config.py` SCHEMA 新增 `tts.duration_factor`（float，缺省 None＝沿用 style 预设；取值域 [0.5, 2.0]＝tts.py `--duration-factor` 既有 parser.error 同域，TOML 字面量 nan/inf 一并拦；edge 集误写给点名 WARN——同 tts.lang「静默忽略会让人误以为改了参数」口径；逐语言覆写表 `_TTS_EN_KEYS` 不收——语速按整集硬窗校准、双语继承，en 误写给白名单 FAIL）；`scripts/pipeline.py` tts 子命令 indextts 分支透传（落点与 `--style` 同构，紧跟其后）。**键缺省 ⇒ 命令行字节不变 ⇒ 摘要不变 ⇒ 存量集零重合成**：测试逐 token 钉死历史命令形态（非只查「不含 token」——防插入位置漂移漏网）；digest 层补「df 参与摘要」显式钉（同句两档 df 摘要必不同，即本条失配机理的机制依据）。文档同步：PIPELINE.md 字段表（自称字段 SSOT）、07 重配流程第 3 步（首配即定值纪律）、VOICE-CLONING §4.3（配置通道指针）、`pipeline.toml.tmpl` 注释预置。回归 12 条（test_config 5 / test_stages 4 / test_digest 1 + 撤修复实证：仅藏实现文件跑新测试 6 条即红）；`tts_resume.py` 走 `--` 原样转发天然覆盖，零改动；RSI-040 `--final-voice` 硬闸与 `all` 结构性永不透传不变量逐一核对未触碰。PR 链接待回填。
+
+**后续防范**：新增可执行参数（进缓存摘要/影响合成结果的旋钮）必须同批审视其配置承载位——SCHEMA 无键位即「唯一来源」承诺的存量破缺，不得以散文例外注记收口；散文注记只许作**临时**止血（登记触发条件），机制通道落地后回改。离散预设（STYLE_PRESETS）与连续校准（SCHEMA 数值键）是正交的两类承载位：跨集复用的听感档位走预设（试听定档），本集数值对齐走 toml 键（实测校准），勿互相借道。
+
+**同类问题影响**：存量以非预设 df 录制的集（目前已知 negentropy ep1 df=1.24）在通道合并后可回改编排器路径——把例外注记换成 toml 一行 `duration_factor = 1.24`，重跑 `--plan` 应显示零待合成（值相同摘要不变）；换 worktree/换机重建不再依赖 README 注记的人读纪律。以预设 df 录制的集零波及。

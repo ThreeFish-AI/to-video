@@ -105,6 +105,15 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         "STYLE_PRESETS 中的档名；engine=edge 时可选＝终声档锚点——预算估算口径"
         "按档分档、实测口径草声期跳过（check_script），以 edge 为终声的集不得挂锚点",
     ),
+    (
+        "tts.duration_factor",
+        float,
+        None,
+        False,
+        "本集语速校准（0.5–2.0，>1 变慢；仅 engine=indextts 生效）：缺省 None＝沿用 "
+        "tts.style 预设的 df；显式值进缓存摘要（改值＝整集重配，tts.py "
+        "--duration-factor 同域）。逐语言覆写表不收——语速按整集时长硬窗校准，双语继承",
+    ),
     ("tts.lang", str, "ZH", False, "机制常数"),
     (
         "tts.en",
@@ -380,6 +389,16 @@ def validate(
             "入口不生效——语言版本用 narration.langs 声明、--lang 选择"
         )
 
+    # tts.duration_factor 只在 indextts 合成生效：edge 集 toml 里写了会被编排器
+    # 静默忽略——静默忽略会让人误以为改了语速（同 tts.lang 显式覆写的提示口径）。
+    if (
+        _get(raw, "tts.duration_factor") is not None
+        and _get(cfg, "tts.engine") != "indextts"
+    ):
+        warns.append(
+            "tts.duration_factor 仅 engine=indextts 合成时生效（edge 草声不读该键，忽略）"
+        )
+
     # 未知键 → WARN（保留前向兼容）+ 最近邻建议
     for sec, body in raw.items():
         if sec not in _SECTIONS:
@@ -434,6 +453,13 @@ def validate(
     sha = _get(cfg, "tts.ref_sha1") if in_scope("tts.x") else None
     if isinstance(sha, str) and len(sha) != 12:
         fails.append(f"tts.ref_sha1 应为 12 位（同 tts.py 口径），实际 {len(sha)} 位")
+    dfc = _get(cfg, "tts.duration_factor") if in_scope("tts.x") else None
+    if isinstance(dfc, (int, float)) and not (
+        0.5 <= dfc <= 2.0
+    ):  # NaN 比较恒 False，一并被拦（TOML 字面量 nan/inf 均可达此处）
+        fails.append(
+            f"tts.duration_factor 应落在 [0.5, 2.0]（tts.py --duration-factor 同域），实际 {dfc}"
+        )
     for rk in (
         "archify.min_anchor_ratio",
         "archify.min_chapter_ratio",

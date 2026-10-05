@@ -1228,3 +1228,144 @@ def test_doctor_clean_browsers_flag_cleans_orphans(monkeypatch, tmp_path, capsys
     assert pipeline.cmd_doctor(tmp_path, {}, None, clean_browsers=True) == 0
     out_clean = capsys.readouterr().out
     assert "已清理自动化浏览器孤儿进程 1 个" in out_clean
+
+
+# ---------------- tts.duration_factor 透传（RSI-044 语速校准通道） ----------------
+
+
+def _indextts_cfg(duration_factor=None) -> dict:
+    tts = {
+        "engine": "indextts",
+        "ref": "voices/me.wav",
+        "ref_sha1": "abc123def456",
+        "style": "story",
+    }
+    if duration_factor is not None:
+        tts["duration_factor"] = duration_factor
+    return {"tts": tts}
+
+
+def _indextts_workspace(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+    (tmp_path / ".to-video-root").touch()
+    (tmp_path / "voices").mkdir()
+    (tmp_path / "voices" / "me.wav").write_bytes(b"ref")
+
+
+def test_tts_command_bytes_unchanged_without_duration_factor(monkeypatch, tmp_path):
+    """RSI-044 最大回归风险钉：键缺省 ⇒ 命令行字节不变 ⇒ 摘要不变 ⇒ 存量集零重合成。
+    命令列表与通道落地前的历史形态逐 token 相等（不是只查「不含 df token」——
+    那样插入位置漂移会漏网）。"""
+    import pipeline
+
+    _indextts_workspace(monkeypatch, tmp_path)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            _indextts_cfg(),
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+        )
+        == 0
+    )
+    expected = [
+        "uv",
+        "run",
+        "--no-project",
+        "--with",
+        "mutagen",
+        str(tmp_path / "scripts" / "tts.py"),
+        "--engine",
+        "indextts",
+        "--narration-lang",
+        "zh",
+        "--ref",
+        str(tmp_path / "voices" / "me.wav"),
+        "--expect-ref-sha1",
+        "abc123def456",
+        "--style",
+        "story",
+    ]
+    assert commands[0] == expected
+
+
+def test_tts_forwards_duration_factor_from_config(monkeypatch, tmp_path):
+    """显式校准值透传 tts.py（值随 cfg），落点与 --style 同分支。"""
+    import pipeline
+
+    _indextts_workspace(monkeypatch, tmp_path)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    assert (
+        pipeline.cmd_tts(
+            tmp_path,
+            _indextts_cfg(1.24),
+            plan=False,
+            force=False,
+            steady=None,
+            style=None,
+            skip_pre_tts=True,
+        )
+        == 0
+    )
+    cmd = commands[0]
+    assert cmd[cmd.index("--duration-factor") + 1] == "1.24"
+    # 紧跟 --style 的值之后（与直调 tts.py 的参数形态同构）
+    assert cmd[cmd.index("--style") + 2] == "--duration-factor"
+
+
+def test_tts_en_inherits_base_duration_factor(monkeypatch, tmp_path):
+    """df 是整集校准（不进逐语言覆写表白名单）：en 经 for_lang 视图继承基础层。"""
+    import pipeline
+
+    _indextts_workspace(monkeypatch, tmp_path)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    cfg = _indextts_cfg(1.24)
+    cfg["narration"] = {"langs": ["zh", "en"]}
+    for i, lang in enumerate(("en", "zh")):
+        assert (
+            pipeline.cmd_tts(
+                tmp_path,
+                cfg,
+                plan=False,
+                force=False,
+                steady=None,
+                style=None,
+                skip_pre_tts=True,
+                langs=[lang],
+            )
+            == 0
+        )
+        cmd = commands[i]
+        assert cmd[cmd.index("--duration-factor") + 1] == "1.24"
+        assert cmd[cmd.index("--narration-lang") + 1] == lang
+
+
+def test_all_chain_never_carries_duration_factor(monkeypatch, tmp_path):
+    """all 一键链结构性与 df 无涉：edge 集走 edge 分支（df 不被读取）；
+    indextts 集在入口预检即拦（既有测试），链内永不出现 df token。"""
+    import pipeline
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        pipeline, "run", lambda cmd, cwd=None: commands.append(cmd) or 0
+    )
+    monkeypatch.setattr(pipeline, "cmd_build", lambda *a, **k: 0)
+    monkeypatch.setattr(pipeline, "cmd_check", lambda *a, **k: 0)
+    monkeypatch.setattr(pipeline, "cmd_render", lambda *a, **k: 0)
+    cfg = {"tts": {"engine": "edge", "duration_factor": 1.24}}
+    assert pipeline.cmd_all(tmp_path, cfg) == 0
+    assert any("tts.py" in " ".join(c) for c in commands), "存在性 guard 防空转"
+    assert not any("--duration-factor" in c for c in commands)
