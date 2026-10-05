@@ -675,7 +675,7 @@
 
 **定性**：阻断性缺陷（产物级渲染错误实锤 12 处；修复本身即收益，走快速通道但 G1–G4 一道不省）。
 
-**处理方式**：`scripts/check_script.py` 新增 `check_quoted_theme_literals`（FAIL，缺省执法、无需 flag——同 RSI-007 的 ISSUE-168 立场，忘带 flag = 检查面静默缩小；语言无关、只在主稿执法、--pre-tts 不跑因场景未写）。判据窄到零误报：逐行扫描 `video/src/scenes/*.tsx` 与 `video/src/components/*.tsx`，引号内**整串**恰为 `theme.<标识符>`（单/双引号同罪）才命中——长文案含子串、注释行（`//`、`{/* */}`、JSDoc `*`）、`theme.ts` 文件名字面引用（agent-skills 集图表配色 code 标注先例）全部豁免；同行同串去重；命中行或其上一行注 `quoted-theme-ok: <理由>` 降 WARN 留痕（同 caption-dup-ok 立场：逃逸口必须存在且必须被记录）。校准：对内容工作区 15 集 248 个创作层 TSX 实跑，现存裸形态命中仅 agent-skills P5.tsx:434 一处（合法上屏，词表豁免），门命中 0、误报 0；历史快照 b542a2ae5 的 12 处全部命中且行号精确。references/08 规则 7 补判据说明；回归测试 +8（事故行锚定/常量引用不报/注释跳过/文件名豁免/整串判据/豁免注记/双引号与 components 扫面/同行去重），撤修复（注释 main 中的调用）即 4 条命中型用例全失败，恢复后 8/8 过。[PR 待回填]。
+**处理方式**：`scripts/check_script.py` 新增 `check_quoted_theme_literals`（FAIL，缺省执法、无需 flag——同 RSI-007 的 ISSUE-168 立场，忘带 flag = 检查面静默缩小；语言无关、只在主稿执法、--pre-tts 不跑因场景未写）。判据窄到零误报：逐行扫描 `video/src/scenes/*.tsx` 与 `video/src/components/*.tsx`，引号内**整串**恰为 `theme.<标识符>`（单/双引号同罪）才命中——长文案含子串、注释行（`//`、`{/* */}`、JSDoc `*`）、`theme.ts` 文件名字面引用（agent-skills 集图表配色 code 标注先例）全部豁免；同行同串去重；命中行或其上一行注 `quoted-theme-ok: <理由>` 降 WARN 留痕（同 caption-dup-ok 立场：逃逸口必须存在且必须被记录）。校准：对内容工作区 15 集 248 个创作层 TSX 实跑，现存裸形态命中仅 agent-skills P5.tsx:434 一处（合法上屏，词表豁免），门命中 0、误报 0；历史快照 b542a2ae5 的 12 处全部命中且行号精确。references/08 规则 7 补判据说明；回归测试 +8（事故行锚定/常量引用不报/注释跳过/文件名豁免/整串判据/豁免注记/双引号与 components 扫面/同行去重），撤修复（注释 main 中的调用）即 4 条命中型用例全失败，恢复后 8/8 过。[PR #35](https://github.com/ThreeFish-AI/to-video/pull/35)（113e838 + 台账补登 f7b42dd）。
 
 **后续防范**：批量替换裸色值改读 theme 常量时，替换产物必须验证「新形态真实在场」——grep 引号包裹的旧产物（如 `'theme\.`）计数须为零、裸引用新形态计数须为正，双向核对（negentropy MEMORY 已有同款条目：quoted-theme-replace-needs-positive-verify）。凡「把值换成常量引用」类机械改动，验收判据是引用关系的成立而不是字面量的存在。
 
