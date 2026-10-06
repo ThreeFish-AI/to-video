@@ -389,14 +389,26 @@ def validate(
             "入口不生效——语言版本用 narration.langs 声明、--lang 选择"
         )
 
-    # tts.duration_factor 只在 indextts 合成生效：edge 集 toml 里写了会被编排器
-    # 静默忽略——静默忽略会让人误以为改了语速（同 tts.lang 显式覆写的提示口径）。
-    if (
-        _get(raw, "tts.duration_factor") is not None
-        and _get(cfg, "tts.engine") != "indextts"
-    ):
+    def _df_has_indextts_consumer() -> bool:
+        """→ df 是否存在 indextts 生效消费者（基础层或任一声明语言的生效视图）。"""
+        if _get(cfg, "tts.engine") == "indextts":
+            return True
+        return any(
+            one != langs.PRIMARY
+            and one in langs.LANGS
+            and _get(for_lang(cfg, one), "tts.engine") == "indextts"
+            for one in _get(cfg, "narration.langs") or []
+        )
+
+    # tts.duration_factor 只被生效引擎为 indextts 的语言读取：全部语言都不读才
+    # 点名（同 tts.lang「静默忽略会让人误以为改了参数」口径）。混合形态——基础层
+    # edge、某语言覆写 indextts——df 对该语言真实透传，报「忽略」会诱导删键、
+    # 静默改变该语言语速；基础层 indextts 而逐语言覆写成草声的反方向由下方
+    # 逐语言重放循环点名。
+    if _get(raw, "tts.duration_factor") is not None and not _df_has_indextts_consumer():
         warns.append(
-            "tts.duration_factor 仅 engine=indextts 合成时生效（edge 草声不读该键，忽略）"
+            "tts.duration_factor 仅生效引擎为 indextts 的语言合成时读取"
+            "（本集无任何 indextts 语言，该键被忽略）"
         )
 
     # 未知键 → WARN（保留前向兼容）+ 最近邻建议
@@ -579,6 +591,18 @@ def validate(
                 continue
             view = for_lang(cfg, one)
             if _get(view, "tts.engine") != "indextts":
+                # 逐语言静默忽略同口径点名：基础层 indextts + df 已声明、该语言却
+                # 覆写成草声——df 对其结构性不读，不点名会让人误以为双语都校准。
+                # 条件含基础层判定：基础层即 edge 的误配由上方基础层 WARN 负责。
+                if (
+                    _get(cfg, "tts.engine") == "indextts"
+                    and _get(cfg, "tts.duration_factor") is not None
+                ):
+                    warns.append(
+                        f"tts.duration_factor 对 {one} 不生效（[tts.{one}] engine="
+                        f"{_get(view, 'tts.engine')}，草声不读该键——基础层校准仅 "
+                        f"{langs.PRIMARY} 生效）"
+                    )
                 continue
             for dotted in ("tts.ref", "tts.ref_sha1", "tts.style"):
                 if _get(view, dotted) is None:
