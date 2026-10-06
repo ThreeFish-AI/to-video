@@ -155,7 +155,7 @@ def _busy_ports() -> list[str]:
     return hits
 
 
-def check_env(*, strict: bool) -> bool:
+def check_env() -> bool:
     """前置门：交换区余量 / 可用内存 / 其它实例。返回是否合格。"""
     swap_used, swap_free = _sysctl_swap()
     vm = _vm_stat()
@@ -373,7 +373,7 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    env_ok = check_env(strict=not args.check_only)
+    env_ok = check_env()
     if args.check_only:
         sys.exit(0 if env_ok else 1)
     if not env_ok and not args.force:
