@@ -667,16 +667,44 @@
 
 **同类问题影响**：适用于人物描边、机制线路、UI 状态 Morph 和沿路径移动的标签/角色；需要体积、内外结构或大量粒子时仍应分别评估 Three.js 或 Canvas 2D，不把 SVG 原语泛化成所有画面类型的默认答案。
 
-## RSI-043 tts_bench.check_env 恒 return True，「环境硬门」名存实亡
+## RSI-043 场景 TSX 中带引号的 `'theme.xxx'` 死字符串零门覆盖
+
+**表因**：negentropy 工作区 ep1 提交 b542a2ae5 做「裸 hex → theme 常量收敛」的批量替换把引号一并保留，`background: '#0B0E13'` 变成 `background: 'theme.bgDeep'`（字符串字面量而非常量引用），共 12 处（P1:2/P2:7/P3:2/P5:1）。`'theme.bgDeep'` 是非法 CSS 色值，浏览器渲染时静默丢弃、背景透明——深底场景与画布底色差异小，肉眼与像素级 QA 双双看不出，直到评审用 `git show` 逐行对账才揭穿。
+
+**根因**：三层门对该形态集体失明——① `tsc` 放行：React `CSSProperties` 的样式值类型是 `string`，任何字符串都合法（`--strict` 下最小实验复验 rc=0）；② 既有「裸 hex 字面量 vs theme.ts 登记集」探针（`qa_frames.py --check-theme`、`check_series.py` 规则 4）的输入面分别是 theme.ts 与 accents 登记表，不扫 scenes/*.tsx；③ `check_script.py` 的 TSX 扫描家族（复述口播/未翻译文字/beat 互比/动效互比）查的都是文本内容与调用结构，无一条查样式值的取值形态——「引号内整串恰为 theme 成员路径」这一缺陷签名在全仓 scripts 中零覆盖（grep 实证）。
+
+**定性**：阻断性缺陷（产物级渲染错误实锤 12 处；修复本身即收益，走快速通道但 G1–G4 一道不省）。
+
+**处理方式**：`scripts/check_script.py` 新增 `check_quoted_theme_literals`（FAIL，缺省执法、无需 flag——同 RSI-007 的 ISSUE-168 立场，忘带 flag = 检查面静默缩小；语言无关、只在主稿执法、--pre-tts 不跑因场景未写）。判据窄到零误报：逐行扫描 `video/src/scenes/*.tsx` 与 `video/src/components/*.tsx`，引号内**整串**恰为 `theme.<标识符>`（单/双引号同罪）才命中——长文案含子串、注释行（`//`、`{/* */}`、JSDoc `*`）、`theme.ts` 文件名字面引用（agent-skills 集图表配色 code 标注先例）全部豁免；同行同串去重；命中行或其上一行注 `quoted-theme-ok: <理由>` 降 WARN 留痕（同 caption-dup-ok 立场：逃逸口必须存在且必须被记录）。校准：对内容工作区 15 集 248 个创作层 TSX 实跑，现存裸形态命中仅 agent-skills P5.tsx:434 一处（合法上屏，词表豁免），门命中 0、误报 0；历史快照 b542a2ae5 的 12 处全部命中且行号精确。references/08 规则 7 补判据说明；回归测试 +8（事故行锚定/常量引用不报/注释跳过/文件名豁免/整串判据/豁免注记/双引号与 components 扫面/同行去重），撤修复（注释 main 中的调用）即 4 条命中型用例全失败，恢复后 8/8 过。[PR #35](https://github.com/ThreeFish-AI/to-video/pull/35)（113e838 + 台账补登 f7b42dd）。
+
+**后续防范**：批量替换裸色值改读 theme 常量时，替换产物必须验证「新形态真实在场」——grep 引号包裹的旧产物（如 `'theme\.`）计数须为零、裸引用新形态计数须为正，双向核对（negentropy MEMORY 已有同款条目：quoted-theme-replace-needs-positive-verify）。凡「把值换成常量引用」类机械改动，验收判据是引用关系的成立而不是字面量的存在。
+
+**同类问题影响**：适用于一切「字符串形态恰与标识符形态同构」的替换类事故（如把 `'useMemo'` 误当 `useMemo` 调用、把 token 名写进文案却没接线）；对 en 版 TSX 同样适用（本门语言无关）。残余面：反引号模板串（含插值时整串判据失效）不抓，family 上无事故先例；`video/src` 其余目录（design/、Root.tsx 等）不在扫面，与 check_script 既有 TSX 扫描家族口径一致。**已知误报方向**（独立核验实测确认，当前 15 集零实害）：豁免判据只认**整行注释**，行尾注释中出现的引号死串形态（如 `background: theme.bgDeep, // 曾写 'theme.bgDeep'` 旧写法留痕）、屏显文本/模板字符串语境中整串恰为 token 名或内嵌单/双引号形态的字面量会被门命中——处置 = 命中行注 `quoted-theme-ok: <理由>` 留痕降 WARN（后续版本可把行尾注释并入豁免判据，须先积累真实场景再动判据）。
+
+## RSI-044 tts.duration_factor 无配置通道：可执行参数只活在散文里，「唯一来源」承诺对它失效
+
+**表因**（2026-10-05，negentropy ep1 复盘发现）：以 `--duration-factor 1.24` 录制全片配音的集（story 风格预设默认 df=1.0，实测校准 1.24 才落入时长硬窗），其 `pipeline.toml` 文件头声明「本集可执行参数的**唯一来源**」、README ③ 又写「配音参数全部取自 pipeline.toml，勿在命令行另写」——而 df 无处可写，只能以「⚠️ 例外注记」形式活在两处散文注释里。复现断裂实锤（`--plan` 对账实证，零合成）：以 df=1.24 摘要写桩集内缓存后，照编排器口径重跑（无 df token → tts.py 回落 story 预设 1.0）整块缓存全失配（「待合成 1 块 / 3 句 · 已整块缓存 0 块」），直调 `tts.py --duration-factor 1.24` 则整块命中（「待合成 0 块 / 0 句」）——141 句全集即整集重配（小时级），且回落 1.0 后实测时长门 FAIL。配置层同证：`duration_factor = 1.24` 写进 toml 后 `config.resolve` 原样透传（未声明、无来源登记），`config.validate` 仅 WARN「未知键 tts.duration_factor（无人读取）」。
+
+**根因**：df 是合法的 per-episode 可执行参数（进 `digest_indextts` 摘要、影响全部合成结果），但 SCHEMA 从未给它键位——「SCHEMA 是默认值唯一来源、toml 只写偏离」的制度对它结构性缺位；ep1 的 R11 收口（pipeline.toml+README 注「重录须直调 tts.py」）是止血不是修复：散文例外条款正是 ISSUE-161 立论要消灭的形态（可执行参数不落散文文档），且每支校准集都要各自维护一份例外注记，承诺破缺持续累积。
+
+**定性**：非阻断改进（有 `--plan` 对账与注记兜底不静默；但承诺破缺 + 复现路径依赖人读注释，属「契约不清致代理误用」族）。
+
+**处理方式**：候选比选四案——(a) SCHEMA 增键 + 编排器透传（采纳）；(b) 仅文档化「须直调」（否决：维持承诺破缺，ep1 现状即此案的反证）；(c) 命名风格预设承载慢速档（否决：df 是**连续的** per-episode 时长硬窗校准值，非可跨集复用的离散听感档位；离散化会为每个新校准值改机制仓 + 孪生档污染 STYLE_PRESETS 生产/候选分界——预设承载跨集风格、SCHEMA 键承载本集校准，两机制正交）；(d) 环境变量（否决：`ENV_OVERRIDES` 既定立场「仅机器属性」，env 覆盖使同一 toml 两机产出不同摘要，与缓存确定性直接冲突）。落地：`scripts/config.py` SCHEMA 新增 `tts.duration_factor`（float，缺省 None＝沿用 style 预设；取值域 [0.5, 2.0]＝tts.py `--duration-factor` 既有 parser.error 同域，TOML 字面量 nan/inf 一并拦；edge 集误写给点名 WARN——同 tts.lang「静默忽略会让人误以为改了参数」口径；逐语言覆写表 `_TTS_EN_KEYS` 不收——语速按整集硬窗校准、双语继承，en 误写给白名单 FAIL）；`scripts/pipeline.py` tts 子命令 indextts 分支透传（落点与 `--style` 同构，紧跟其后）。**键缺省 ⇒ 命令行字节不变 ⇒ 摘要不变 ⇒ 存量集零重合成**：测试逐 token 钉死历史命令形态（非只查「不含 token」——防插入位置漂移漏网）；digest 层补「df 参与摘要」显式钉（同句两档 df 摘要必不同，即本条失配机理的机制依据）。文档同步：PIPELINE.md 字段表（自称字段 SSOT）、07 重配流程第 3 步（首配即定值纪律）、VOICE-CLONING §4.3（配置通道指针）、`pipeline.toml.tmpl` 注释预置。回归 10 条（test_config 5 / test_stages 4 / test_digest 1 + 撤修复实证：仅藏实现文件跑新测试 6 条即红；首条 commit 信息曾误记「12 条」，2026-10-06 核验收口订正——分项 5+4+1 与 grep 实数 10 为准）；`tts_resume.py` 走 `--` 原样转发天然覆盖，零改动；RSI-040 `--final-voice` 硬闸与 `all` 结构性永不透传不变量逐一核对未触碰。**核验收口**（2026-10-06，独立核验 PASS-with-notes 两条注记）：① validate 类型分支显式排除 bool（`isinstance(val, bool) and typ is not bool` 先于「整数不苛求」分支）——TOML `duration_factor = true` 此前被收编成 1.0 静默放行（直调 tts.py 到 argparse 才以英文报错、编排器路径静默变 1.0），现在配置门即给可读 FAIL；该分支为全 SCHEMA 数值键共用，bool 键自身（`archify.forbid_inset`）经 `typ is not bool` 豁免零波及，真集 grep 实证 bool 只写在 bool 键；+2 测（bool FAIL 可读 / bool 键自身不受误伤）。② 台账与 commit 元数字归一（本段）。[PR #36](https://github.com/ThreeFish-AI/to-video/pull/36)（主实现 2f47e8b + 核验收口 1cbbf38）。**评审加固**（2026-10-06，review-once 独立盲审 3×P3）：① 校准值测试的断言与注释对齐 cfg 实际行为——int 字面量 cfg 保留 int（validate 收编只改局部变量不写回），断言改类型敏感、注释改「下游经 tts.py argparse 归一」；② 逐语言覆写引擎非 indextts 时 df 点名 WARN（同「静默忽略必须点名」口径；条件含基础层判定防与基础层 WARN 双报）；③ 基础层 df WARN 收敛为「无任何 indextts 生效语言才点名」（混合形态——基础 edge + en 覆写 indextts——df 对 en 真实透传（cmd_tts 命令字节实证），原「忽略」文案失真、诱导删键即 en 静默变速整集重配）。②③ 共 +2 测（共 14：test_config 9 / test_stages 4 / test_digest 1）。
+
+**后续防范**：新增可执行参数（进缓存摘要/影响合成结果的旋钮）必须同批审视其配置承载位——SCHEMA 无键位即「唯一来源」承诺的存量破缺，不得以散文例外注记收口；散文注记只许作**临时**止血（登记触发条件），机制通道落地后回改。离散预设（STYLE_PRESETS）与连续校准（SCHEMA 数值键）是正交的两类承载位：跨集复用的听感档位走预设（试听定档），本集数值对齐走 toml 键（实测校准），勿互相借道。
+
+**同类问题影响**：存量以非预设 df 录制的集（目前已知 negentropy ep1 df=1.24）在通道合并后可回改编排器路径——把例外注记换成 toml 一行 `duration_factor = 1.24`，重跑 `--plan` 应显示零待合成（值相同摘要不变）；换 worktree/换机重建不再依赖 README 注记的人读纪律。以预设 df 录制的集零波及。
+
+## RSI-045 tts_bench.check_env 恒 return True，「环境硬门」名存实亡
 
 **表因**：`tts_bench.py --check-only` 恒退出 0；main 中「环境门未通过」分支不可达。
-**根因**：`check_env` 的 `strict` 形参从未读取，`ok` 初始化 `True` 后交换区/内存/端口占用各分支只 print 不置 False——docstring 声称「唯一硬门是已有其它 IndexTTS 实例」但 others 同样不拦（preening 测绘静态证实；2026-10-06 S8 仅剥除死形参，门语义未动）。
+**根因**：`check_env` 的 `strict` 形参从未读取，`ok` 初始化 `True` 后交换区/内存/端口占用各分支只 print 不置 False——docstring 声称「唯一硬门是已有其它 IndexTTS 实例」但 others 同样不拦（preening 测绘静态证实；2026-10-06 S8 仅剥除死形参，门语义未动。原登记号 RSI-043 与先合入的 PR #35 撞号，让位重编号）。
 **定性**：疑似阻断性缺陷（A/B 基准前置门失效，环境不合格时耗时结论不可信），待 G1 实机复现定性。
 **处理方式**：待复现后修复——恢复 ok 置 False 判定或显式改 docstring 为「纯报告」二选一，须与「静态指标一律只作告警」的历史注释对质后定案。
 **后续防范**：门函数的布尔返回值必须有置 False 的可达路径，否则改为报告函数命名（report_env）。
 **同类问题影响**：凡「返回 bool 的门」皆可静态扫描「恒真路径」复核（preening 审计方法可复用）。
 
-## RSI-044 test_config 机制常数期望值未感知 story 分档默认（集成模式预存红）
+## RSI-046 test_config 机制常数期望值未感知 story 分档默认（集成模式预存红）
 
 **表因**：集成模式（TO_VIDEO_TEST_WORKSPACE）下 `test_real_episodes_resolve_identically_to_literal_values` 对 `agent-skills-video` 断言 `narration.chars_per_min == 280` 实得 254（2026-10-06 基线即红，单仓模式不受影响）。
 **根因**：RSI-021 引入 `chars_per_min` 默认层按 `tts.style` 分档（story=254），该测试的 `LITERALS_BEFORE_DELETION` 仍按单一默认 280 书写；新入语料集为 story 档即触发。

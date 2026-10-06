@@ -264,6 +264,7 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 4. 若覆写底座语义色（如 ok 与主色合一），在 theme.ts 注释 + planning.md + README 三处记录。
 5. 时间/顺序等非色彩维度用**位置、线型、亮度**编码，不用色相。
 6. **色相距离人工核验**（撞值门之外的一半）：机器只拦精确同值，近色相不拦（判据松紧权衡见 check_series 规则 4 docstring——蓝青相邻共存是接受态，假报一多门被关掉）；故新选色须对着 INFO 行人工核色相距离（角度取统一色相模型，如 Python colorsys `rgb_to_hls` 的 h×360），肉眼同族即换槽（实测教训 2026-09：初选玫红 #E85D75=350° 与既有玫红 #FF6F91=346° 仅差 4°，撞值门全绿但视觉同色相，最终换品红 #D65DB1=318° 空槽）。**未登记进 series.json `accents` 的色不进 INFO 清单**（如材料色数组 token `sourceFlows`）——这类色在 theme.ts 注释里自证「与全系列已用色的色相距离」，必要时临时并进 accents 比对后再移出。
+7. **theme token 只许常量引用、不许带引号**：批量替换裸 hex 时保留引号会产出 `'theme.bgDeep'` 死字符串——非法 CSS 色值被浏览器静默丢弃（背景透明），tsc 放行（style 值类型是 string）、色值探针也失明（ep1 实锤 12 处、8 轮门全绿）。`check_script.py` 的 theme 死字符串门（RSI-043，FAIL，缺省执法）逐行扫描 scenes/ 与 components/ 的 TSX：引号内整串恰为 `theme.<标识符>` 即拦（注释行与 `theme.ts` 文件名上屏豁免，`quoted-theme-ok: <理由>` 可降级留痕）。
 
 ## 渲染缺陷自检清单（历史教训公共化）
 

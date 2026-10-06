@@ -163,6 +163,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 | `tts.ref`                       | engine=indextts | —                       | **工作区根相对**（如 `voices/me-bright.wav`）；内容入缓存摘要（改拼法不失效缓存）                                             |
 | `tts.ref_sha1`                  | engine=indextts | —                       | 12 位，同 tts.py 口径                                                                                                          |
 | `tts.style`                     | engine=indextts | —                       | STYLE_PRESETS 档名（新集缺省 story＝段落演绎）；engine=edge 时兼作**终声档锚点**（估算口径分档＋实测门跳过，以 edge 为终声不得挂） |
+| `tts.duration_factor`           |                 | 缺省＝预设 df           | 本集语速校准（RSI-044）：`0.5–2.0`（>1 变慢），编排入口自动透传 `tts.py --duration-factor`；**显式值进缓存摘要**（改值＝整集重配），缺省沿用 `tts.style` 预设——预设 df 是跨集风格档，本键承载 per-episode 时长硬窗校准，勿混用；仅 engine=indextts 生效，双语继承（逐语言覆写表不收） |
 | `tts.lang`                      |                 | `ZH`                    | 机制常数（zh 主稿恒 ZH；en 版由语言自动解析为 EN，见 §五「双语渲染」）                                                          |
 | `narration.langs`               |                 | `["zh"]`                | **策略声明**：本集产出的语言版本（必含 zh）；en 需显式声明并配 `narration.en.md`                                               |
 | `narration.words_per_min`       |                 | `150`                  | 机制常数：英文含停顿等效语速（首集实测后校准）                                                                                  |
