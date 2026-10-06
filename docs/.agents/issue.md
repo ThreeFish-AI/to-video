@@ -666,3 +666,17 @@
 **后续防范**：SVG Renderer 不得拥有自己的时间轴；路径主体、身份锚点和色板由场景注入；不得使用 `timer`、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态；`pathLength` 与像素版 `strokeDasharray` 不得在同一元素混用；模板新增 `@remotion/*` 必须与 Remotion 全家桶精确同版并同步 lockfile。
 
 **同类问题影响**：适用于人物描边、机制线路、UI 状态 Morph 和沿路径移动的标签/角色；需要体积、内外结构或大量粒子时仍应分别评估 Three.js 或 Canvas 2D，不把 SVG 原语泛化成所有画面类型的默认答案。
+
+## RSI-043 场景 TSX 中带引号的 `'theme.xxx'` 死字符串零门覆盖
+
+**表因**：negentropy 工作区 ep1 提交 b542a2ae5 做「裸 hex → theme 常量收敛」的批量替换把引号一并保留，`background: '#0B0E13'` 变成 `background: 'theme.bgDeep'`（字符串字面量而非常量引用），共 12 处（P1:2/P2:7/P3:2/P5:1）。`'theme.bgDeep'` 是非法 CSS 色值，浏览器渲染时静默丢弃、背景透明——深底场景与画布底色差异小，肉眼与像素级 QA 双双看不出，直到评审用 `git show` 逐行对账才揭穿。
+
+**根因**：三层门对该形态集体失明——① `tsc` 放行：React `CSSProperties` 的样式值类型是 `string`，任何字符串都合法（`--strict` 下最小实验复验 rc=0）；② 既有「裸 hex 字面量 vs theme.ts 登记集」探针（`qa_frames.py --check-theme`、`check_series.py` 规则 4）的输入面分别是 theme.ts 与 accents 登记表，不扫 scenes/*.tsx；③ `check_script.py` 的 TSX 扫描家族（复述口播/未翻译文字/beat 互比/动效互比）查的都是文本内容与调用结构，无一条查样式值的取值形态——「引号内整串恰为 theme 成员路径」这一缺陷签名在全仓 scripts 中零覆盖（grep 实证）。
+
+**定性**：阻断性缺陷（产物级渲染错误实锤 12 处；修复本身即收益，走快速通道但 G1–G4 一道不省）。
+
+**处理方式**：`scripts/check_script.py` 新增 `check_quoted_theme_literals`（FAIL，缺省执法、无需 flag——同 RSI-007 的 ISSUE-168 立场，忘带 flag = 检查面静默缩小；语言无关、只在主稿执法、--pre-tts 不跑因场景未写）。判据窄到零误报：逐行扫描 `video/src/scenes/*.tsx` 与 `video/src/components/*.tsx`，引号内**整串**恰为 `theme.<标识符>`（单/双引号同罪）才命中——长文案含子串、注释行（`//`、`{/* */}`、JSDoc `*`）、`theme.ts` 文件名字面引用（agent-skills 集图表配色 code 标注先例）全部豁免；同行同串去重；命中行或其上一行注 `quoted-theme-ok: <理由>` 降 WARN 留痕（同 caption-dup-ok 立场：逃逸口必须存在且必须被记录）。校准：对内容工作区 15 集 248 个创作层 TSX 实跑，现存裸形态命中仅 agent-skills P5.tsx:434 一处（合法上屏，词表豁免），门命中 0、误报 0；历史快照 b542a2ae5 的 12 处全部命中且行号精确。references/08 规则 7 补判据说明；回归测试 +8（事故行锚定/常量引用不报/注释跳过/文件名豁免/整串判据/豁免注记/双引号与 components 扫面/同行去重），撤修复（注释 main 中的调用）即 4 条命中型用例全失败，恢复后 8/8 过。[PR #35](https://github.com/ThreeFish-AI/to-video/pull/35)（113e838 + 台账补登 f7b42dd）。
+
+**后续防范**：批量替换裸色值改读 theme 常量时，替换产物必须验证「新形态真实在场」——grep 引号包裹的旧产物（如 `'theme\.`）计数须为零、裸引用新形态计数须为正，双向核对（negentropy MEMORY 已有同款条目：quoted-theme-replace-needs-positive-verify）。凡「把值换成常量引用」类机械改动，验收判据是引用关系的成立而不是字面量的存在。
+
+**同类问题影响**：适用于一切「字符串形态恰与标识符形态同构」的替换类事故（如把 `'useMemo'` 误当 `useMemo` 调用、把 token 名写进文案却没接线）；对 en 版 TSX 同样适用（本门语言无关）。残余面：反引号模板串（含插值时整串判据失效）不抓，family 上无事故先例；`video/src` 其余目录（design/、Root.tsx 等）不在扫面，与 check_script 既有 TSX 扫描家族口径一致。**已知误报方向**（独立核验实测确认，当前 15 集零实害）：豁免判据只认**整行注释**，行尾注释中出现的引号死串形态（如 `background: theme.bgDeep, // 曾写 'theme.bgDeep'` 旧写法留痕）、屏显文本/模板字符串语境中整串恰为 token 名或内嵌单/双引号形态的字面量会被门命中——处置 = 命中行注 `quoted-theme-ok: <理由>` 留痕降 WARN（后续版本可把行尾注释并入豁免判据，须先积累真实场景再动判据）。
