@@ -105,6 +105,15 @@ SCHEMA: tuple[tuple[str, type, object, object, str], ...] = (
         "STYLE_PRESETS 中的档名；engine=edge 时可选＝终声档锚点——预算估算口径"
         "按档分档、实测口径草声期跳过（check_script），以 edge 为终声的集不得挂锚点",
     ),
+    (
+        "tts.duration_factor",
+        float,
+        None,
+        False,
+        "本集语速校准（0.5–2.0，>1 变慢；仅 engine=indextts 生效）：缺省 None＝沿用 "
+        "tts.style 预设的 df；显式值进缓存摘要（改值＝整集重配，tts.py "
+        "--duration-factor 同域）。逐语言覆写表不收——语速按整集时长硬窗校准，双语继承",
+    ),
     ("tts.lang", str, "ZH", False, "机制常数"),
     (
         "tts.en",
@@ -380,6 +389,28 @@ def validate(
             "入口不生效——语言版本用 narration.langs 声明、--lang 选择"
         )
 
+    def _df_has_indextts_consumer() -> bool:
+        """→ df 是否存在 indextts 生效消费者（基础层或任一声明语言的生效视图）。"""
+        if _get(cfg, "tts.engine") == "indextts":
+            return True
+        return any(
+            one != langs.PRIMARY
+            and one in langs.LANGS
+            and _get(for_lang(cfg, one), "tts.engine") == "indextts"
+            for one in _get(cfg, "narration.langs") or []
+        )
+
+    # tts.duration_factor 只被生效引擎为 indextts 的语言读取：全部语言都不读才
+    # 点名（同 tts.lang「静默忽略会让人误以为改了参数」口径）。混合形态——基础层
+    # edge、某语言覆写 indextts——df 对该语言真实透传，报「忽略」会诱导删键、
+    # 静默改变该语言语速；基础层 indextts 而逐语言覆写成草声的反方向由下方
+    # 逐语言重放循环点名。
+    if _get(raw, "tts.duration_factor") is not None and not _df_has_indextts_consumer():
+        warns.append(
+            "tts.duration_factor 仅生效引擎为 indextts 的语言合成时读取"
+            "（本集无任何 indextts 语言，该键被忽略）"
+        )
+
     # 未知键 → WARN（保留前向兼容）+ 最近邻建议
     for sec, body in raw.items():
         if sec not in _SECTIONS:
@@ -414,6 +445,15 @@ def validate(
             if need:
                 fails.append(f"缺少必填键 {dotted}")
             continue
+        if isinstance(val, bool) and typ is not bool:
+            # bool 是 int 的子类：不显式排除会被下方「整数不苛求」分支收编
+            # （数值键写 true → 1.0 静默放行，直调 tts.py 到 argparse 才以英文
+            # 报错、编排器路径更是静默变 1.0）——TOML 的 true/false 不是数值，
+            # 配置门就给可读 FAIL（RSI-044 核验注记 1）。
+            fails.append(
+                f"{dotted} 类型应为 {typ.__name__}，实际 bool（TOML 的 true/false 不是数值）"
+            )
+            continue
         if typ is float and isinstance(val, int):
             val = float(val)  # TOML 的 1 与 1.0 是不同类型，此处不苛求
         if not isinstance(val, typ):
@@ -434,6 +474,13 @@ def validate(
     sha = _get(cfg, "tts.ref_sha1") if in_scope("tts.x") else None
     if isinstance(sha, str) and len(sha) != 12:
         fails.append(f"tts.ref_sha1 应为 12 位（同 tts.py 口径），实际 {len(sha)} 位")
+    dfc = _get(cfg, "tts.duration_factor") if in_scope("tts.x") else None
+    if isinstance(dfc, (int, float)) and not (
+        0.5 <= dfc <= 2.0
+    ):  # NaN 比较恒 False，一并被拦（TOML 字面量 nan/inf 均可达此处）
+        fails.append(
+            f"tts.duration_factor 应落在 [0.5, 2.0]（tts.py --duration-factor 同域），实际 {dfc}"
+        )
     for rk in (
         "archify.min_anchor_ratio",
         "archify.min_chapter_ratio",
@@ -544,6 +591,18 @@ def validate(
                 continue
             view = for_lang(cfg, one)
             if _get(view, "tts.engine") != "indextts":
+                # 逐语言静默忽略同口径点名：基础层 indextts + df 已声明、该语言却
+                # 覆写成草声——df 对其结构性不读，不点名会让人误以为双语都校准。
+                # 条件含基础层判定：基础层即 edge 的误配由上方基础层 WARN 负责。
+                if (
+                    _get(cfg, "tts.engine") == "indextts"
+                    and _get(cfg, "tts.duration_factor") is not None
+                ):
+                    warns.append(
+                        f"tts.duration_factor 对 {one} 不生效（[tts.{one}] engine="
+                        f"{_get(view, 'tts.engine')}，草声不读该键——基础层校准仅 "
+                        f"{langs.PRIMARY} 生效）"
+                    )
                 continue
             for dotted in ("tts.ref", "tts.ref_sha1", "tts.style"):
                 if _get(view, dotted) is None:

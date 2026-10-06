@@ -44,7 +44,7 @@
 流程（narration / storyboard / scenes **零改动**——音频换轨，时间轴随新 manifest 自动重排）：
 1. **升档前画面须已冻结**：草渲 + 抽帧 QA 全绿、逐字稿字节冻结——升档后只做音频换轨重渲，不再改稿改画面（改稿会触发块缓存重录、变相第二次长跑；确需改稿见下方延续条款）；
 2. 过上方升档闸 1–6（指纹、试听、排期）；
-3. 该集 pipeline.toml `[tts]`：`engine = "indextts"` + 填 `ref` / `ref_sha1`（模板已注释预置，style 锚点已在）；首次上 story 且无 `script/narration.cues.toml` → 按 [references/03](./03-narration.md) 台本规约补写并 `build`；
+3. 该集 pipeline.toml `[tts]`：`engine = "indextts"` + 填 `ref` / `ref_sha1`（模板已注释预置，style 锚点已在）；首次上 story 且无 `script/narration.cues.toml` → 按 [references/03](./03-narration.md) 台本规约补写并 `build`；**全片时长实测偏离硬窗时加 `duration_factor` 语速校准**（0.5–2.0，编排入口自动透传；显式值进缓存摘要——改值＝整集重配，故首配即定值，勿事后单独调整；字段表见 [PIPELINE.md](PIPELINE.md)）；
 4. `pipeline.py tts --plan` 对账 → `pipeline.py tts --allow-voice-switch --final-voice`（幂等长跑，断点续跑/自愈见「调用形态」）；
 5. 下游全量重推：`render` → `qa`（全场景 + 尾幕——时间轴位移必须重抽帧）→ `check`（实测门自动恢复执法）→（archify 集加 `check_archify.py`）→ `captions` → `render --final`；`deliver` 仍显式执行；
 6. 完成后按 [VOICE-CLONING §5.4](VOICE-CLONING.md) 跑句尾英文词 take 验收；不合格句在台本写 `[take] <句id> = 1`（再不合格递增）重跑（命令照带 `--final-voice`），`--plan` 应只显示该块待合成。

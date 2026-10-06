@@ -135,6 +135,20 @@ def test_digest_edge_golden():
     assert digest_edge("v", "r", "t") == hashlib.sha1(b"v|r|t").hexdigest()
 
 
+def test_duration_factor_participates_in_digest():
+    """df 进摘要（RSI-044 的回归前提）：同句两档 df 摘要必不同——这正是「df 走
+    编排器默认会整集缓存失配」的机制依据（缺省回落预设 df=1.0 vs 校准 1.24）。"""
+    vec = (1 / 3, 0, 0, 0, 0, 0, 2 / 3, 0)
+    base = ("aa", "story", vec, 0.28)
+    slow = digest_indextts(*base, 1.24, "ZH", "indextts", "测试句。", 1, None, None, {})
+    fast = digest_indextts(*base, 1.0, "ZH", "indextts", "测试句。", 1, None, None, {})
+    assert slow != fast
+    # repr 口径防漂移（与 alpha 同款：1.20 ≠ 1.2 表示）
+    assert slow == digest_indextts(
+        *base, 1.24, "ZH", "indextts", "测试句。", 1, None, None, {}
+    )
+
+
 def test_digest_indextts_lang_participates():
     """lang 参与摘要：同输入 ZH/EN 摘要不同——zh/en 槽位天然隔离、互不覆盖缓存
     的依据（双语改造的 digest 硬约束：zh 值逐字节不变，见上方黄金）。"""
