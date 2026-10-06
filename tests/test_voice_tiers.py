@@ -62,3 +62,45 @@ def test_stage7_gate_is_engine_branched():
         "须在通过门声明（与 SKILL.md 速查双址逐字同步）"
     )
     assert "草声" in stage["name"], "⑦ 阶段名应体现草声与克隆档位"
+
+
+def test_final_render_consumes_existing_audio_track():
+    """⑩ 终渲不触发 TTS：只消费既有音轨，未显式重配即 edge 成片（RSI-045）。
+
+    终渲/交付阶段消费哪档音轨若不显式声明，读者会从「终声=交付音色」的档位
+    术语反推出「终渲≈终声≈IndexTTS」——机制上 cmd_render 从不分派 TTS，规格
+    却曾是空白。钉住四处：SKILL 速查 ⑩ 行与关键不变量括注、10 终渲节首句与
+    前置行中性化（两遍法术语不得作终渲前置）。
+    """
+    skill = (skill_root() / "SKILL.md").read_text(encoding="utf-8")
+    assert "终渲沿用既有音轨" in skill, (
+        "SKILL.md 速查 ⑩ 行缺「终渲沿用既有音轨」——终渲阶段配音档位"
+        "无声明（RSI-045 表因：可被误读为终渲需先升档 IndexTTS）"
+    )
+    assert "终渲不自动升档" in skill, (
+        "SKILL.md 配音不变量缺「终渲不自动升档」细化括注（RSI-045）——"
+        "「其余一律 edge 草声」不点名终渲即留滑动面"
+    )
+    spec = (REFERENCES / "10-final-render.md").read_text(encoding="utf-8")
+    assert "不触发任何 TTS" in spec, "10 终渲节缺「不触发任何 TTS」终渲语义（RSI-045）"
+    assert "edge 终声集" in spec, "10 缺「edge 终声集」合法路径表述（RSI-045）"
+    assert "B 遍" not in spec and "A 遍" not in spec, (
+        "10 不得出现两遍法术语（B 遍/A 遍）——那是 IndexTTS 存量集概念，"
+        "字面把克隆两遍写成终渲相关前置（RSI-045 表因）"
+    )
+
+
+def test_stage7_dual_path_edge_final_delivery():
+    """07 两档生命周期须含 edge 直达终渲交付的对偶路径（RSI-045）。"""
+    spec = (REFERENCES / "07-tts-voice.md").read_text(encoding="utf-8")
+    assert "终渲/交付" in spec, (
+        "07 草声时机枚举缺「终渲/交付」——枚举止于试配音会把终渲推向升档叙事（RSI-045）"
+    )
+    assert "直接终渲交付" in spec, (
+        "07 迭代与定稿缺「不点名＝以 edge 草声直接终渲交付」对偶路径——只有"
+        "升档单边叙事即暗含交付必升档（RSI-045）"
+    )
+    assert "末次 TTS 完成后（edge 或克隆皆同）" in spec, (
+        "07 完成门须以「末次 TTS」表述——「终声完成后…才算交付」可被读作"
+        "交付前须有克隆终声（RSI-045）"
+    )

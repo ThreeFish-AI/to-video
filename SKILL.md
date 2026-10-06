@@ -2,7 +2,7 @@
 name: to-video
 description: 把论文、技术文档、代码仓库、课程站点或 guided-learn 精读产物（精读与通俗拆解文档）等信源做成动效图解科普视频（animated explainer video）的十阶段流水线：信源精读取证、策划、逐字稿（单一事实源）、真实性与易懂性校验、成文优化（把 AI 稿改得像人写、适合人读人听）、分镜、声音克隆或预置音色配音（TTS）、Remotion 代码动画、抽帧 QA、终渲字幕与交付归档，支持中英双语版本。Use when 用户想把一篇论文、文档、代码或已有的精读拆解文档讲成视频，制作或迭代科普解说视频（改稿后重配音、重渲染），初始化视频工作区或新建一集，编写或润色 narration.md / storyboard.md，跑配音、渲染、抽帧质检或交付归档，或询问这套流水线的用法——即使没有点名 to-video。不用于剪辑或转码已有视频、通用产品宣传片、幻灯片、单独绘制架构图，或不产出视频的论文精读。
 license: MIT
-compatibility: 渲染与抽帧 QA 仅支持 macOS（场景字体依赖系统 CJK 字体栈）；需要 uv、pnpm 与 Node.js（版本要求见 README 前置依赖）；制作期 edge-tts 草声默认（需联网），IndexTTS-2.5 本人声音克隆仅本人显式点名启用（实跑带 --final-voice 具名授权，需本地服务）；宿主须能执行 Bash。
+compatibility: 渲染与抽帧 QA 仅支持 macOS（场景字体依赖系统 CJK 字体栈）；需要 uv、pnpm 与 Node.js（版本要求见 README 前置依赖）；全程（含终渲与交付）edge-tts 草声默认（需联网），IndexTTS-2.5 本人声音克隆仅本人显式点名启用（实跑带 --final-voice 具名授权，需本地服务）；宿主须能执行 Bash。
 metadata:
   version: "2.0.0"
   author: "ThreeFish-AI"
@@ -76,10 +76,10 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 | ④ 双重校验 | 真实性回溯 + 易懂性 | [04](references/04-verification.md) | `check` | RISKY=0 且 REWRITE=0 |
 | ⑤ 成文优化 | 四稿按结构→衔接→句子→词句四层 pass 改成人写模样；只改表达不改事实 | [05](references/05-prose-refinement.md) | —（authored；改后 `build` + `check`，无分镜时 `check_script.py --pre-tts`） | 成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0 |
 | ⑥ 分镜表 | 前四列 + 可选 Visual Lock；Morph 见 06 | [06](references/06-storyboard.md) | `check --check-scenes` | beat 覆盖率无缺句（--check-scenes 分镜↔代码互比） |
-| ⑦ TTS 配音 | edge 草声直配（制作期）；IndexTTS-2.5 克隆本人点名后升档（manifest 契约一致） | [07](references/07-tts-voice.md) | `tts` / `captions` | edge 草声直行；indextts 另过本人显式授权（--final-voice）+ refs 指纹门 + 试听定档 + ETA 排期 |
+| ⑦ TTS 配音 | edge 草声直配（全程默认）；IndexTTS-2.5 克隆本人点名后升档（manifest 契约一致） | [07](references/07-tts-voice.md) | `tts` / `captions` | edge 草声直行；indextts 另过本人显式授权（--final-voice）+ refs 指纹门 + 试听定档 + ETA 排期 |
 | ⑧ Remotion 场景 | 代码动画实现；动效走 `src/motion/` 运动模型 | [08](references/08-remotion-implementation.md) | 工程内直调 `tsc --noEmit` 与 motion 测试 | tsc --noEmit 零错误 + 七条渲染红线 + 运动层铁律 |
 | ⑨ 草渲 + 抽帧 QA | 草渲与 Transition/Loop 抽帧 | [09](references/09-render-qa.md) | `render` + `qa` | qa --check 自动体检零 FAIL（含尾幕渐黑必查） |
-| ⑩ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 + 按系列/标题 vN 归档 | [10](references/10-final-render.md) | `render --final` + `captions` + `deliver` | 实测时长落在 pipeline.toml 的预算窗内 |
+| ⑩ 终渲 + 交付 | 1080p30 成片 + srt/vtt 字幕 + 按系列/标题 vN 归档；终渲沿用既有音轨（未显式重配即 edge 成片） | [10](references/10-final-render.md) | `render --final` + `captions` + `deliver` | 实测时长落在 pipeline.toml 的预算窗内 |
 
 ## 关键不变量
 
@@ -90,7 +90,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 - 每集 `pipeline.toml` 是可执行参数唯一来源（默认值在 `config.py` SCHEMA，toml 只写偏离）；README 不复制命令行参数。
 - 时序常数只在 `video/src/timing.json`（TS 与 Python 双语共读同一 JSON）；运动语汇只在 `video/src/motion/`（frozen，改 = 模板 + 全集同步）。
 - 声音样本是生物特征：不入库（`voices/refs.toml` 只存指纹），试听后即删。
-- **配音人为触发**：IndexTTS 克隆仅本人显式点名时启用（实跑必带 `--final-voice`、zh/en 各算一次，`all` 永不透传；agent 不得主动建议，其余一律 edge 草声）——见 [07](references/07-tts-voice.md)。
+- **配音人为触发**：IndexTTS 克隆仅本人显式点名时启用（实跑必带 `--final-voice`、zh/en 各算一次，`all` 永不透传；agent 不得主动建议，其余一律 edge 草声——含终渲与交付，终渲不自动升档）——见 [07](references/07-tts-voice.md)。
 - **复用边界**：Python 脚本集中共享（SSOT）；Remotion 原语复制不共享——复制源头 `assets/video-skeleton/`，`scaffold.py` 实例化、`verify_skeleton.py` 字节级执法漂移。
 - **依赖版本策略**：优先最新稳定版（模板钉版/README 地板只是快照下限）；建集先 `npm view remotion version` 对照，Remotion 全家桶同 major 整组追新（drift 登记）、跨 major 走 RSI；细则见 [PIPELINE.md §九](references/PIPELINE.md)。
 - **双锚点**：skill 根随安装位置（脚本自 `__file__` 向上找 `SKILL.md`），工作区根由哨兵搜索定位——机制与内容物理分离，互不牵连。
@@ -122,8 +122,8 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 
 - **Stage ① 信源输入**：已有 /guided-learn 产出作 C 型信源直接成片（01「C 型」），不重新精读；无产物可先跑 /guided-learn。
 - **Stage ⑥/⑧ 图示资产**：需要架构/流程类图解时调 `/archify` 出图，HTML 落 `$W` 下，`record_archify_all.py` 逐章录成动效素材；句级锚定覆盖门已串联进 `check`。
-- **Stage ⑧ 精确 3D 资产（可选）**：信源涉机械结构/硬件、示意级几何不够时，装 text-to-cad 的 **cad 单 skill**（`npx skills add earthtojake/text-to-cad --skill cad`）出 GLB；链路与 3D 宪法见 [08「外部 CAD 资产」](references/08-remotion-implementation.md)。
+- **Stage ⑧ 精确 3D 资产（可选）**：信源涉机械结构/硬件、示意级几何不够时，装 text-to-cad 的 **cad 单 skill** 出 GLB；安装命令与 3D 宪法见 [08「外部 CAD 资产」](references/08-remotion-implementation.md)。
 
 ## 自改进回路（RSI）
 
-制片中发现**本 Skill 自身**缺陷或改进项（脚本报错、命令失败、规格漂移等）走 RSI：登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容问题走既有 QA 回路。四道门全过后发起改进 PR 并回报链接。内容侧例外：认可/否决的**动效建模方法**追加进有界的 [建模手册](references/MODELING-PLAYBOOK.md) 候选区。协议全文：[RSI.md](RSI.md)。
+制片中发现**本 Skill 自身**缺陷或改进项走 RSI：登记 [docs/.agents/issue.md](docs/.agents/issue.md) 台账，**另起子代理**调研改进并核验；视频内容问题走既有 QA 回路。四道门全过后发起改进 PR 并回报链接。内容侧例外：认可/否决的**动效建模方法**追加进有界的 [建模手册](references/MODELING-PLAYBOOK.md) 候选区。协议全文：[RSI.md](RSI.md)。

@@ -520,7 +520,7 @@ cd video && pnpm run render:draft && pnpm run render   # render 脚本定义在 
 
 - **模型许可**：IndexTTS-2.5 按 [bilibili 模型使用许可协议](https://github.com/index-tts/index-tts/blob/main/LICENSE)（bilibili Model Use License）发布——**个人/研究用途可用；商用需联系 indexspeech@bilibili.com**。制作对外发布的视频前请自行评估许可范围。
 - **声音权利**：克隆他人声音必须获得本人书面同意；`$V/`（工作区 `voices/`）下样本已被工作区根 `.gitignore` 忽略，绝不入库。
-- **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；制作期草声默认走 edge（RSI-034 两档策略），克隆仅本人显式点名（`--final-voice`，RSI-040 人为触发），见 07-tts-voice.md。
+- **edge-tts 义务**：edge-tts 为微软服务免费接口，成品需遵守微软服务条款；全程（含终渲与交付）草声默认走 edge（RSI-034 两档策略），克隆仅本人显式点名（`--final-voice`，RSI-040 人为触发），见 07-tts-voice.md。
 
 ## 九、备选方案与参考文献
 
