@@ -1233,7 +1233,11 @@ def main() -> None:
         "（不可 import check_script，见 paths.py 文件头）使然；要门就走本入口",
     )
     p = sub.add_parser("render", parents=[lang_flag], help="⑨⑩ 渲染")
-    p.add_argument("--final", action="store_true", help="终渲（默认草渲）")
+    p.add_argument(
+        "--final",
+        action="store_true",
+        help="终渲（默认草渲；沿用既有音轨，不触发 TTS）",
+    )
     p = sub.add_parser("qa", parents=[lang_flag], help="⑨ 抽帧 QA（恒单语言）")
     p.add_argument(
         "--video",

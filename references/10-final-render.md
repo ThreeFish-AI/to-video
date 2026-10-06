@@ -1,10 +1,12 @@
 # Stage ⑩ 终渲与交付（skill 规格 · 10）
 
-> 前置：Stage ⑨ 的自动体检零 FAIL 且人工目检通过；文稿与音频已冻结（B 遍完成）。
+> 前置：Stage ⑨ 的自动体检零 FAIL 且人工目检通过；文稿与音频已冻结（末次 TTS 产物即可——默认 edge；克隆重配仅在本人显式触发后存在，不是终渲前置）。
 
 **目录**：终渲 · 交付件清单 · 交付归档 · 平台合规 · 换机 / 换 worktree 重建 runbook
 
 ## 终渲
+
+**终渲只消费既有音轨**（`video/public/audio/` 的 manifest + mp3），**不触发任何 TTS**：未显式重配时音轨＝edge 草声，直接以 edge 成片交付即合法路径（「edge 终声集」，见 [07](./07-tts-voice.md)「两档生命周期」）。
 
 ```bash
 cd $P/video
@@ -49,7 +51,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver
 - [ ] `out/final.mp4`（1080p30，h264/aac192K；`remotion ffmpeg -i` 核流摘要）
 - [ ] `out/captions.srt` + `out/captions.vtt`
 - [ ] 封面帧（可从 `qa_frames.py` 挑一张标题卡帧，或 `remotion still` 单渲）
-- [ ] 全片逐幕抽帧复检 + `--last-n 6 --check`（时长在 B 遍后又位移过，勿复用 A 遍结论）
+- [ ] 全片逐幕抽帧复检 + `--last-n 6 --check`（时长在末次 TTS 后又位移过——edge 或克隆皆同，勿复用此前结论）
 - [ ] 交付时长以 `total_duration_in_frames`（timeline.py 纯函数）**现算**，登记时连复算式一起写（`= 23820 帧 @30fps = 794.00s` 形态）——勿抄上次输出/README/series.json 里的旧数字：四集曾统一短 2.19s（登记值取了音轨末点而非含 `tailSec` 的片尾），有复算式的那一集才对（ISSUE-171）
 - [ ] `pipeline.py check` 实测口径在预算窗内
 - [ ] deliver 归档副本（根路径已配置时）：`<根>/<系列id>/<集标题> vN.mp4`

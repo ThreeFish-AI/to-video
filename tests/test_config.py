@@ -778,7 +778,7 @@ def test_chars_per_min_tier_ignores_non_string_style():
 
 
 def test_engine_default_is_edge_draft():
-    """制作期默认引擎翻转为 edge（草声档）——终声克隆只在 toml 显式声明。"""
+    """全程（含终渲与交付）默认引擎为 edge（草声档，RSI-034 翻转）——终声克隆只在 toml 显式声明。"""
     assert config.default("tts.engine") == "edge"
 
 
