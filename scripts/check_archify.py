@@ -16,7 +16,6 @@
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -24,20 +23,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config  # noqa: E402 - 同目录模块；阈值默认值层的单一事实源
 import langs  # noqa: E402 - 语言后缀/manifest 路径的单一事实源
 import timeline  # noqa: E402
-from check_archify_coverage import extract_cues  # noqa: E402  —— 单一 cue 提取器
+from check_archify_coverage import (  # noqa: E402  —— 单一 cue 提取器 + 字面量提取器
+    extract_archify_literal,
+    extract_cues,
+)
 
 
 def load_manifest(root: Path) -> dict:
-    m = re.search(
-        r"export const ARCHIFY = ([\s\S]+?) as const",
-        (root / "video/src/archify.manifest.ts").read_text("utf-8"),
+    lit = extract_archify_literal(
+        (root / "video/src/archify.manifest.ts").read_text("utf-8")
     )
-    if not m:
+    if lit is None:
         raise SystemExit(
             "FAIL: archify.manifest.ts 解析失败——先跑 "
             "$T/scripts/archify_manifest.py --project $P"
         )
-    return json.loads(m.group(1))
+    return json.loads(lit)
 
 
 def scene_cues(root: Path) -> list[tuple[str, str, str, str | None]]:

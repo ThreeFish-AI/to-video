@@ -13,7 +13,7 @@ import json
 import os
 from pathlib import Path
 
-import urllib.error  # noqa: E402 - offline_doctor_project 的离线桩异常类型
+import urllib.error
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 

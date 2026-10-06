@@ -21,8 +21,8 @@
 受检面：references/PIPELINE.md + references/NN-*.md（各篇阶段规格）+ SKILL.md + 根 RSI.md
 （自改进协议，散文链接最密集的文档，纳入即受围栏/链接/变量/混锚四类执法）
 + references/MODELING-PLAYBOOK.md（RSI 建模经验沉淀面，条目指针须可跳转）。
-references/ 下的手册（VOICE-CLONING.md 等，非 NN- 阶段规格）与根 PIPELINE_MD（门面）暂不在面内
-——根 PIPELINE_MD 快速上手中的 T=/W=/P= 赋值块是 quickstart 实例化而非第二
+references/ 下的手册（VOICE-CLONING.md 等，非 NN- 阶段规格）与根 README（门面）暂不在面内
+——根 README 快速上手中的 T=/W=/P= 赋值块是 quickstart 实例化而非第二
 定义处；若未来扩面把它纳入，须先为该块设豁免。
 """
 
