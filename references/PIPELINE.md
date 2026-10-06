@@ -1,6 +1,6 @@
 # 科普视频制作 Pipeline（公共基建）
 
-> 从「论文精读 → 逐字稿 → 配音 → 代码动画 → 终渲」全链路中沉淀的**可复用流水线机制**：抽取自 negentropy 仓，以 to-video 技能仓为家，安装在任意内容工作区上使用。
+> 从「论文精读 → 逐字稿 → 配音 → 代码动画 → 终渲」全链路中沉淀的**可复用流水线机制**：抽取自 negentropy 仓，以 vibe-video 技能仓为家，安装在任意内容工作区上使用。
 > 首个建成的完整范例：《AI 如何自己变强？》（`$W/episodes/self-improving-agents-video/`；建成时间上的第一个，非系列首集，发布顺序见 `$W/series.json`）。
 
 **目录**：一、Pipeline 总览 · 路径变量约定（含环境变量） · 二、工程目录约定 · 三、公共脚本与编排入口（含 pipeline.toml 字段表、交付归档） · 四、复用边界 · 五、音画同步机制（含双语渲染） · 六、新集脚手架清单 · 七、工程模式 · 八、许可注意 · 九、依赖与版本策略 · 十、浏览器进程纪律
@@ -11,7 +11,7 @@
 
 > 图源（可 diff 文本）：[`pipeline-layers.mmd`](../docs/assets/mermaid/pipeline-layers.mmd) · 交互版（下载到本地打开）：[`pipeline-layers.html`](../docs/assets/architecture/pipeline-layers.html)
 
-每个 Stage 的代理提示词规格见本目录的 `01`–`10` 阶段规格（[01](./01-source-extraction.md) 起，文件号 = 阶段序号），可直接作为子代理 prompt；整仓即 to-video 技能本体，路由入口是 [SKILL.md](../SKILL.md)（skill 根）。
+每个 Stage 的代理提示词规格见本目录的 `01`–`10` 阶段规格（[01](./01-source-extraction.md) 起，文件号 = 阶段序号），可直接作为子代理 prompt；整仓即 vibe-video 技能本体，路由入口是 [SKILL.md](../SKILL.md)（skill 根）。
 
 **全部阶段的声明源是 [stages.toml](./stages.toml)**（上图与下表都是它的人读视图）。执行 `uv run --no-project $T/scripts/pipeline.py stages` 打印全表。此前「有哪些阶段」同时声明在四处（skills 散文标题 / `pipeline.py` 子命令 / 上面的 mermaid / [SKILL.md](../SKILL.md)（skill 根）速查表），四份可各自漂移且**已经漂移**。序号与文件号一一对齐（第 N 阶段 = `NN-*.md`；历史上的 ⑥⑦ 错位已随 RSI-009 废除，RSI-013 插入 ⑤ 成文优化时 05–09 整段顺移为 06–10），由 [tests/test_stages.py](../tests/test_stages.py) 连同 skill H1、子命令注册表、SKILL.md 覆盖面一起执法。
 
@@ -20,13 +20,13 @@
 本文档、各篇阶段规格与各分集 README 中的**命令**统一用下面四个变量书写，使命令与两个位置事实解耦——skill 装在哪、工作区放在哪（换安装位置 / 搬工作区 / 多工作区并存零改动）；**散文里的链接保持 skill 内部的真实相对路径**：跨树引用（工作区里的文件）做不成相对链接，一律以变量写成纯文本，链接变量化则会造出任何机器都解不开的死链：
 
 ```bash
-T=~/.claude/skills/to-video   # skill 根（机制的家 = 本仓；env TO_VIDEO_HOME 或任意 clone + 软链皆可）
-W=<内容工作区根>              # 含 .to-video-root 哨兵的目录（env TO_VIDEO_WORKSPACE 显式指派）
+T=~/.claude/skills/vibe-video   # skill 根（机制的家 = 本仓；env VIBE_VIDEO_HOME 或任意 clone + 软链皆可）
+W=<内容工作区根>              # 含 .vibe-video-root 哨兵的目录（env VIBE_VIDEO_WORKSPACE 显式指派）
 P=$W/episodes/<slug>-video    # 目标分集工程（各集 README 里换成本集 slug）
 V=$W/voices                   # 音色样本目录（整目录 gitignored，生物特征）
 ```
 
-**$T 与 $W 物理分离**（机制住技能仓、内容住工作区），一条命令同时引用两者是常态（如 `$T/scripts/qa_frames.py $P/out/draft.mp4`）。skill 脚本定位工作区走「env `TO_VIDEO_WORKSPACE` > 自 CWD 向上找哨兵」，找不到即大声退出——故 $T 锚定的命令仍须**在工作区内（或其子目录）执行**。⚠️ 混锚禁令（反向）：$T 锚定的命令里不得出现工作区相对字面量（`voices/…`、`episodes/…`）——`pipeline.toml` 的 `tts.ref` 与 `series.json` 的 `path` 是**工作区根相对**（配置契约而非命令，由 `paths.WORKSPACE` 拼接），把那套写法搬进命令行会造出（skill 侧 tts_sample 配「裸 voices/ 前缀」样本参数）这类**在任何 CWD 下都不成立**的混锚命令——命令行里的样本路径一律走 `$V`。该纪律由 [tests/test_docs_paths.py](../tests/test_docs_paths.py) 执法。
+**$T 与 $W 物理分离**（机制住技能仓、内容住工作区），一条命令同时引用两者是常态（如 `$T/scripts/qa_frames.py $P/out/draft.mp4`）。skill 脚本定位工作区走「env `VIBE_VIDEO_WORKSPACE` > 自 CWD 向上找哨兵」，找不到即大声退出——故 $T 锚定的命令仍须**在工作区内（或其子目录）执行**。⚠️ 混锚禁令（反向）：$T 锚定的命令里不得出现工作区相对字面量（`voices/…`、`episodes/…`）——`pipeline.toml` 的 `tts.ref` 与 `series.json` 的 `path` 是**工作区根相对**（配置契约而非命令，由 `paths.WORKSPACE` 拼接），把那套写法搬进命令行会造出（skill 侧 tts_sample 配「裸 voices/ 前缀」样本参数）这类**在任何 CWD 下都不成立**的混锚命令——命令行里的样本路径一律走 `$V`。该纪律由 [tests/test_docs_paths.py](../tests/test_docs_paths.py) 执法。
 
 ### 环境变量（机器属性注册处）
 
@@ -34,13 +34,13 @@ V=$W/voices                   # 音色样本目录（整目录 gitignored，生�
 
 | env | 作用 | 缺省 |
 |---|---|---|
-| `TO_VIDEO_HOME` | skill 根（包装器解析首位；其后依次 `~/.claude/skills/to-video` → `~/.agents/skills/to-video`，未命中即大声退出） | 无（靠软链命中） |
-| `TO_VIDEO_WORKSPACE` | 工作区根显式指派（目录须含哨兵，防拼错静默锚错；工作区级包装器会用自身位置硬性覆写它） | 自 CWD 向上搜索哨兵 |
-| `TO_VIDEO_TTS_STORE` | TTS 音频版本库根 | `~/Library/Application Support/to-video/tts-store` |
-| `TO_VIDEO_INDEX_TTS_ROOT` | IndexTTS 服务仓（`tts_server` / `tts_bench` 的运行环境） | `~/tools/index-tts` |
+| `VIBE_VIDEO_HOME` | skill 根（包装器解析首位；其后依次 `~/.claude/skills/vibe-video` → `~/.agents/skills/vibe-video`，未命中即大声退出） | 无（靠软链命中） |
+| `VIBE_VIDEO_WORKSPACE` | 工作区根显式指派（目录须含哨兵，防拼错静默锚错；工作区级包装器会用自身位置硬性覆写它） | 自 CWD 向上搜索哨兵 |
+| `VIBE_VIDEO_TTS_STORE` | TTS 音频版本库根 | `~/Library/Application Support/vibe-video/tts-store` |
+| `VIBE_VIDEO_INDEX_TTS_ROOT` | IndexTTS 服务仓（`tts_server` / `tts_bench` 的运行环境） | `~/tools/index-tts` |
 | `INDEXTTS_SERVER` | IndexTTS 服务地址，覆盖 `pipeline.toml` 的 `tts.server`（见下方字段表） | 无（回落 `tts.server` 缺省 `http://127.0.0.1:8766`） |
-| `TO_VIDEO_DELIVER_ROOT` | 交付归档根路径（`deliver` 子命令；`--root` 一次性优先于此） | 无（未配置时 deliver 大声退出并列两渠道） |
-| `TO_VIDEO_TEST_WORKSPACE` | 测试集成模式：指向真实内容工作区做真树回归 | 无（单测用 fixture） |
+| `VIBE_VIDEO_DELIVER_ROOT` | 交付归档根路径（`deliver` 子命令；`--root` 一次性优先于此） | 无（未配置时 deliver 大声退出并列两渠道） |
+| `VIBE_VIDEO_TEST_WORKSPACE` | 测试集成模式：指向真实内容工作区做真树回归 | 无（单测用 fixture） |
 
 ## 二、工程目录约定
 
@@ -60,13 +60,13 @@ $T/
 
 ```
 $W/
-├── .to-video-root     # 工作区哨兵（skill 脚本自 CWD 向上定位工作区靠它，勿删）
+├── .vibe-video-root     # 工作区哨兵（skill 脚本自 CWD 向上定位工作区靠它，勿删）
 ├── series.json        # 发布顺序 SSOT（机读，顶层 seriesList[]）
 ├── series.md          # 作品总览（人读）
 ├── source-map/        # 多集系列的章节→集归属信源地图
 ├── voices/            # 参考音色样本（gitignored 生物特征；refs.toml 只存指纹）= $V
-├── to-video.toml      # 工作区机制配置（check_series 工程级受检面与系列 id 集、骨架合法偏离登记）
-├── scripts/*.py       # 工作区级薄包装 → skill（自证工作区锚并硬性覆写 TO_VIDEO_WORKSPACE）
+├── vibe-video.toml      # 工作区机制配置（check_series 工程级受检面与系列 id 集、骨架合法偏离登记）
+├── scripts/*.py       # 工作区级薄包装 → skill（自证工作区锚并硬性覆写 VIBE_VIDEO_WORKSPACE）
 └── episodes/          # 每集一个 <slug>-video 工程（下）
 ```
 
@@ -88,7 +88,7 @@ $P/
 └── out/                    # 渲染产物（gitignored）
 ```
 
-两级薄包装都不含实现：skill 位置由 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 依序解析（命中 = 候选目录含 `SKILL.md` 且有 `scripts/pipeline.py`；工作区根也有 `scripts/pipeline.py`，缺哨兵判据则 `TO_VIDEO_HOME` 误指工作区时包装器自递归），未命中即大声退出并打印安装指令——静默跳过是被禁止的失效形态。
+两级薄包装都不含实现：skill 位置由 `VIBE_VIDEO_HOME` → `~/.claude/skills/vibe-video` → `~/.agents/skills/vibe-video` 依序解析（命中 = 候选目录含 `SKILL.md` 且有 `scripts/pipeline.py`；工作区根也有 `scripts/pipeline.py`，缺哨兵判据则 `VIBE_VIDEO_HOME` 误指工作区时包装器自递归），未命中即大声退出并打印安装指令——静默跳过是被禁止的失效形态。
 
 **格式契约**（`build_narration.py` 的解析规则）：
 - narration.md：`## P0 标题` 分幕 + `- [p0-01] 文本` 一句一行；句 id 必须以幕名小写为前缀、全片唯一。
@@ -105,7 +105,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 
 > `clean-samples` 与 `stages` 与具体工程无关，不读 `pipeline.toml`（`--project` 可省）。
 > 本清单与 `pipeline.py` 文件头的抄件由 [tests/test_stages.py](../tests/test_stages.py) 对齐 argparse 真实注册表。
-> 工作区内亦可走薄包装：`uv run --no-project $W/scripts/pipeline.py --project $P …`（包装器自证工作区锚并硬性覆写 `TO_VIDEO_WORKSPACE`，从任意 CWD 调用都锚定本工作区）。
+> 工作区内亦可走薄包装：`uv run --no-project $W/scripts/pipeline.py --project $P …`（包装器自证工作区锚并硬性覆写 `VIBE_VIDEO_WORKSPACE`，从任意 CWD 调用都锚定本工作区）。
 
 | Stage | 命令             | 输入 → 产出                                         | 幂等/续跑               |
 | ----- | ---------------- | --------------------------------------------------- | ----------------------- |
@@ -134,7 +134,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | [scripts/check_archify.py](../scripts/check_archify.py) | archify 回放**结构**门（只查结构不查画面语义——图层遮挡/时序错位须 `remotion still` 逐帧目视）：manifest × views 一致 / rate 预演边界 `[0.7, 1.35]`（阈值走 config）/ 素材完整（逐章有效采集帧率 ≥18，`capture_fps` 优先）/ 白录检测（manifest 有图却零 cue 引用）；`--stills` 打印每个 cue 的 K1/K4 边界帧抽帧命令 | `uv run --no-project $T/scripts/check_archify.py --project $P` |
 | [scripts/check_archify_coverage.py](../scripts/check_archify_coverage.py) | archify 覆盖门（`check` 子命令在内容门后**自动串联**，无 flag）：图例对逐字稿的句级锚定率（整幕零锚 FAIL）/ 图与 cue 丰富度地板 / 分镜声明↔cue 双向对账 + 章节播放单调性；无资产集干净跳过，旧形态（仅 sidecar）点名 WARN 跳过 | `uv run --no-project $T/scripts/check_archify_coverage.py --project $P` |
 | [scripts/check_playbook.py](../scripts/check_playbook.py) | 建模手册有界门（RSI 建模经验分支）：字数水位（CAP/HIGH/TARGET 滞回）+ 条目结构/权重/证锚点规则的唯一实现；零依赖、不需工作区 | `uv run --no-project $T/scripts/check_playbook.py` |
-| [scripts/check_series.py](../scripts/check_series.py) | 系列一致性规则（口播反串线 / 多标题顺序 / 序号绑定 / 清单完整性 / 死链 / 可渲染性 / 去站点化 / 下期卡同步），执法 `$W/series.json`；**工程级受检面（project_globs）与课程/下期卡系列 id 集由工作区 to-video.toml 声明** | 工作区内任意目录：`uv run --no-project $T/scripts/check_series.py`（工作区侧可挂 pre-commit） |
+| [scripts/check_series.py](../scripts/check_series.py) | 系列一致性规则（口播反串线 / 多标题顺序 / 序号绑定 / 清单完整性 / 死链 / 可渲染性 / 去站点化 / 下期卡同步），执法 `$W/series.json`；**工程级受检面（project_globs）与课程/下期卡系列 id 集由工作区 vibe-video.toml 声明** | 工作区内任意目录：`uv run --no-project $T/scripts/check_series.py`（工作区侧可挂 pre-commit） |
 | [scripts/captions.py](../scripts/captions.py) | 导出 srt/vtt（cue 终点不含句间停顿——外挂字幕静默期不留字） | `uv run --no-project scripts/captions.py` |
 | [scripts/deliver.py](../scripts/deliver.py) | ⑩ 交付归档：out/final.mp4 → `<根>/<系列id>/<集标题> vN.mp4`（版本扫目录自增、同字节跳过；根路径两渠道见下方「交付归档」节） | `uv run --no-project $T/scripts/pipeline.py --project $P deliver` |
 | [scripts/qa_frames.py](../scripts/qa_frames.py) | 抽帧 QA（幕/句/`--last-n` 末 N 句/Transition/Loop 窗口）+ `--check` 五项自动体检（黑帧/字幕带侵入/冻帧/字幕缺失/纯底色段）+ `--check-theme` WCAG 对比度 | `uv run --no-project --with pillow --with numpy scripts/qa_frames.py out/draft.mp4 --last-n 6 --check`（工程根；视频路径按 CWD 解析，$T 直调须写全 `$P/out/draft.mp4`；过渡/loop 见 [09](./09-render-qa.md)） |
@@ -144,7 +144,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P     {status|doctor|build
 | [scripts/pron_marks.py](../scripts/pron_marks.py) | 发音标注 `<原文\|读音>` 的解析与校验（纯函数库，无 IO）：多音字/英文专名的精确读音控制；被 `build_narration.py` 用于硬失败拦非法标注 | 库，不直接调用；语法与规则见其模块文档，台账见 [PRON-GLOSSARY.md](./PRON-GLOSSARY.md) |
 | [scripts/tts_progress.py](../scripts/tts_progress.py) | IndexTTS 长跑**旁路**监视：按逐句 mp3 的 mtime 序列重建墙钟进度 + 滚动秒/字 vs 基线（与合成进程零耦合、退出码恒 0——监视器不打断长跑；越阈先分因：负载竞争可继续只重排期，热节流才须中止验证环境） | 长跑期间另开终端：`uv run --no-project $T/scripts/tts_progress.py --project $P` |
 | [scripts/tts_bench.py](../scripts/tts_bench.py) | 合成耗时基准与**测量环境体检**（**运行于 index-tts 环境**，同 tts_server.py）：A/A 复现性判定 + 分段计时 + 换页/分配器诊断。本机漂移已定因为热节流，做任何耗时 A/B 前先用它确认环境合格 | 在 `~/tools/index-tts` 内：`./.venv/bin/python $T/scripts/tts_bench.py --check-only`；A/A 见 [INDEXTTS-2.5-ADVANCED.md §6.5](./INDEXTTS-2.5-ADVANCED.md) |
-| [scripts/tts_resume.py](../scripts/tts_resume.py) | IndexTTS 长跑**自愈编排**（RSI-022，纯标准库）：健康检查（`/health`，`ok` 为真）→ 不健康或客户端失败后**按端口**冷重启服务（kill 判据=作用面，只杀该端口 LISTEN，勿 pkill -f）→ 以**真实退出码**（subprocess.run 直取 returncode，禁 ``cmd \| tail; $?`` 管道尾食）续跑 tts.py（幂等缓存从断点续）；连续 N 轮失败（`--max-restarts`，缺省 3）放弃并非零退出；入口硬门禁客户端依赖（mutagen 缺即大声退出，不进循环——否则首句合成成功、测时长才崩）；`--` 之后参数原样转发 tts.py——**入口预检：转发参数缺 `--final-voice` 即拒（先于任何冷重启；RSI-040 人为触发——授权缺失不出现在循环内，循环保持 RSI-022 既有自愈语义不变）** | 工作区内：`uv run --no-project --with mutagen $T/scripts/tts_resume.py -- --engine indextts --final-voice --project $P --ref $V/<样本>.wav --expect-ref-sha1 <指纹>`；服务启动命令缺省从 tts.py 同构派生（`--server-cmd` 覆写、根走 `TO_VIDEO_INDEX_TTS_ROOT`）；服务端能力透传 `--use-qwen-emo`（`--emo-text` 自然语言情感的长跑必传，缺省不带——story 档块情感走台本向量，RSI-035）；MPS 显存上限走 `--mps-mem-limit-gib` flag 直传（0=禁用 high watermark；缺省命令路径 env 兜底被服务端缺省 setter 覆盖、实测无效，RSI-036——`--mps-high-ratio` env 兜底仅 `--server-cmd` 自定义命令生效且须配对，RSI-017） |
+| [scripts/tts_resume.py](../scripts/tts_resume.py) | IndexTTS 长跑**自愈编排**（RSI-022，纯标准库）：健康检查（`/health`，`ok` 为真）→ 不健康或客户端失败后**按端口**冷重启服务（kill 判据=作用面，只杀该端口 LISTEN，勿 pkill -f）→ 以**真实退出码**（subprocess.run 直取 returncode，禁 ``cmd \| tail; $?`` 管道尾食）续跑 tts.py（幂等缓存从断点续）；连续 N 轮失败（`--max-restarts`，缺省 3）放弃并非零退出；入口硬门禁客户端依赖（mutagen 缺即大声退出，不进循环——否则首句合成成功、测时长才崩）；`--` 之后参数原样转发 tts.py——**入口预检：转发参数缺 `--final-voice` 即拒（先于任何冷重启；RSI-040 人为触发——授权缺失不出现在循环内，循环保持 RSI-022 既有自愈语义不变）** | 工作区内：`uv run --no-project --with mutagen $T/scripts/tts_resume.py -- --engine indextts --final-voice --project $P --ref $V/<样本>.wav --expect-ref-sha1 <指纹>`；服务启动命令缺省从 tts.py 同构派生（`--server-cmd` 覆写、根走 `VIBE_VIDEO_INDEX_TTS_ROOT`）；服务端能力透传 `--use-qwen-emo`（`--emo-text` 自然语言情感的长跑必传，缺省不带——story 档块情感走台本向量，RSI-035）；MPS 显存上限走 `--mps-mem-limit-gib` flag 直传（0=禁用 high watermark；缺省命令路径 env 兜底被服务端缺省 setter 覆盖、实测无效，RSI-036——`--mps-high-ratio` env 兜底仅 `--server-cmd` 自定义命令生效且须配对，RSI-017） |
 | [scripts/record_archify.py](../scripts/record_archify.py) | archify 图解录制器：Playwright 驱动系统 Chrome 的**无头**实例，逐章录 mp4/webm + 末帧 PNG + sidecar（单 browser 跨章复用、每章独立 context；生命周期纪律见 §十） | `uv run --with playwright $T/scripts/record_archify.py <图.html> /dev/null <sidecar.json> --mode chapter --all-chapters --out-dir <目录>`（批量重录走下行） |
 | [scripts/record_archify_all.py](../scripts/record_archify_all.py) | archify 逐图批量重录驱动：默认**进程内跨图复用单 Headless Chrome 实例 + 单图异常隔离重启 supervisor**（`--reuse-browser` 缺省开启，`--no-reuse-browser` 退回逐图独立子进程；见 §十）；含产物新鲜度 / 章节集对齐跳过判据与帧率基线比对 | `uv run --with playwright $T/scripts/record_archify_all.py --project $P` |
 
@@ -196,7 +196,7 @@ schema、默认值与校验的单一事实源是 [scripts/config.py](../scripts/
 uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Documents/video] [--dry-run]
 ```
 
-- **根路径两渠道**（解析序：`--root` 一次性/prompt 指定 > env `TO_VIDEO_DELIVER_ROOT` 持久统一配置）：机器属性，**永不写进受版本控制的 toml**——同 `tts.server` / tts-store 立场（执法：[tests/test_config.py](../tests/test_config.py) 的 machine-property 用例）。相对路径锚 `$W`（绝不锚 CWD）；两渠道皆无则大声退出并列出用法。双语集 en 版：`deliver --lang en` 归档 `<集标题> vN.en.mp4`，版本扫描按语言独立（fullmatch 后缀隔离，与 zh 互不抬号）。
+- **根路径两渠道**（解析序：`--root` 一次性/prompt 指定 > env `VIBE_VIDEO_DELIVER_ROOT` 持久统一配置）：机器属性，**永不写进受版本控制的 toml**——同 `tts.server` / tts-store 立场（执法：[tests/test_config.py](../tests/test_config.py) 的 machine-property 用例）。相对路径锚 `$W`（绝不锚 CWD）；两渠道皆无则大声退出并列出用法。双语集 en 版：`deliver --lang en` 归档 `<集标题> vN.en.mp4`，版本扫描按语言独立（fullmatch 后缀隔离，与 zh 互不抬号）。
 - **触发形态**：显式子命令，**刻意不串联进 `render --final`**——编排层完成行 `>> render 完成` 是 [references/10](./10-final-render.md) 钉死的判完成信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号；与 `captions` 同为 ⑩ 的显式交付命令。用户在 prompt 给出目标路径时，agent 在终渲成功后显式执行 `deliver --root <路径>`（契约见 references/10 §交付归档）。
 - **扇出**：deliver 不在 `--series` 白名单——写用户目录且累积版本文件的交付操作须显式逐集执行。
 
@@ -227,7 +227,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
 - **对齐与失鲜**：`narration.en.md` 与主稿句 id 1:1（`build --lang en` 硬对齐门）；基线锁 `narration.en.lock.json` 记录翻译时的主稿句 digest，主稿改稿后 `check --lang en` 点名失配句。重建**不自动接受**改过的主稿（gettext fuzzy 语义）：译句改写即视为已重译、自动刷新；译文无需改动时 `build --lang en --accept <ids>` 显式确认。
 - **缺省语义（昂贵命令显式化）**：`build` / `check` / `captions` / `status` 缺省跑全部声明语言；**`tts` / `render` / `deliver` / `all` 缺省只跑 zh**（声明多语言而未指定即报错提示 `--lang`），显式多值才顺序执行且完成行按语言分打；`qa` 恒单语言（按视频文件名 `.en` 后缀推断）。
 - **本人声音追配（RSI-034）**：既有 zh 集追加 en 版可在 `[tts.en]` 声明 `engine = "indextts"` + 跨语种 `ref`/`style`（触发话术与完整流程见 [references/07](./07-tts-voice.md)「双语配音」；跨语种克隆必须先试听；**en 的克隆配音是独立的一次人工显式要求**——实跑 `tts --lang en --final-voice`，RSI-040）。
-- **骨架分代**：改 frozen 骨架文件引入语言维度属新代（工作区 `to-video.toml` 的 `[[skeleton.generation]]` 登记旧代指纹与花名册，格式见 `skeleton.toml`「骨架分代」节；`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
+- **骨架分代**：改 frozen 骨架文件引入语言维度属新代（工作区 `vibe-video.toml` 的 `[[skeleton.generation]]` 登记旧代指纹与花名册，格式见 `skeleton.toml`「骨架分代」节；`verify_skeleton.py` 执法原子性——半同步集报 `GENERATION-MIXED`）；zh 渲染逐像素不变，旧代集重渲时按代整组同步。
 
 ## 六、新集脚手架清单
 
@@ -235,7 +235,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver [--root ~/Docume
    ```bash
    uv run --no-project $T/scripts/scaffold.py --init-workspace <dir>
    ```
-   落盘哨兵 `.to-video-root`、空 series.json/series.md、voices/ 模板、to-video.toml 与工作区级薄包装。（可选）`export TO_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
+   落盘哨兵 `.vibe-video-root`、空 series.json/series.md、voices/ 模板、vibe-video.toml 与工作区级薄包装。（可选）`export VIBE_VIDEO_DELIVER_ROOT=<目录>` 持久配置交付归档根——机器属性不进 toml，见 §三「交付归档」。结尾点名的登记系列 / 录样本指纹 / 声明受检面等人工事项是刻意不代做的内容决策。
 1. 实例化骨架（替代旧的「`cp -r` 任一既有集」——那句话给 391 行冻结基建留了 4 个同权真理声明者；建集模式自 CWD 锚定 `$W/episodes/`，须在工作区内执行）：
    ```bash
    uv run --no-project $T/scripts/scaffold.py <slug>-video --title "本集标题"
@@ -290,4 +290,4 @@ Remotion 对超过 3 人的公司需商业授权（个人/小团队免费）；e
   # ② 手工只列不杀备查（双特征 = --headless + playwright 临时 user-data-dir）
   ps axo pid,ppid,etime,command | grep -E '[Cc]hrome.*(--headless|playwright_chromiumdev_profile-|puppeteer_dev_chrome_profile-)'
   ```
-  安全论证：`scan_automation_browsers` 排除所有 `--type=` helper 子进程，且只匹配带 `--headless` / `chrome-headless-shell` 或带自动化临时 profile（`playwright_chromiumdev_profile-` / `puppeteer_dev_chrome_profile-` / `--user-data-dir=.*(\.temp/|/browser-data|/to-video)`）的主进程，且 `clean_orphan_browsers` 仅杀 `ppid==1` 孤儿。**明令严禁 `pkill -f Chrome` / 全局杀**——会连带杀掉用户在用的日常 Chrome。
+  安全论证：`scan_automation_browsers` 排除所有 `--type=` helper 子进程，且只匹配带 `--headless` / `chrome-headless-shell` 或带自动化临时 profile（`playwright_chromiumdev_profile-` / `puppeteer_dev_chrome_profile-` / `--user-data-dir=.*(\.temp/|/browser-data|/vibe-video)`）的主进程，且 `clean_orphan_browsers` 仅杀 `ppid==1` 孤儿。**明令严禁 `pkill -f Chrome` / 全局杀**——会连带杀掉用户在用的日常 Chrome。

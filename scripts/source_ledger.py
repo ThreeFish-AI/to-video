@@ -55,7 +55,7 @@ import tomllib
 _BLOCK_RE = re.compile(r"(?is)<(script|style)\b.*?</\1>")
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
-USER_AGENT = "to-video-source-ledger/1.0 (+skill)"
+USER_AGENT = "vibe-video-source-ledger/1.0 (+skill)"
 TIMEOUT = 30
 
 

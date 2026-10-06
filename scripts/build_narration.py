@@ -69,10 +69,10 @@ SCENE_RE = re.compile(r"^## (?P<scene>P\d+)\b[\s:：—\-·]*(?P<title>.*)$")
 FORMAT_DOC = "references/PIPELINE.md 第二节格式契约"
 
 #: pinyin.vocab 在 index-tts checkout 内（不在 skill）。根目录可经
-#: TO_VIDEO_INDEX_TTS_ROOT 覆盖（默认 ~/tools/index-tts）。存在则用于 WARN 级「音节是否在表内」，
+#: VIBE_VIDEO_INDEX_TTS_ROOT 覆盖（默认 ~/tools/index-tts）。存在则用于 WARN 级「音节是否在表内」，
 #: 缺失时格式类 ERROR 仍然生效（规则内联在 pron_marks.py，不依赖该文件）。
 PINYIN_VOCAB = (
-    Path(os.environ.get("TO_VIDEO_INDEX_TTS_ROOT", "~/tools/index-tts")).expanduser()
+    Path(os.environ.get("VIBE_VIDEO_INDEX_TTS_ROOT", "~/tools/index-tts")).expanduser()
     / "checkpoints"
     / "pinyin.vocab"
 )

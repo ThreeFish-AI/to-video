@@ -1,6 +1,6 @@
 """deliver 子命令契约：根路径两渠道、series.json 身份锚、标题 vN 版本管理。
 
-形态沿 test_check_series.run_series_check 先例：subprocess + cwd=ws + 剥 TO_VIDEO_* env
+形态沿 test_check_series.run_series_check 先例：subprocess + cwd=ws + 剥 VIBE_VIDEO_* env
 （防集成模式 env 残留锚走别的树）。纯函数（清洗/计号）in-process 直测；
 deliver.py 的 WORKSPACE 消费全在函数内（paths 惰性解析），subprocess 形态
 天然走真解析路径。交付根一律落 tmp_path——conftest 的真树守卫只盯
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers import to_video_stripped_env
+from helpers import vibe_video_stripped_env
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 DELIVER = SCRIPTS / "deliver.py"
@@ -42,7 +42,7 @@ def build_ws(
     """最小可交付工作区：哨兵 + series.json（一集已登记）+ out/final.mp4。"""
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / ".to-video-root").write_text("# sentinel\n", encoding="utf-8")
+    (ws / ".vibe-video-root").write_text("# sentinel\n", encoding="utf-8")
     data = series_json or {
         "seriesList": [
             {
@@ -74,8 +74,8 @@ def run_deliver(
     env_extra: dict[str, str] | None = None,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """按真实调用形态驱动 deliver.py；剥 TO_VIDEO_* 防外层 env 改变锚走向。"""
-    env = to_video_stripped_env()
+    """按真实调用形态驱动 deliver.py；剥 VIBE_VIDEO_* 防外层 env 改变锚走向。"""
+    env = vibe_video_stripped_env()
     env.update(env_extra or {})
     return subprocess.run(
         [
@@ -209,7 +209,7 @@ def test_copy_failure_leaves_no_debris(tmp_path, monkeypatch):
     无残缺版本文件、大声退出。（变异锚点：删除 unlink 行本测试必红。）"""
     ws = build_ws(tmp_path)
     root = tmp_path / "dv"
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(ws))
+    monkeypatch.setenv("VIBE_VIDEO_WORKSPACE", str(ws))
 
     def boom(*_a, **_k):
         raise OSError("replace failed (simulated)")
@@ -294,7 +294,7 @@ def test_root_expanduser(tmp_path: Path):
         ws,
         "--root",
         "~/dv",
-        env_extra={"HOME": str(tmp_path), "TO_VIDEO_WORKSPACE": str(ws)},
+        env_extra={"HOME": str(tmp_path), "VIBE_VIDEO_WORKSPACE": str(ws)},
         cwd=tmp_path,
     )
     assert r.returncode == 0, out_text(r)
@@ -309,7 +309,7 @@ def test_relative_root_anchors_to_workspace_not_cwd(tmp_path: Path):
         "--root",
         "dv",
         cwd=tmp_path,  # 工作区之外：若锚 CWD，产物会落在 tmp_path/dv 之外
-        env_extra={"TO_VIDEO_WORKSPACE": str(ws)},
+        env_extra={"VIBE_VIDEO_WORKSPACE": str(ws)},
     )
     assert r.returncode == 0, out_text(r)
     assert (ws / "dv" / SID / f"{TITLE} v1.mp4").is_file()
@@ -351,7 +351,7 @@ def test_root_without_write_permission_exits(tmp_path: Path):
 def test_root_inside_workspace_outside_episodes_warns(tmp_path: Path):
     """$W 内非 episodes 落点不被 .gitignore 覆盖——必须点名（静默污染 git status）。"""
     ws = build_ws(tmp_path)
-    r = run_deliver(ws, "--root", "dv", env_extra={"TO_VIDEO_WORKSPACE": str(ws)})
+    r = run_deliver(ws, "--root", "dv", env_extra={"VIBE_VIDEO_WORKSPACE": str(ws)})
     assert r.returncode == 0, out_text(r)
     assert "git status" in r.stdout
     assert (ws / "dv" / SID / f"{TITLE} v1.mp4").is_file()
@@ -585,9 +585,9 @@ def test_dry_run_does_not_bypass_read_guards(tmp_path: Path):
 
 def test_toml_deliver_root_is_not_a_channel(tmp_path: Path):
     """机器属性立法：[deliver] root 写进 toml（曾拟议后否决的渠道）不生效——
-    deliver 只认 --root / env TO_VIDEO_DELIVER_ROOT 两渠道。"""
+    deliver 只认 --root / env VIBE_VIDEO_DELIVER_ROOT 两渠道。"""
     ws = build_ws(tmp_path)
-    (ws / "to-video.toml").write_text(
+    (ws / "vibe-video.toml").write_text(
         '[deliver]\nroot = "elsewhere"\n', encoding="utf-8"
     )
     r = run_deliver(ws)

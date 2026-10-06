@@ -49,10 +49,10 @@ def render(text: str, subs: dict[str, str]) -> str:
 
 #: 工作区骨架的「点名 → 目标名」映射（模板里不带点前缀，防模板自吞）。
 _WS_ARTIFACTS = {
-    "to-video-root.tmpl": ".to-video-root",
+    "vibe-video-root.tmpl": ".vibe-video-root",
     "series.json.tmpl": "series.json",
     "series.md.tmpl": "series.md",
-    "to-video.toml.tmpl": "to-video.toml",
+    "vibe-video.toml.tmpl": "vibe-video.toml",
     "gitignore.tmpl": ".gitignore",
     "README.md.tmpl": "README.md",
     "scripts/pipeline.py.tmpl": "scripts/pipeline.py",
@@ -94,7 +94,7 @@ def init_workspace(ws: Path, force: bool) -> int:
         " → 指纹写进 refs.toml（edge 草声建集不需要样本）"
     )
     print(
-        "  3. to-video.toml：按需声明 check_series 的工程级受检面与系列 id 集；"
+        "  3. vibe-video.toml：按需声明 check_series 的工程级受检面与系列 id 集；"
         "骨架合法偏离走其 [skeleton] 登记"
     )
     print("  4. （可选）git init；README.md 按本工作区实态改写")

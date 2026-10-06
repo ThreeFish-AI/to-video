@@ -8,7 +8,7 @@
 时时长预算门会静默退化为 [0, 999]，是个「你以为开着其实关着的门」。
 
 真集用例按 env 门控（双锚点：本仓是 skill 仓，无 episodes/）：
-  - 集成模式（TO_VIDEO_TEST_WORKSPACE=<工作区根>）→ 受检面 = 真树全部集；
+  - 集成模式（VIBE_VIDEO_TEST_WORKSPACE=<工作区根>）→ 受检面 = 真树全部集；
   - 未设 env → 受检面 = fixtures/golden-episode/ 的 tmp 镜像（目录名对齐
     slug=golden-episode-video 以过身份校验；golden 本身按「删机制常数、留策略
     声明」纪律书写，故等价变换判据在两种模式下同构成立）。
@@ -46,10 +46,10 @@ def episodes(tmp_path: Path) -> list[Path]:
     golden 进 tmp 而非直读 fixtures/：`episode.slug` 与工程目录名的一致性校验
     要求目录名恰为 golden-episode-video，且用例永不改动夹具源文件。
     """
-    ws = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+    ws = os.environ.get("VIBE_VIDEO_TEST_WORKSPACE")
     if ws:
         eps = sorted(p for p in (Path(ws) / "episodes").iterdir() if p.is_dir())
-        assert eps, f"TO_VIDEO_TEST_WORKSPACE={ws} 下无 episodes/ 集目录"
+        assert eps, f"VIBE_VIDEO_TEST_WORKSPACE={ws} 下无 episodes/ 集目录"
         return eps
     assert GOLDEN_EPISODE_TOML.is_file(), f"golden 夹具缺失：{GOLDEN_EPISODE_TOML}"
     root = tmp_path / "golden-episode-video"

@@ -29,13 +29,13 @@
     真仓文件分毫不动。
   - **平铺工作区**（`flat_ws`）：哨兵 + series.json + episodes/。工作区锚由
     CWD 哨兵搜索提供（subprocess 传 `cwd=工作区根`）。drift/generation 登记
-    写进它的 to-video.toml `[skeleton]`（登记面住工作区，RSI-010）。
+    写进它的 vibe-video.toml `[skeleton]`（登记面住工作区，RSI-010）。
 
 沙箱里的分集不再从真树复制：由（副本里的真）scaffold 实例化——scaffold 产物
 与模板字节相同正是 scaffold 自身的执法对象（见
 test_scaffold_produces_gate_clean_episode），恰好也是漂移门正控需要的干净基线。
 真树判据（baselineOf 在册、逃逸表指向实存文件）改为 env 门控的集成模式
-（TO_VIDEO_TEST_WORKSPACE，见 conftest 文件头）：本仓是 skill 仓，没有 episodes/。
+（VIBE_VIDEO_TEST_WORKSPACE，见 conftest 文件头）：本仓是 skill 仓，没有 episodes/。
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers import to_video_stripped_env as _clean_env
+from helpers import vibe_video_stripped_env as _clean_env
 
 #: 本仓根 = 真 skill 根（含 SKILL.md）。scaffold 行为用例经绝对路径调真脚本。
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -93,10 +93,10 @@ def remotion_family(pkg: dict) -> dict[str, str]:
 
 #: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）；离线为 None。
 #: 真树判据只在集成模式下运行——本仓（skill 仓）没有 episodes/，离线无从对账。
-INTEGRATION_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+INTEGRATION_WS = os.environ.get("VIBE_VIDEO_TEST_WORKSPACE")
 needs_real_tree = pytest.mark.skipif(
     not INTEGRATION_WS,
-    reason="真树判据：skill 仓离线无 episodes/，集成模式（TO_VIDEO_TEST_WORKSPACE）下运行",
+    reason="真树判据：skill 仓离线无 episodes/，集成模式（VIBE_VIDEO_TEST_WORKSPACE）下运行",
 )
 
 
@@ -136,7 +136,7 @@ def mirror_skill(tmp_path: Path) -> Path:
     return skill
 
 
-def flat_ws(tmp_path: Path, sentinel: str = ".to-video-root") -> Path:
+def flat_ws(tmp_path: Path, sentinel: str = ".vibe-video-root") -> Path:
     """平铺假工作区：哨兵 + 空 seriesList + episodes/（两脚本的最小消费面）。"""
     ws = tmp_path / "ws"
     (ws / "episodes").mkdir(parents=True)
@@ -181,15 +181,15 @@ def scaffold_into(
     """在平铺工作区上经（副本里的真）scaffold 实例化一集。
 
     cwd=工作区根 ⇒ 哨兵搜索锚定工作区——scaffold 建集模式要求 CWD 在工作区内
-    或 TO_VIDEO_WORKSPACE 指派，二者都是双锚点的工作区锚来源。
+    或 VIBE_VIDEO_WORKSPACE 指派，二者都是双锚点的工作区锚来源。
     """
     return run(skill / "scripts" / "scaffold.py", slug, "--title", title, cwd=ws)
 
 
 def register_drift(ws: Path, episode: str, rel: str, fingerprint: str | None) -> None:
-    """往沙箱工作区 to-video.toml 追加一条 `[[skeleton.drift]]`。"""
+    """往沙箱工作区 vibe-video.toml 追加一条 `[[skeleton.drift]]`。"""
     pin = f'fingerprint = "{fingerprint}"\n' if fingerprint else ""
-    with (ws / "to-video.toml").open("a", encoding="utf-8") as fh:
+    with (ws / "vibe-video.toml").open("a", encoding="utf-8") as fh:
         fh.write(
             f'\n[[skeleton.drift]]\nepisode = "{episode}"\npath = "{rel}"\n{pin}'
             'reason = "正控用条目"\n'
@@ -197,8 +197,8 @@ def register_drift(ws: Path, episode: str, rel: str, fingerprint: str | None) ->
 
 
 def ws_registry(ws: Path) -> dict:
-    """工作区 to-video.toml 的 [skeleton] 登记表（真树用例的读取面）。"""
-    toml = ws / "to-video.toml"
+    """工作区 vibe-video.toml 的 [skeleton] 登记表（真树用例的读取面）。"""
+    toml = ws / "vibe-video.toml"
     if not toml.is_file():
         return {}
     return tomllib.loads(toml.read_text(encoding="utf-8")).get("skeleton", {})
@@ -387,7 +387,7 @@ def test_registered_drift_is_pinned_to_its_fingerprint(tmp_path):
     # 处置指引须指向工作区登记面：照旧文案改 skill 侧 skeleton.toml 会被
     # load_registry() 大声拒收，豁免永远改不对（RSI-010 评审回归）
     line = next(ln for ln in r.stdout.splitlines() if "DRIFT-CHANGED" in ln)
-    assert "to-video.toml" in line and "skeleton.toml" not in line, line
+    assert "vibe-video.toml" in line and "skeleton.toml" not in line, line
 
 
 def test_i2_honours_the_drift_registry(tmp_path):
@@ -489,7 +489,7 @@ def test_template_carries_no_workspace_registry():
 
     leaked = [k for k in vs.LEAK_KEYS if k in skeleton()]
     assert not leaked, (
-        f"skill 模板含登记表 {leaked}——应写进工作区 $W/to-video.toml 的 [skeleton]"
+        f"skill 模板含登记表 {leaked}——应写进工作区 $W/vibe-video.toml 的 [skeleton]"
     )
 
 
@@ -516,7 +516,7 @@ def test_skill_side_registry_is_refused(tmp_path, table, hint, wrong_hint):
         )
     r = run(skill / "scripts" / "verify_skeleton.py", cwd=ws)
     assert r.returncode != 0, f"skill 侧登记被静默接受：\n{r.stdout}"
-    assert "to-video.toml" in r.stderr and "skeleton.drift" in r.stderr, r.stderr
+    assert "vibe-video.toml" in r.stderr and "skeleton.drift" in r.stderr, r.stderr
     assert hint in r.stderr and wrong_hint not in r.stderr, r.stderr
 
 
@@ -611,7 +611,7 @@ def test_unpinned_drift_is_refused_at_load(tmp_path):
 
     r = run(skill / "scripts" / "verify_skeleton.py", "--strict", cwd=ws)
     assert r.returncode != 0, f"未钉指纹的登记被静默放行：\n{r.stdout}"
-    assert "缺 fingerprint" in r.stderr and "to-video.toml" in r.stderr, r.stderr
+    assert "缺 fingerprint" in r.stderr and "vibe-video.toml" in r.stderr, r.stderr
 
 
 def test_stale_registry_entry_is_flagged(tmp_path):
@@ -712,10 +712,10 @@ def test_init_workspace_is_idempotent(tmp_path):
     r = run(SCAFFOLD, "--init-workspace", str(ws))
     assert r.returncode == 0, r.stdout + r.stderr
     for rel in (
-        ".to-video-root",
+        ".vibe-video-root",
         "series.json",
         "series.md",
-        "to-video.toml",
+        "vibe-video.toml",
         ".gitignore",
         "README.md",
         "scripts/pipeline.py",
@@ -736,8 +736,8 @@ def test_init_workspace_is_idempotent(tmp_path):
 
 
 def test_workspace_wrapper_resolves_skill_via_env(tmp_path):
-    """init 落盘的工作区薄包装：TO_VIDEO_HOME → 本仓真 check_series，且从
-    **任意 CWD** 都锚回该工作区（包装器以自身位置写 TO_VIDEO_WORKSPACE，
+    """init 落盘的工作区薄包装：VIBE_VIDEO_HOME → 本仓真 check_series，且从
+    **任意 CWD** 都锚回该工作区（包装器以自身位置写 VIBE_VIDEO_WORKSPACE，
     双锚点的工作区锚经 env 移交）。
 
     断言锚定真脚本的退出语：空 seriesList 是 load_series 的大声退出——只有
@@ -751,7 +751,7 @@ def test_workspace_wrapper_resolves_skill_via_env(tmp_path):
         text=True,
         check=False,
         cwd=tmp_path,  # 刻意不在工作区内：锚不得依赖调用现场
-        env={**_clean_env(), "TO_VIDEO_HOME": str(SKILL_ROOT)},
+        env={**_clean_env(), "VIBE_VIDEO_HOME": str(SKILL_ROOT)},
     )
     assert r.returncode != 0
     assert "无 seriesList" in r.stdout + r.stderr, r.stdout + r.stderr
@@ -1075,7 +1075,7 @@ def test_chapter_progress_mount_is_load_bearing():
 # 「整组停在旧代」放行。与 [[skeleton.drift]] 的分工：drift 钉该集**特有**偏离（一集
 # 一文件一指纹），generation 钉**模板升级遗留**的整组旧态（一组文件一组指纹，
 # 按显式花名册退役）。正控沿双锚点沙箱形态（mirror_skill + flat_ws），注入的
-# 分代登记写进沙箱工作区 to-video.toml 的 [skeleton]——真实 legacy 指纹指向真实
+# 分代登记写进沙箱工作区 vibe-video.toml 的 [skeleton]——真实 legacy 指纹指向真实
 # 旧代文件，镜像里无从复现，故正控自登记「镜像当代」为旧代再升模板，复现整组旧态。
 
 #: bilingual-i18n 分代组的文件面（含档位），正控与表合法性测试共用。
@@ -1115,7 +1115,7 @@ def test_generation_roster_references_real_episodes():
 def inject_generation(
     ws: Path, gid: str, episodes: list[str], legacy: dict[str, str]
 ) -> None:
-    """往沙箱工作区 to-video.toml 追加一个 [[skeleton.generation]]（正控用）。"""
+    """往沙箱工作区 vibe-video.toml 追加一个 [[skeleton.generation]]（正控用）。"""
     eps = ", ".join(f'"{e}"' for e in episodes)
     lines = [
         "\n[[skeleton.generation]]",
@@ -1126,7 +1126,7 @@ def inject_generation(
         "[skeleton.generation.legacy]",
     ]
     lines += [f'"{rel}" = "{fp}"' for rel, fp in legacy.items()]
-    with (ws / "to-video.toml").open("a", encoding="utf-8") as fh:
+    with (ws / "vibe-video.toml").open("a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
 
 

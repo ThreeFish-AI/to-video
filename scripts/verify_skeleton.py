@@ -10,7 +10,7 @@
   I2 模板不过期：baselineOf 指定的系列必须与 assets/video-skeleton 一致
       —— 单集系列的 I1 是空条件（无比较对象），故 I2 不可省
 
-两者**共用同一个逃逸口**（工作区 to-video.toml 的 `[[skeleton.drift]]`，格式见
+两者**共用同一个逃逸口**（工作区 vibe-video.toml 的 `[[skeleton.drift]]`，格式见
 skeleton.toml「合法偏离登记」节，判定见 exempt()）：语义不一致
 会让单集系列拿不到文档承诺的豁免（I1 放行、I2 仍红，登记者无路可走）。豁免按
 指纹钉住，偏离内容一变即报 DRIFT-CHANGED——否则「登记一次、永久免检」。
@@ -44,7 +44,7 @@ import paths  # noqa: E402 - SKILL 模块级、WORKSPACE 惰性解析
 
 TEMPLATE = paths.SKILL / "assets" / "video-skeleton"
 SKELETON_TOML = TEMPLATE / "skeleton.toml"
-#: 登记表键：条目指向具体集（内容），只许住工作区 to-video.toml 的 [skeleton]。
+#: 登记表键：条目指向具体集（内容），只许住工作区 vibe-video.toml 的 [skeleton]。
 REGISTRY_KEYS = ("drift", "generation")
 #: skill 侧 skeleton.toml 禁现的顶层键：旧表名 + 照抄工作区示例的 skeleton 前缀形态。
 LEAK_KEYS = (*REGISTRY_KEYS, "skeleton")
@@ -221,7 +221,7 @@ def registry_problems(reg: dict, classes: dict[str, list[str]]) -> list[str]:
 
 
 def load_registry(skel: dict) -> dict:
-    """→ 工作区 to-video.toml 的 [skeleton] 表；文件/表缺失 = 无登记（新工作区默认态）。
+    """→ 工作区 vibe-video.toml 的 [skeleton] 表；文件/表缺失 = 无登记（新工作区默认态）。
 
     登记指向具体集（内容），随内容走而不随模板分发：skill 侧 skeleton.toml 出现
     登记键即大声退出——静默忽略会让登记者以为已豁免，合并两处则是 split-brain。
@@ -238,11 +238,11 @@ def load_registry(skel: dict) -> dict:
             how.append("[skeleton.*] 已是工作区写法：整段原样移入，勿再加前缀")
         sys.exit(
             f"FAIL: {SKELETON_TOML} 含登记表 {leaked}——合法偏离登记在工作区 "
-            "$W/to-video.toml 的 [[skeleton.drift]] / [[skeleton.generation]]（"
+            "$W/vibe-video.toml 的 [[skeleton.drift]] / [[skeleton.generation]]（"
             + "；".join(how)
             + "；格式见 skeleton.toml「合法偏离登记」节），skill 模板不携带集名"
         )
-    ws_toml = paths.WORKSPACE / "to-video.toml"
+    ws_toml = paths.WORKSPACE / "vibe-video.toml"
     if not ws_toml.is_file():
         return {}
     reg = tomllib.loads(ws_toml.read_text(encoding="utf-8")).get("skeleton", {})
@@ -365,7 +365,7 @@ def main() -> int:
                         print(
                             f"    DRIFT-CHANGED {rel} · {slug} 现为 {fp}，"
                             f"登记的是 {registered[(slug, rel)][1]}"
-                            f" —— 偏离内容已变，豁免失效：请复核后更新 $W/to-video.toml"
+                            f" —— 偏离内容已变，豁免失效：请复核后更新 $W/vibe-video.toml"
                             " 的 [[skeleton.drift]]"
                         )
                         continue

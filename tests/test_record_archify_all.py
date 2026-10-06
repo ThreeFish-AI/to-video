@@ -153,7 +153,7 @@ def _site(tmp_path: Path, html: str, sidecar: dict | None = None) -> Path:
     """
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / ".to-video-root").write_text("", encoding="utf-8")
+    (ws / ".vibe-video-root").write_text("", encoding="utf-8")
     (ws / "archify-html").mkdir()
     (ws / "archify-html" / "a.html").write_text(html, encoding="utf-8")
     arch = ws / "ep" / "video" / "public" / "archify"
@@ -171,7 +171,7 @@ def _run(ws: Path, *extra: str) -> tuple[int, str]:
         capture_output=True,
         text=True,
         check=False,
-        env={**os.environ, "TO_VIDEO_WORKSPACE": str(ws)},
+        env={**os.environ, "VIBE_VIDEO_WORKSPACE": str(ws)},
     )
     return r.returncode, r.stdout + r.stderr
 

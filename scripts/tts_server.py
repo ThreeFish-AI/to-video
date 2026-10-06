@@ -2,7 +2,7 @@
 """IndexTTS 声音克隆推理服务——运行于 index-tts 工程环境内的本地 HTTP 服务。
 
 - 位置约定：本脚本属于公共管线（SSOT），但必须在 index-tts checkout 的 uv 环境内运行
-  （默认 ~/tools/index-tts；工具侧可经 TO_VIDEO_INDEX_TTS_ROOT 另指。torch/indextts 等
+  （默认 ~/tools/index-tts；工具侧可经 VIBE_VIDEO_INDEX_TTS_ROOT 另指。torch/indextts 等
   重依赖不进入本 skill）；
 - 启动（在 index-tts 根目录）：
     uv run --frozen --with fastapi --with uvicorn --with soundfile --with numpy --with lameenc \

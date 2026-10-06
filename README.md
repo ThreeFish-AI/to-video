@@ -1,10 +1,10 @@
-# to-video
+# vibe-video
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](LICENSE) [![Platform: macOS](https://img.shields.io/badge/platform-macOS-333333.svg)](#三安装)
 
 读透一份信源，交付一支 1080p30 的科普视频——由 AI Agent 执行、人做评审决策的十阶段流水线。
 
-**to-video** 是一个可安装的 agent Skill（Claude Code 等）加 Python / Remotion 工具链：把「信源精读 → 逐字稿 → 配音 → 代码动画 → 终渲」固化为十个带通过门的阶段。内容层（①–⑥）的写作阶段产出**可回溯、像人写的逐字稿**（每句口播都能落到信源证据），生产层（⑦–⑩）的工具阶段完成声音克隆配音、React 场景动画、抽帧质检与终渲交付。全片派生自文本单一事实源——改稿后 `build → tts → render` 一条链重跑，全程不打开任何剪辑软件。
+**vibe-video** 是一个可安装的 agent Skill（Claude Code 等）加 Python / Remotion 工具链：把「信源精读 → 逐字稿 → 配音 → 代码动画 → 终渲」固化为十个带通过门的阶段。内容层（①–⑥）的写作阶段产出**可回溯、像人写的逐字稿**（每句口播都能落到信源证据），生产层（⑦–⑩）的工具阶段完成声音克隆配音、React 场景动画、抽帧质检与终渲交付。全片派生自文本单一事实源——改稿后 `build → tts → render` 一条链重跑，全程不打开任何剪辑软件。
 
 <p align="center">
   <img src="docs/assets/demo/hello-video.gif" width="88%" alt="Demo：顶部分段章节进度条段宽随时长、填充跨段推进，标题 spring 入场、能力标签错峰弹入——画面、配音、字幕全部由代码生成">
@@ -65,8 +65,8 @@ Skill 本体是纯指令，零依赖即装即用；下表工具链仅运行流�
 ### Claude Code（推荐）
 
 ```bash
-git clone https://github.com/ThreeFish-AI/to-video ~/projects/to-video
-ln -s ~/projects/to-video ~/.claude/skills/to-video
+git clone https://github.com/ThreeFish-AI/vibe-video ~/projects/vibe-video
+ln -s ~/projects/vibe-video ~/.claude/skills/vibe-video
 ```
 
 装完开一个新会话使 Skill 被发现（Claude Code 监视技能目录，已开的会话通常也能即时生效）。
@@ -74,37 +74,37 @@ ln -s ~/projects/to-video ~/.claude/skills/to-video
 ### 其他宿主与 skills CLI
 
 ```bash
-npx skills add ThreeFish-AI/to-video   # 交互选择宿主；--copy 可选固化副本
+npx skills add ThreeFish-AI/vibe-video   # 交互选择宿主；--copy 可选固化副本
 ```
 
-- **多宿主共享**：把同一 clone 再链到 `~/.agents/skills/to-video`，或设 `TO_VIDEO_HOME=<clone 根>` 指到任意安装位置——包装器按 `TO_VIDEO_HOME` → `~/.claude/skills/to-video` → `~/.agents/skills/to-video` 顺序解析。
+- **多宿主共享**：把同一 clone 再链到 `~/.agents/skills/vibe-video`，或设 `VIBE_VIDEO_HOME=<clone 根>` 指到任意安装位置——包装器按 `VIBE_VIDEO_HOME` → `~/.claude/skills/vibe-video` → `~/.agents/skills/vibe-video` 顺序解析。
 - 其余环境变量（工作区指派、tts-store、IndexTTS 服务等）见 [references/PIPELINE.md](references/PIPELINE.md)「环境变量」节。
 
 ### 验证安装
 
-- 宿主内：`/skills`（Claude Code / Codex）或 Skills 面板（Cursor）应列出 to-video；
+- 宿主内：`/skills`（Claude Code / Codex）或 Skills 面板（Cursor）应列出 vibe-video；
 - CLI 冒烟：`uv run --no-project <clone 根>/scripts/scaffold.py --help` 可正常打印。
 
 ### 更新与卸载
 
 - 更新：clone 目录内 `git pull`（软链自动生效），或 `npx skills update`。
-- 卸载：`rm -r ~/.claude/skills/to-video`（软链形态只删软链、clone 保留；--copy 形态删的是副本目录），可选清理 `~/Library/Application Support/to-video/tts-store` 缓存。
+- 卸载：`rm -r ~/.claude/skills/vibe-video`（软链形态只删软链、clone 保留；--copy 形态删的是副本目录），可选清理 `~/Library/Application Support/vibe-video/tts-store` 缓存。
 
 ## 四、快速上手（Quickstart）
 
 变量约定（完整定义见 [references/PIPELINE.md](references/PIPELINE.md) 路径变量一节）：`$T` = Skill 根（安装位置），`$W` = 内容工作区根，`$P` = 分集工程。以下开箱即 edge 草声跑一支两幕三句话的 mini 片（免本地模型与声音样本，需联网）；用自己的声音克隆重配见 [references/VOICE-CLONING.md](references/VOICE-CLONING.md)。
 
 ```bash
-T=~/.claude/skills/to-video
+T=~/.claude/skills/vibe-video
 W=~/my-videos
 P=$W/episodes/hello-video
 
 # 1) 初始化内容工作区（幂等：哨兵 + series.json + voices/ + 工作区包装器）
 uv run --no-project $T/scripts/scaffold.py --init-workspace $W
 
-# 2) 建集脚手架（在 $W 内执行，脚本靠哨兵 .to-video-root 定位工作区）
+# 2) 建集脚手架（在 $W 内执行，脚本靠哨兵 .vibe-video-root 定位工作区）
 cd $W
-uv run --no-project $T/scripts/scaffold.py hello-video --title "你好 to-video"
+uv run --no-project $T/scripts/scaffold.py hello-video --title "你好 vibe-video"
 
 # 3) mini 篇幅调整：把时长预算窗缩到三句话的量级（引擎开箱即 edge 草声）
 sed -i '' -e 's/^target_minutes = .*/target_minutes = [0.1, 2.0]/' "$P/pipeline.toml"
@@ -115,7 +115,7 @@ cat > "$P/script/narration.md" <<'EOF'
 ## P0 开场
 
 - [p0-01] 这是一支画面、配音、字幕全部由代码生成的视频。
-- [p0-02] to-video 流水线把它自动做了出来。
+- [p0-02] vibe-video 流水线把它自动做了出来。
 
 ## P1 收束
 
@@ -150,7 +150,7 @@ uv run --no-project $W/scripts/pipeline.py --project $P render
 uv run --no-project $W/scripts/pipeline.py --project $P qa --video out/draft.mp4 --last-n 2 --check
 ```
 
-全绿后交付：`captions` 导出 srt/vtt，`render --final` 出 `out/final.mp4`（本文首屏 Demo 即由本流程产出）；`deliver`（`--root` 一次性或 env `TO_VIDEO_DELIVER_ROOT` 持久指定归档根）把成片按 `<根>/<系列id>/<标题> vN.mp4` 归档。随时可用 `status`（阶段新鲜度）与 `doctor`（环境自检）定位问题。真实制作的完整清单（信源取证、series.json 登记、概念色设计）见 [references/PIPELINE.md](references/PIPELINE.md)。
+全绿后交付：`captions` 导出 srt/vtt，`render --final` 出 `out/final.mp4`（本文首屏 Demo 即由本流程产出）；`deliver`（`--root` 一次性或 env `VIBE_VIDEO_DELIVER_ROOT` 持久指定归档根）把成片按 `<根>/<系列id>/<标题> vN.mp4` 归档。随时可用 `status`（阶段新鲜度）与 `doctor`（环境自检）定位问题。真实制作的完整清单（信源取证、series.json 登记、概念色设计）见 [references/PIPELINE.md](references/PIPELINE.md)。
 
 ## 五、文档地图
 

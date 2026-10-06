@@ -3,8 +3,8 @@
 包装器是「机制随 skill 分发、内容留在工作区」的粘合层，失效形态被刻意
 设计为**大声退出**——静默跳过等于流水线假绿。这里钉三件事：
 
-  1. 解析命中：TO_VIDEO_HOME 指向的假 skill 被找到，且目标脚本收到的
-     `--project`（分集包装器）/ `TO_VIDEO_WORKSPACE`（工作区包装器）恰是
+  1. 解析命中：VIBE_VIDEO_HOME 指向的假 skill 被找到，且目标脚本收到的
+     `--project`（分集包装器）/ `VIBE_VIDEO_WORKSPACE`（工作区包装器）恰是
      包装器**自身位置**推导的锚，与调用 CWD 无关；命中须见 skill 根
      `SKILL.md` 哨兵——工作区根同有 `scripts/pipeline.py`，误指工作区须回落
      下一候选而非自递归；
@@ -39,7 +39,7 @@ WS_TMPL = SKILL_ROOT / "assets" / "workspace" / "scripts"
 
 #: 分集薄包装器（--project 形态，模板里是明文 .py）。
 EPISODE_WRAPPERS = ("tts.py", "build_narration.py", "qa_frames.py")
-#: 工作区薄包装器（TO_VIDEO_WORKSPACE 形态，模板带 .tmpl 后缀）。
+#: 工作区薄包装器（VIBE_VIDEO_WORKSPACE 形态，模板带 .tmpl 后缀）。
 WORKSPACE_WRAPPERS = ("pipeline.py", "check_series.py")
 
 #: 假目标脚本：把收到的 argv 与锚定 env 落盘，供断言转发契约。
@@ -51,7 +51,7 @@ from pathlib import Path
 
 Path(os.environ["WRAP_PROBE_OUT"]).write_text(
     json.dumps(
-        {"argv": sys.argv, "workspace_env": os.environ.get("TO_VIDEO_WORKSPACE")}
+        {"argv": sys.argv, "workspace_env": os.environ.get("VIBE_VIDEO_WORKSPACE")}
     ),
     encoding="utf-8",
 )
@@ -62,7 +62,7 @@ def child_env(**overrides: str) -> dict[str, str]:
     """子进程环境：先清掉外层可能渗入的锚定变量，再按用例覆写——
     集成模式整跑时外层 env 不许改变解析走向。"""
     env = dict(os.environ)
-    for key in (paths.ENV_WORKSPACE, "TO_VIDEO_HOME"):
+    for key in (paths.ENV_WORKSPACE, "VIBE_VIDEO_HOME"):
         env.pop(key, None)
     env.update(overrides)
     return env
@@ -111,7 +111,7 @@ def test_episode_wrapper_forwards_project_from_own_location(tmp_path, name):
         wrapper,
         "--force",
         "extra.wav",
-        env=child_env(TO_VIDEO_HOME=str(home), WRAP_PROBE_OUT=str(probe_out)),
+        env=child_env(VIBE_VIDEO_HOME=str(home), WRAP_PROBE_OUT=str(probe_out)),
         cwd=elsewhere,
     )
     assert r.returncode == 0, r.stdout + r.stderr
@@ -129,7 +129,7 @@ def test_episode_wrapper_forwards_project_from_own_location(tmp_path, name):
 
 @pytest.mark.parametrize("name", WORKSPACE_WRAPPERS)
 def test_workspace_wrapper_anchors_env_from_own_location(tmp_path, name):
-    """工作区包装器 .tmpl 去后缀落盘后：argv 原样转发，TO_VIDEO_WORKSPACE
+    """工作区包装器 .tmpl 去后缀落盘后：argv 原样转发，VIBE_VIDEO_WORKSPACE
     由自身 parent.parent 写回——从任意 CWD 调用都锚定本工作区。"""
     home = fake_skill(tmp_path)
     ws = tmp_path / "ws"
@@ -147,7 +147,7 @@ def test_workspace_wrapper_anchors_env_from_own_location(tmp_path, name):
         "status",
         "--series",
         "demo",
-        env=child_env(TO_VIDEO_HOME=str(home), WRAP_PROBE_OUT=str(probe_out)),
+        env=child_env(VIBE_VIDEO_HOME=str(home), WRAP_PROBE_OUT=str(probe_out)),
         cwd=elsewhere,
     )
     assert r.returncode == 0, r.stdout + r.stderr
@@ -162,7 +162,7 @@ def test_workspace_wrapper_anchors_env_from_own_location(tmp_path, name):
 
 
 def test_workspace_wrapper_overrides_caller_explicit_env(tmp_path):
-    """硬性覆写语义：调用方 env 里的 TO_VIDEO_WORKSPACE 不被承袭——环境残留
+    """硬性覆写语义：调用方 env 里的 VIBE_VIDEO_WORKSPACE 不被承袭——环境残留
     指向另一工作区时，包装器（含挂 pre-commit 的系列一致性门）会静默去检查
     那个工作区，属被禁止的静默失效。借道操作其他工作区走显式通道：目标
     工作区自身的包装器，或 pipeline.py 的 --workspace flag。"""
@@ -178,9 +178,9 @@ def test_workspace_wrapper_overrides_caller_explicit_env(tmp_path):
     r = run_wrapper(
         wrapper,
         env=child_env(
-            TO_VIDEO_HOME=str(home),
+            VIBE_VIDEO_HOME=str(home),
             WRAP_PROBE_OUT=str(tmp_path / "probe-preset.json"),
-            TO_VIDEO_WORKSPACE=str(preset),
+            VIBE_VIDEO_WORKSPACE=str(preset),
         ),
         cwd=tmp_path,
     )
@@ -217,7 +217,7 @@ def run_guarded(
 
 @pytest.mark.parametrize("name", (*EPISODE_WRAPPERS, *WORKSPACE_WRAPPERS))
 def test_home_pointing_at_workspace_falls_through(tmp_path, name):
-    """TO_VIDEO_HOME 误指工作区根（易与 TO_VIDEO_WORKSPACE 混淆）⇒ 回落下一候选。
+    """VIBE_VIDEO_HOME 误指工作区根（易与 VIBE_VIDEO_WORKSPACE 混淆）⇒ 回落下一候选。
 
     工作区根自带 `scripts/pipeline.py`（工作区包装器），只认它当探测标记时，
     工作区包装器会把自己认成 skill 入口无界自递归，分集包装器则去跑不存在的
@@ -235,16 +235,16 @@ def test_home_pointing_at_workspace_falls_through(tmp_path, name):
         wrapper = ws / "episodes" / "probe-video" / "scripts" / name
         shutil.copy2(SKEL / name, wrapper)
 
-    home = tmp_path / "home"  # 次候选 ~/.claude/skills/to-video = 软链安装形态
+    home = tmp_path / "home"  # 次候选 ~/.claude/skills/vibe-video = 软链安装形态
     (home / ".claude" / "skills").mkdir(parents=True)
-    installed = home / ".claude" / "skills" / "to-video"
+    installed = home / ".claude" / "skills" / "vibe-video"
     installed.symlink_to(fake_skill(tmp_path), target_is_directory=True)
     probe_out = tmp_path / f"probe-{name}.json"
 
     r = run_guarded(
         wrapper,
         env=child_env(
-            TO_VIDEO_HOME=str(ws), HOME=str(home), WRAP_PROBE_OUT=str(probe_out)
+            VIBE_VIDEO_HOME=str(ws), HOME=str(home), WRAP_PROBE_OUT=str(probe_out)
         ),
         cwd=tmp_path,
     )
@@ -266,18 +266,18 @@ def test_unresolved_skill_lists_all_candidates_and_install_hint(tmp_path):
     absent = tmp_path / "no-such-skill"
     r = run_wrapper(
         wrapper,
-        env=child_env(TO_VIDEO_HOME=str(absent), HOME=str(empty_home)),
+        env=child_env(VIBE_VIDEO_HOME=str(absent), HOME=str(empty_home)),
         cwd=tmp_path,
     )
     assert r.returncode != 0
     out = r.stdout + r.stderr
     for candidate in (
         str(absent),
-        str(empty_home / ".claude" / "skills" / "to-video"),
-        str(empty_home / ".agents" / "skills" / "to-video"),
+        str(empty_home / ".claude" / "skills" / "vibe-video"),
+        str(empty_home / ".agents" / "skills" / "vibe-video"),
     ):
         assert candidate in out, f"未列出候选 {candidate}：\n{out}"
-    assert "git clone" in out and "TO_VIDEO_HOME" in out
+    assert "git clone" in out and "VIBE_VIDEO_HOME" in out
 
 
 # ── 模板一致性：解析器体共享，正文除目标名外字节一致 ────────────────────────

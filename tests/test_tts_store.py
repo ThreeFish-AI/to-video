@@ -82,18 +82,18 @@ def test_disabled_store_is_transparent(tmp_path):
 
 
 def test_env_override(monkeypatch, tmp_path):
-    monkeypatch.setenv("TO_VIDEO_TTS_STORE", str(tmp_path / "custom"))
+    monkeypatch.setenv("VIBE_VIDEO_TTS_STORE", str(tmp_path / "custom"))
     assert store_root(disabled=False) == tmp_path / "custom"
 
 
 def test_empty_env_disables_store(monkeypatch):
-    monkeypatch.setenv("TO_VIDEO_TTS_STORE", "")
+    monkeypatch.setenv("VIBE_VIDEO_TTS_STORE", "")
     assert store_root(disabled=False) is None
 
 
 def test_default_dir_used_when_env_unset(monkeypatch, tmp_path):
     """不设 env ⇒ 落到默认路径（目录允许尚不存在，deposit 时再建）。"""
-    monkeypatch.delenv("TO_VIDEO_TTS_STORE", raising=False)
+    monkeypatch.delenv("VIBE_VIDEO_TTS_STORE", raising=False)
     monkeypatch.setattr(tts, "DEFAULT_STORE", str(tmp_path / "fresh-store"))
     assert store_root(disabled=False) == tmp_path / "fresh-store"
 

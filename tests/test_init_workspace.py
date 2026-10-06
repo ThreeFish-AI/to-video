@@ -28,10 +28,10 @@ WS_TEMPLATE = SKILL_ROOT / "assets" / "workspace"
 #: _WS_ARTIFACTS 的契约钉（模板名 → 落盘名）：映射键集是被文档承诺的工作区
 #: 骨架面，缩水即静默缺失的哨兵/包装器/指纹清单，须红在这里走人工决策。
 EXPECTED_ARTIFACTS = {
-    "to-video-root.tmpl": ".to-video-root",
+    "vibe-video-root.tmpl": ".vibe-video-root",
     "series.json.tmpl": "series.json",
     "series.md.tmpl": "series.md",
-    "to-video.toml.tmpl": "to-video.toml",
+    "vibe-video.toml.tmpl": "vibe-video.toml",
     "gitignore.tmpl": ".gitignore",
     "README.md.tmpl": "README.md",
     "scripts/pipeline.py.tmpl": "scripts/pipeline.py",
@@ -45,12 +45,12 @@ def init(ws: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     """按真实调用形态驱动：cwd=目标目录（--init-workspace 缺省 const="."
     依赖子进程 CWD 解析为该目录）+ 脚本绝对路径。
 
-    env 剥掉 TO_VIDEO_WORKSPACE：init 路径本不消费它，剥掉是防外层
+    env 剥掉 VIBE_VIDEO_WORKSPACE：init 路径本不消费它，剥掉是防外层
     （集成模式）env 在未来机制漂移时改变解析走向。"""
     r = subprocess.run(
         [sys.executable, str(SCAFFOLD), "--init-workspace", *extra],
         cwd=ws,
-        env={k: v for k, v in os.environ.items() if k != "TO_VIDEO_WORKSPACE"},
+        env={k: v for k, v in os.environ.items() if k != "VIBE_VIDEO_WORKSPACE"},
         capture_output=True,
         encoding="utf-8",
         errors="replace",
@@ -81,7 +81,7 @@ def test_init_lays_down_every_artifact(tmp_path: Path):
         # 逐工件字节等于模板：init 是纯机械复制不渲染——README 的
         # {{WORKSPACE_TITLE}} 刻意留给使用者按实态改写（人工步骤 4）
         assert dst.read_bytes() == (WS_TEMPLATE / src_name).read_bytes(), dst_name
-    assert (tmp_path / ".to-video-root").is_file()
+    assert (tmp_path / ".vibe-video-root").is_file()
     for d in ("episodes", "source-map"):
         assert (tmp_path / d / ".gitkeep").is_file(), f"{d}/.gitkeep 缺失"
     assert f"新建 {len(EXPECTED_ARTIFACTS)} 件" in r.stdout
@@ -116,7 +116,7 @@ def test_force_restores_tampered_artifacts(tmp_path: Path):
 
 def test_machine_readable_defaults_parse_empty(tmp_path: Path):
     init(tmp_path)
-    cfg = tomllib.loads((tmp_path / "to-video.toml").read_text(encoding="utf-8"))
+    cfg = tomllib.loads((tmp_path / "vibe-video.toml").read_text(encoding="utf-8"))
     assert cfg == {
         "check_series": {
             "project_globs": [],

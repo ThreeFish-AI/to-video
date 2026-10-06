@@ -1,6 +1,6 @@
 """跨测试文件共享的纯 helper（pytest 夹具归 conftest.py，纯函数归此）。
 
-沿革：`_zh_digest`、剥 `TO_VIDEO_*` env、doctor 离线夹具、timing 六键常数此前在
+沿革：`_zh_digest`、剥 `VIBE_VIDEO_*` env、doctor 离线夹具、timing 六键常数此前在
 多个测试文件各写一份（乃至同名异义），双份维护必然漂移——收敛到唯一住处。
 刻意异值的用例（如 check_script 淡入淡出违约形态的 `sceneCrossFadeSec=0.9`）
 仍自持字面量，不从此处取。
@@ -23,10 +23,10 @@ def zh_digest(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
-def to_video_stripped_env() -> dict[str, str]:
-    """剥掉 `TO_VIDEO_*`：锚点 env（`TO_VIDEO_WORKSPACE`）优先级高于 CWD 搜索，
+def vibe_video_stripped_env() -> dict[str, str]:
+    """剥掉 `VIBE_VIDEO_*`：锚点 env（`VIBE_VIDEO_WORKSPACE`）优先级高于 CWD 搜索，
     外部残留会让用例静默锚去别处；集成模式的 env 尤其必须挡在门外。"""
-    return {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
+    return {k: v for k, v in os.environ.items() if not k.startswith("VIBE_VIDEO_")}
 
 
 def timing_constants() -> dict:
@@ -49,8 +49,8 @@ def offline_doctor_project(tmp_path: Path, monkeypatch) -> dict:
     )
     ref = tmp_path / "ref.wav"
     ref.write_bytes(b"RIFF-fixture")
-    (tmp_path / ".to-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+    (tmp_path / ".vibe-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
+    monkeypatch.setenv("VIBE_VIDEO_WORKSPACE", str(tmp_path))
 
     def offline(*_a, **_k):
         raise urllib.error.URLError("Connection refused")

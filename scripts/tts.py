@@ -10,7 +10,7 @@
     sunny-steady 为其定稿档＝同参数 + 束宽 3；另有激情/轻快/自信/正能量）。
 - 幂等：参数与文本未变则跳过（SHA1 摘要 sidecar 缓存）。
 - 版本库（indextts）：合成成功的句子按 digest 存入机器级持久库（默认
-  ~/Library/Application Support/to-video/tts-store，环境变量 TO_VIDEO_TTS_STORE
+  ~/Library/Application Support/vibe-video/tts-store，环境变量 VIBE_VIDEO_TTS_STORE
   覆盖，--no-store 禁用）；集内缓存未命中时先按 digest 回收——换 worktree / 清盘不再
   丢整集合成成果，改稿只重配变更句。历史版本按 digest 文件名并存，不互相覆盖。
 
@@ -753,7 +753,7 @@ def digest_indextts(
 #   - 合成成功 → store_deposit 入库（同 digest 刷新为最新音频；不同 digest 并存=保留历史版本）；
 #   - 集内缓存未命中 → store_restore 按 digest 回收，命中即等价集内缓存命中；
 #   - 改稿/换风格 ⇒ 新 digest 自然 miss 重配，旧版本文件保留可回退。
-# 路径是机器属性：默认值在此 + TO_VIDEO_TTS_STORE 环境变量覆盖，永不写进
+# 路径是机器属性：默认值在此 + VIBE_VIDEO_TTS_STORE 环境变量覆盖，永不写进
 # 受版本控制的 toml（与
 # config.py 对 tts.server 的立场一致；tts.py 不 import paths.py 的边界也不变
 # ——默认值是纯字面量）。仅接 indextts：edge 预置音色免密钥秒级重合成，
@@ -766,16 +766,16 @@ def digest_indextts(
 # 回退旧值、静默复活历史坏 take——死 digest 下的已知坏 take 一律改名隔离
 # （<sid>.<digest12>.mp3 → *.bad-<tag>，.sha 邻档同步），留档不删，恢复后抽检。
 
-DEFAULT_STORE = "~/Library/Application Support/to-video/tts-store"
+DEFAULT_STORE = "~/Library/Application Support/vibe-video/tts-store"
 
 
 def store_root(disabled: bool) -> Path | None:
     """版本库根目录；--no-store 或 env 置空串时返回 None（全程直通不落盘）。
 
-    解析顺序：TO_VIDEO_TTS_STORE → 默认目录（不存在则原样返回，首存即建）。"""
+    解析顺序：VIBE_VIDEO_TTS_STORE → 默认目录（不存在则原样返回，首存即建）。"""
     if disabled:
         return None
-    env = os.environ.get("TO_VIDEO_TTS_STORE")
+    env = os.environ.get("VIBE_VIDEO_TTS_STORE")
     if env == "":
         return None
     if env:
@@ -1610,7 +1610,7 @@ async def main() -> None:
     parser.add_argument(
         "--no-store",
         action="store_true",
-        help="[indextts] 禁用音频版本库（默认启用；库根目录可用环境变量 TO_VIDEO_TTS_STORE 覆盖）",
+        help="[indextts] 禁用音频版本库（默认启用；库根目录可用环境变量 VIBE_VIDEO_TTS_STORE 覆盖）",
     )
     parser.add_argument(
         "--allow-voice-switch",

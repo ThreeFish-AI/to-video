@@ -8,9 +8,9 @@ repos:
     rev: v0.14.5
     hooks:
       - id: ruff
-        name: ruff lint (to-video)
+        name: ruff lint (vibe-video)
         args: [--fix]
         files: ^(scripts|tests|assets)/
       - id: ruff-format
-        name: ruff format (to-video)
+        name: ruff format (vibe-video)
         files: ^(scripts|tests|assets)/

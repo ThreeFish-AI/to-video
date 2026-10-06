@@ -132,7 +132,7 @@ def test_main_exits_when_index_tts_root_missing(monkeypatch, tmp_path):
     calls = _mock_loop(monkeypatch, healthy_seq=[True], rc_seq=[0])
     with pytest.raises(SystemExit) as e:
         tts_resume.main(["--index-tts-root", str(tmp_path / "nope"), "--", *FWD])
-    assert "index-tts" in str(e.value) and "TO_VIDEO_INDEX_TTS_ROOT" in str(e.value)
+    assert "index-tts" in str(e.value) and "VIBE_VIDEO_INDEX_TTS_ROOT" in str(e.value)
     assert calls["tts"] == 0  # 未进合成即拦
 
 
@@ -321,10 +321,10 @@ def test_server_launch_hint_flags_anchored_to_manual():
 
 
 def test_index_tts_root_honors_env_and_flag(monkeypatch):
-    monkeypatch.setenv("TO_VIDEO_INDEX_TTS_ROOT", "/opt/idx")
+    monkeypatch.setenv("VIBE_VIDEO_INDEX_TTS_ROOT", "/opt/idx")
     assert tts_resume.index_tts_root(None) == Path("/opt/idx")
     assert tts_resume.index_tts_root("/else/where") == Path("/else/where")
-    monkeypatch.delenv("TO_VIDEO_INDEX_TTS_ROOT")
+    monkeypatch.delenv("VIBE_VIDEO_INDEX_TTS_ROOT")
     assert tts_resume.index_tts_root(None) == Path.home() / "tools/index-tts"
 
 
@@ -539,7 +539,7 @@ def test_start_server_missing_root_or_exec_exits_with_hint(tmp_path):
         tts_resume.start_server(
             ["uv", "run"], tmp_path / "no-such-dir", tmp_path / "s.log", {}
         )
-    assert "--index-tts-root" in str(e.value) and "TO_VIDEO_INDEX_TTS_ROOT" in str(
+    assert "--index-tts-root" in str(e.value) and "VIBE_VIDEO_INDEX_TTS_ROOT" in str(
         e.value
     )
 

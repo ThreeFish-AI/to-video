@@ -7,7 +7,7 @@
 从 `__file__` 向上找哨兵即可同时定位「机制」与「内容」。抽取后二者物理分离：
 
   - **skill 根**（`SKILL`）：本脚本所在技能仓的根（含 `SKILL.md`），随安装位置
-    变化（`~/.claude/skills/to-video` 软链 / `TO_VIDEO_HOME` / 任意 clone 路径），
+    变化（`~/.claude/skills/vibe-video` 软链 / `VIBE_VIDEO_HOME` / 任意 clone 路径），
     永远从 `__file__` 向上搜索——脚本自己知道自己在哪。
   - **工作区根**（`WORKSPACE`）：内容所在的任意目录（series.json / episodes/
     voices/ 的父目录），从**调用侧上下文**（CWD / `--workspace` / env）向上搜索
@@ -20,7 +20,7 @@
 pre-commit 门整体失效、试听小样写错位置且 git status 不可见）。哨兵搜索对位置
 免疫（git 找 `.git`、uv/pytest 找 `pyproject.toml` 的同一惯例）。
 
-  - 哨兵 `.to-video-root`。
+  - 哨兵 `.vibe-video-root`。
   - 为什么不用 `.git` 当工作区哨兵：相关仓的 `.git` 可能是**文件**（git worktree），
     `(p / ".git").is_dir()` 当场失效；测试 fixture 无 `.git`；`~/tools/index-tts`
     是真 `.git` 目录会误锚。`.git` 只用于 `project_root`（且文件/目录皆认）。
@@ -62,10 +62,10 @@ from pathlib import Path
 SKILL_MARKER = "SKILL.md"
 
 #: 工作区根哨兵。
-WORKSPACE_MARKERS = (".to-video-root",)
+WORKSPACE_MARKERS = (".vibe-video-root",)
 
 #: 工作区显式指派（优先于哨兵搜索）；值为工作区根绝对或相对路径。
-ENV_WORKSPACE = "TO_VIDEO_WORKSPACE"
+ENV_WORKSPACE = "VIBE_VIDEO_WORKSPACE"
 
 
 def find_upward(start: Path, markers: tuple[str, ...]) -> Path | None:
@@ -97,7 +97,7 @@ def workspace_root(start: Path | None = None) -> Path:
     """定位内容工作区根：env 显式指派 > 自 start（默认 CWD）向上搜索哨兵。
 
     解析顺序：
-      1. `TO_VIDEO_WORKSPACE` 指向的目录必须含哨兵之一（防止 env 拼写错误
+      1. `VIBE_VIDEO_WORKSPACE` 指向的目录必须含哨兵之一（防止 env 拼写错误
          静默锚到无辜目录），否则大声退出；
       2. 自 start（默认当前工作目录）向上搜索首个含哨兵的目录；
       3. 都失败则大声退出，报错须写明标记名、搜索起点与修复动作。
