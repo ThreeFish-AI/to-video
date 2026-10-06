@@ -666,3 +666,21 @@
 **后续防范**：SVG Renderer 不得拥有自己的时间轴；路径主体、身份锚点和色板由场景注入；不得使用 `timer`、`requestAnimationFrame`、`Date.now()`、随机数或帧间状态；`pathLength` 与像素版 `strokeDasharray` 不得在同一元素混用；模板新增 `@remotion/*` 必须与 Remotion 全家桶精确同版并同步 lockfile。
 
 **同类问题影响**：适用于人物描边、机制线路、UI 状态 Morph 和沿路径移动的标签/角色；需要体积、内外结构或大量粒子时仍应分别评估 Three.js 或 Canvas 2D，不把 SVG 原语泛化成所有画面类型的默认答案。
+
+## RSI-043 tts_bench.check_env 恒 return True，「环境硬门」名存实亡
+
+**表因**：`tts_bench.py --check-only` 恒退出 0；main 中「环境门未通过」分支不可达。
+**根因**：`check_env` 的 `strict` 形参从未读取，`ok` 初始化 `True` 后交换区/内存/端口占用各分支只 print 不置 False——docstring 声称「唯一硬门是已有其它 IndexTTS 实例」但 others 同样不拦（preening 测绘静态证实；2026-10-06 S8 仅剥除死形参，门语义未动）。
+**定性**：疑似阻断性缺陷（A/B 基准前置门失效，环境不合格时耗时结论不可信），待 G1 实机复现定性。
+**处理方式**：待复现后修复——恢复 ok 置 False 判定或显式改 docstring 为「纯报告」二选一，须与「静态指标一律只作告警」的历史注释对质后定案。
+**后续防范**：门函数的布尔返回值必须有置 False 的可达路径，否则改为报告函数命名（report_env）。
+**同类问题影响**：凡「返回 bool 的门」皆可静态扫描「恒真路径」复核（preening 审计方法可复用）。
+
+## RSI-044 test_config 机制常数期望值未感知 story 分档默认（集成模式预存红）
+
+**表因**：集成模式（TO_VIDEO_TEST_WORKSPACE）下 `test_real_episodes_resolve_identically_to_literal_values` 对 `agent-skills-video` 断言 `narration.chars_per_min == 280` 实得 254（2026-10-06 基线即红，单仓模式不受影响）。
+**根因**：RSI-021 引入 `chars_per_min` 默认层按 `tts.style` 分档（story=254），该测试的 `LITERALS_BEFORE_DELETION` 仍按单一默认 280 书写；新入语料集为 story 档即触发。
+**定性**：非阻断改进（测试预期 vs 分档语义漂移；单仓全绿、CI 无感）。
+**处理方式**：待办——期望值构造改为「按集生效 style 查 STYLE_CHARS_PER_MIN 分档」或对 story 集点名豁免；改断言属预期变更，走 RSI 常规流程。
+**后续防范**：钉「删除前字面值」的等价变换测试，其期望值应从 SCHEMA/分档表派生而非手抄，防分档演进再漂移。
+**同类问题影响**：`negentropy` 工作区新增 story 档集都会触发；内容仓补 LICENSE（5 集缺 source-archive/LICENSE 的同批预存红）在内容侧另行处理。
