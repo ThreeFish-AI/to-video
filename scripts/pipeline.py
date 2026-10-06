@@ -718,6 +718,10 @@ def cmd_tts(
             # 故直取而不编造兜底档名——凭空的 "sunny-steady" 会盖住配置缺失。
             # --style CLI 覆写对两语言同传（现状语义）。
             cmd += ["--style", style or tts["style"]]
+            if tts.get("duration_factor") is not None:
+                # 本集语速校准（RSI-044）：键缺省不加 token ⇒ 命令字节与通道落地前
+                # 一致 ⇒ 摘要不变，存量集零重合成；显式值进缓存摘要（改值＝整集重配）。
+                cmd += ["--duration-factor", str(tts["duration_factor"])]
         elif tts.get("voice"):
             # edge + 该语言覆写了音色（for_lang 视图带 voice 键）才透传
             cmd += ["--voice", tts["voice"]]

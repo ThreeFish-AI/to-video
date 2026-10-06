@@ -836,3 +836,171 @@ def test_max_dark_sec_schema_default_and_toml_override(tmp_path):
     )
     _cfg, _o, fails2, _w = config.load(root, required=True)
     assert any("qa.max_dark_sec" in f for f in fails2), fails2
+
+
+# ---------------- tts.duration_factor（RSI-044 语速校准通道） ----------------
+
+
+_MIN_INDEXTTS = (
+    '[episode]\nslug = "some-episode-video"\n[narration]\n'
+    'target_minutes = [1.0, 2.0]\n[tts]\nengine = "indextts"\n'
+    'ref = "voices/me-bright.wav"\nref_sha1 = "54b699cce97f"\nstyle = "story"\n'
+)
+
+
+def test_duration_factor_absent_keeps_toml_channel_closed(tmp_path):
+    """键缺省＝预设 df：cfg 不出现该键、origin 记「缺失」、不再报「未知键」WARN
+    ——通道关闭形态与历史逐字节等价（存量集零波及）。"""
+    root = _write(tmp_path, _MIN_INDEXTTS)
+    cfg, origin, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert "duration_factor" not in cfg["tts"]
+    assert origin["tts.duration_factor"] == "缺失"
+    assert not any("duration_factor" in w for w in warns), warns
+
+
+def test_duration_factor_calibrated_value_flows_through(tmp_path):
+    """显式校准值进 SCHEMA：不再是「未知键（无人读取）」，origin 记 pipeline.toml；
+    int 字面量（TOML 的 1）类型合法——validate 的收编只改局部变量，cfg 保留 int。"""
+    root = _write(tmp_path, _MIN_INDEXTTS + "duration_factor = 1.24\n")
+    cfg, origin, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert not any("未知键" in w and "duration_factor" in w for w in warns), warns
+    assert cfg["tts"]["duration_factor"] == 1.24
+    assert origin["tts.duration_factor"] == "pipeline.toml"
+
+    (root / "pipeline.toml").write_text(
+        _MIN_INDEXTTS + "duration_factor = 1\n", encoding="utf-8"
+    )
+    cfg2, _o, fails2, _w = config.load(root, required=True)
+    assert not fails2, fails2
+    # validate 的类型收编不写回 cfg：保留 TOML 字面量 int 1——下游 str(1) 经
+    # tts.py argparse float() 归一，缓存摘要口径与写 1.0 一致。
+    df2 = cfg2["tts"]["duration_factor"]
+    assert isinstance(df2, int) and df2 == 1
+
+
+def test_duration_factor_value_domain_gated(tmp_path):
+    """取值域 = tts.py --duration-factor 实际接受范围 [0.5, 2.0]；TOML 字面量
+    nan/inf（float 可达）一并被拦——「参数怎么调都不生效」先红在配置门。"""
+
+    def case(name: str) -> Path:
+        d = tmp_path / name
+        d.mkdir()
+        return d
+
+    for bad in ("0.3", "2.5", "nan", "inf"):
+        root = _write(case(f"bad-{bad}"), _MIN_INDEXTTS + f"duration_factor = {bad}\n")
+        _cfg, _o, fails, _w = config.load(root, required=True)
+        assert any("tts.duration_factor" in f and "[0.5, 2.0]" in f for f in fails), (
+            bad,
+            fails,
+        )
+    for good in ("0.5", "2.0", "1.24"):
+        root = _write(
+            case(f"good-{good}"), _MIN_INDEXTTS + f"duration_factor = {good}\n"
+        )
+        _cfg, _o, fails, _w = config.load(root, required=True)
+        assert not fails, (good, fails)
+
+
+def test_duration_factor_on_edge_engine_warns_ignored(tmp_path):
+    """edge 集写 df＝静默忽略的误配：给点名 WARN（同 tts.lang 显式覆写口径），
+    防止「以为改了语速」；indextts 集同值零 WARN。"""
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        'target_minutes = [1.0, 2.0]\n[tts]\nengine = "edge"\n'
+        "duration_factor = 1.24\n",
+    )
+    _cfg, _o, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert any("tts.duration_factor" in w and "indextts" in w for w in warns), warns
+
+
+def test_duration_factor_en_override_whitelist_excludes_it(tmp_path):
+    """逐语言覆写表不收 df：语速按整集时长硬窗校准、双语继承基础层——en 写 df
+    给可读 FAIL（白名单），而非静默忽略或悄然生效。"""
+    root = _write(
+        tmp_path,
+        _MIN_INDEXTTS + '[tts.en]\nengine = "indextts"\nref = "voices/me-bright.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\nduration_factor = 0.95\n',
+    )
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any("tts.en.duration_factor" in f and "未知" in f for f in fails), fails
+
+
+def test_duration_factor_per_lang_engine_override_warns(tmp_path):
+    """基础层 indextts + df、en 覆写 engine=edge：en 生效视图走 edge 分支、df
+    结构性不读——逐语言同口径点名，防「以为双语都校准」；基础层即 edge 的误配
+    由基础层 WARN 负责，逐语言不双报。"""
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n'
+        '[narration]\ntarget_minutes = [1.0, 2.0]\nlangs = ["zh", "en"]\n'
+        '[tts]\nengine = "indextts"\nref = "voices/me-bright.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\nduration_factor = 1.24\n'
+        '[tts.en]\nengine = "edge"\n',
+    )
+    _cfg, _o, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert any(
+        "duration_factor" in w and "en 不生效" in w and "edge" in w for w in warns
+    ), warns
+    # 基础层即 edge：df 误配由基础层 WARN 点名一次，逐语言视图不重复报
+    d = tmp_path / "base-edge"
+    d.mkdir()
+    base_edge = _write(
+        d,
+        '[episode]\nslug = "some-episode-video"\n'
+        '[narration]\ntarget_minutes = [1.0, 2.0]\nlangs = ["zh", "en"]\n'
+        '[tts]\nengine = "edge"\nduration_factor = 1.24\n'
+        '[tts.en]\nengine = "edge"\n',
+    )
+    _c, _o2, fails2, warns2 = config.load(base_edge, required=True)
+    assert not fails2, fails2
+    df_warns = [w for w in warns2 if "duration_factor" in w]
+    assert len(df_warns) == 1 and "仅生效引擎为 indextts" in df_warns[0], warns2
+
+
+def test_duration_factor_mixed_engine_no_false_ignore_warn(tmp_path):
+    """基础层 edge + df、en 覆写 indextts：en 生效视图合并后为 indextts，df 对
+    en 真实透传（cmd_tts 命令字节实证）——基础层 WARN 不得误报「忽略」（会诱导
+    删键 → en 静默变速 → 整集重配）；全部语言都不读它时才点名。"""
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n'
+        '[narration]\ntarget_minutes = [1.0, 2.0]\nlangs = ["zh", "en"]\n'
+        '[tts]\nengine = "edge"\nduration_factor = 1.24\n'
+        '[tts.en]\nengine = "indextts"\nref = "voices/me-bright.wav"\n'
+        'ref_sha1 = "54b699cce97f"\nstyle = "story"\n',
+    )
+    cfg, _o, fails, warns = config.load(root, required=True)
+    assert not fails, fails
+    assert not any("duration_factor" in w for w in warns), warns
+    # en 生效视图确已携带 df（下游 indextts 分支透传的机制依据）
+    assert config.for_lang(cfg, "en")["tts"]["duration_factor"] == 1.24
+
+
+def test_duration_factor_bool_is_readable_fail_at_config_gate(tmp_path):
+    """TOML `duration_factor = true` 须在配置门给可读 FAIL——bool 是 int 子类，
+    无显式排除会被「整数不苛求」分支收编成 1.0 静默放行（直调 tts.py 到 argparse
+    才以英文报错，编排器路径更是静默变 1.0）。核验注记 1。"""
+    root = _write(tmp_path, _MIN_INDEXTTS + "duration_factor = true\n")
+    _cfg, _o, fails, _w = config.load(root, required=True)
+    assert any(
+        "tts.duration_factor" in f and "bool" in f and "不是数值" in f for f in fails
+    ), fails
+    # bool 键自身不受误伤（archify.forbid_inset 既有真集用法）
+
+
+def test_bool_key_itself_still_accepts_bool(tmp_path):
+    root = _write(
+        tmp_path,
+        '[episode]\nslug = "some-episode-video"\n[narration]\n'
+        'target_minutes = [1.0, 2.0]\n[tts]\nengine = "edge"\n'
+        "[archify]\nforbid_inset = true\n",
+    )
+    cfg, _o, fails, _w = config.load(root, required=True)
+    assert not fails, fails
+    assert cfg["archify"]["forbid_inset"] is True
