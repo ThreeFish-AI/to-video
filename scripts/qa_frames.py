@@ -930,7 +930,7 @@ def main() -> None:
         return
 
     video = Path(args.video).resolve()
-    out = root / "out" / f"frames{langs.suffix(args.lang)}"
+    out = langs.frames_dir(root, args.lang)
     if custom_sampling:
         constants = load_constants(root)
         samples = _custom_samples(
