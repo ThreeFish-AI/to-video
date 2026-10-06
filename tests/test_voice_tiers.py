@@ -42,12 +42,16 @@ def test_stage7_spec_has_revoice_section_and_triggers():
 
 
 def test_scaffold_template_defaults_to_edge_draft():
-    """建集模板引擎默认须为 edge 草声（重配才升 indextts，ref 以注释预置）。"""
+    """建集模板引擎默认须为 edge 草声（重配才升 indextts，ref 以注释预置；头注须含对偶交付路径）。"""
     text = (ASSETS / "video-skeleton" / "pipeline.toml.tmpl").read_text(
         encoding="utf-8"
     )
     assert 'engine = "edge"' in text, "模板 tts.engine 应默认 edge（草声档）"
     assert "#ref = " in text, "模板 ref 应以注释预置（重配前才需要，非建集前置）"
+    assert "未点名重配即以 edge 成片交付" in text, (
+        "模板 [tts] 头注缺「未点名重配即以 edge 成片交付」对偶路径——"
+        "单边升档叙事＝滑动面（RSI-047 后续防范）"
+    )
 
 
 def test_stage7_gate_is_engine_branched():
@@ -83,7 +87,10 @@ def test_final_render_consumes_existing_audio_track():
     )
     spec = (REFERENCES / "10-final-render.md").read_text(encoding="utf-8")
     assert "不触发任何 TTS" in spec, "10 终渲节缺「不触发任何 TTS」终渲语义（RSI-047）"
-    assert "edge 终声集" in spec, "10 缺「edge 终声集」合法路径表述（RSI-047）"
+    assert "直接以 edge 成片交付" in spec, (
+        "10 缺「直接以 edge 成片交付」edge 成片合法路径表述（RSI-047；"
+        "锚串取本句独有指纹——「edge 终声集」系换机 runbook 存量术语可平凡满足）"
+    )
     assert "B 遍" not in spec and "A 遍" not in spec, (
         "10 不得出现两遍法术语（B 遍/A 遍）——那是 IndexTTS 存量集概念，"
         "字面把克隆两遍写成终渲相关前置（RSI-047 表因）"
