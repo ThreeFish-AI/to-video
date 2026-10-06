@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from captions import (  # noqa: E402
     build_cues,
     fmt_ts_srt,

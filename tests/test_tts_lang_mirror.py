@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import langs  # noqa: E402
 import tts  # noqa: E402
 

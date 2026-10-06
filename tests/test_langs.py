@@ -8,12 +8,10 @@ en 的 `.en` 后缀 / `audio/en/` 子目录形态在此钉死——消费者只�
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import langs  # noqa: E402
 

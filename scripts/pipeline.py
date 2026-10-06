@@ -274,13 +274,13 @@ def _status_lang(root: Path, lang: str, multi: bool) -> None:
     from timeline import load_constants
 
     sfx = langs.suffix(lang)
-    narr_md = root / "script" / f"narration{sfx}.md"
-    narr_json = root / "script" / f"narration{sfx}.json"
+    narr_md = langs.narration_md(root, lang)
+    narr_json = langs.narration_json(root, lang)
     board = root / "script" / "storyboard.md"
     manifest = langs.manifest(root, lang)
     audio_dir = langs.audio_dir(root, lang)
-    draft = root / "out" / f"draft{sfx}.mp4"
-    final = root / "out" / f"final{sfx}.mp4"
+    draft = langs.render_out(root, "draft", lang)
+    final = langs.render_out(root, "final", lang)
 
     def fresh(target: Path, *deps: Path) -> str:
         if not target.is_file():
@@ -443,6 +443,19 @@ def clean_orphan_browsers(
     return cleaned
 
 
+def _ref_sha1_line(ref: Path, expect: str | None, tag: str = "") -> tuple[str, bool]:
+    """→（报告行（不含缩进），指纹是否相符）。参考样本实况 sha1[:12] 与配置期望
+    比对——多语言循环块与主语言块共用同一口径（12 位 sha1 是跨模块指纹契约）；
+    tag 非空时在判定符后插 [tag]（多语言报告形态）。"""
+    import hashlib
+
+    sha1 = hashlib.sha1(ref.read_bytes()).hexdigest()[:12]
+    hit = sha1 == expect
+    match = "✅" if hit else "❌ 指纹不符"
+    tag_s = f" [{tag}]" if tag else ""
+    return f"{match}{tag_s} 参考样本 {ref.name} sha1={sha1}", hit
+
+
 def cmd_doctor(
     root: Path,
     cfg: dict,
@@ -479,12 +492,9 @@ def cmd_doctor(
             # 对齐下方主语言块的口径：ref 存在即校验 sha1 与文件实况
             ref = paths.WORKSPACE / view["ref"]
             if ref.is_file():
-                import hashlib
-
-                sha1 = hashlib.sha1(ref.read_bytes()).hexdigest()[:12]
-                match = "✅" if sha1 == view.get("ref_sha1") else "❌ 指纹不符"
-                print(f"     {match} [{lang}] 参考样本 {ref.name} sha1={sha1}")
-                ok = ok and sha1 == view.get("ref_sha1")
+                line, hit = _ref_sha1_line(ref, view.get("ref_sha1"), lang)
+                print(f"     {line}")
+                ok = ok and hit
             else:
                 print(f"     ⚠️  [{lang}] 参考样本缺失: {ref}")
     from timeline import load_constants
@@ -522,12 +532,9 @@ def cmd_doctor(
             )
             ok = False
         elif (ref := paths.WORKSPACE / ref_rel).is_file():
-            import hashlib
-
-            sha1 = hashlib.sha1(ref.read_bytes()).hexdigest()[:12]
-            match = "✅" if sha1 == tts.get("ref_sha1") else "❌ 指纹不符"
-            print(f"  {match} 参考样本 {ref.name} sha1={sha1}")
-            ok = ok and sha1 == tts.get("ref_sha1")
+            line, hit = _ref_sha1_line(ref, tts.get("ref_sha1"))
+            print(f"  {line}")
+            ok = ok and hit
         else:
             print(f"  ⚠️  参考样本缺失: {ref}（音频不入库；用 refs.py rebuild 重建）")
         try:

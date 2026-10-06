@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from tts import check_voice_marker, server_launch_hint, write_voice_marker  # noqa: E402
+
+from helpers import timing_constants
 
 
 def test_engine_guard_blocks_clone_flags_without_engine(tmp_path):
@@ -93,8 +95,7 @@ def _indextts_plan_project(tmp_path):
     )
     (proj / "video" / "src").mkdir(parents=True)
     (proj / "video" / "src" / "timing.json").write_text(
-        '{"fps": 30, "sentenceGapSec": 0.32, "sceneGapSec": 0.9,'
-        ' "leadInSec": 0.6, "tailSec": 2.0, "sceneCrossFadeSec": 0.4}',
+        json.dumps(timing_constants()),
         encoding="utf-8",
     )
     ref = tmp_path / "ref.wav"

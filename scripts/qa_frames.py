@@ -71,7 +71,9 @@ THEME_COLOR_RE = re.compile(
 )
 
 
-def timeline(root: Path, lang: str = langs.PRIMARY) -> dict[str, tuple[float, float]]:
+def resolve_timeline(
+    root: Path, lang: str = langs.PRIMARY
+) -> dict[str, tuple[float, float]]:
     """读 manifest + timing.json，返回 {句id: (startSec, spanSec)}。"""
     manifest = langs.manifest(root, lang)
     if not manifest.is_file():
@@ -612,7 +614,7 @@ def check_frames(
 ) -> None:
     """逐帧体检（黑帧/侵入/字幕/冻帧）+ 纯底色段跨帧时序门（RSI-020）。
 
-    `timeline`（{句id: (startSec, spanSec)}，qa_frames.timeline() 的产物）给到时
+    `timeline`（{句id: (startSec, spanSec)}，qa_frames.resolve_timeline() 的产物）给到时
     才启用纯底色段判定——须句中点采样形态；--beat-heads 的头帧名不在时间轴里，
     自然不参与。`max_dark_sec` 缺省取 SCHEMA 默认（qa.max_dark_sec），调用方传入
     toml 覆写值。
@@ -883,7 +885,7 @@ def main() -> None:
             "需要 <video> 且 --scene / --last-n / ids 三选一（或用 --check-theme）"
         )
 
-    tl = timeline(root, args.lang)
+    tl = resolve_timeline(root, args.lang)
     offset = args.offset
 
     if args.compare:
@@ -930,7 +932,7 @@ def main() -> None:
         return
 
     video = Path(args.video).resolve()
-    out = root / "out" / f"frames{langs.suffix(args.lang)}"
+    out = langs.frames_dir(root, args.lang)
     if custom_sampling:
         constants = load_constants(root)
         samples = _custom_samples(

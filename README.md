@@ -29,20 +29,20 @@
 
 ①–⑥ 为**内容层**（写作产物，由人/代理撰写），⑦–⑩ 为**生产层**（由工具执行）：
 
-| 阶段 | 产出 · 通过门 |
+| 阶段 | 产出 |
 | --- | --- |
-| ① 信源精读取证 | 取证笔记——全部断言可回溯；RISKY=0 |
-| ② 策划案生成 | planning.md 六节齐 |
+| ① 信源精读取证 | 取证笔记（A/B/C 三型分流） |
+| ② 策划案生成 | planning.md（含钩子候选矩阵） |
 | ③ 逐字稿写作 | narration.md（全片单一事实源），`build` 派生 narration.json |
-| ④ 双重校验 | 真实性 + 易懂性双门（`check`）：RISKY=0 且 REWRITE=0 |
-| ⑤ 成文优化 | 研究笔记 / 策划案 / 逐字稿 / 分镜按「结构 → 衔接 → 句子 → 词句」四层改成人写模样，只改表达不改事实：成文评审 REWRITE=0 且改动句复核 RISKY=0、REWRITE=0 |
-| ⑥ 分镜表生成 | beat 覆盖率无缺句（`check`，含分镜↔代码互比） |
+| ④ 双重校验 | 真实性 + 易懂性双重校验（`check`） |
+| ⑤ 成文优化 | 研究笔记 / 策划案 / 逐字稿 / 分镜按「结构 → 衔接 → 句子 → 词句」四层改成人写模样，只改表达不改事实 |
+| ⑥ 分镜表生成 | storyboard.md（`check` 执法 beat 覆盖与分镜↔代码互比） |
 | ⑦ TTS 配音 | 逐句 mp3 + 时长 manifest（`tts`，幂等续跑），`captions` 导出 srt/vtt |
-| ⑧ Remotion 场景实现 | React 场景组件、全代码动画：tsc 零错误 + 七条渲染红线 + 运动层铁律 |
-| ⑨ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`）零 FAIL，含尾幕渐黑必查 |
-| ⑩ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径，实测时长落在预算窗内 |
+| ⑧ Remotion 场景实现 | React 场景组件、全代码动画（tsc + 运动层单测） |
+| ⑨ 草渲 + 抽帧 QA | 半分辨率 draft.mp4 + 抽帧自动体检（`render` / `qa`） |
+| ⑩ 终渲与交付 | 1080p30 final.mp4（`render --final`）+ `deliver` 按系列子目录与集标题 vN 归档到可配根路径 |
 
-全部阶段的唯一声明源是 [`references/stages.toml`](references/stages.toml)，本表是它的人读视图；每阶段的代理规格见 [`references/`](references/)。
+全部阶段的唯一声明源是 [`references/stages.toml`](references/stages.toml)；各阶段**通过门**的权威速查见 [SKILL.md 十阶段速查](SKILL.md)（门列与 `stages.toml` 的 `gate` 逐字同源、测试执法），本表不再抄录——无执法的抄本必漂移（② 门曾缺「钩子候选矩阵」而无人察觉）。每阶段的代理规格见 [`references/`](references/)。
 
 ## 三、安装
 

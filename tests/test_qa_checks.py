@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import qa_frames  # noqa: E402
 from qa_frames import (  # noqa: E402
     beat_head_samples,

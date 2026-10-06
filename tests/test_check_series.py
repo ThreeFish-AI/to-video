@@ -16,12 +16,13 @@ to-video.toml（内容策略随内容走），空默认的「不激活」态同�
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from helpers import to_video_stripped_env
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 SCRIPT = SCRIPTS_DIR / "check_series.py"
@@ -174,13 +175,13 @@ def build_workspace(
     return ws
 
 
-def run_check(ws: Path) -> tuple[int, str]:
+def run_series_check(ws: Path) -> tuple[int, str]:
     """真脚本原地运行：SKILL 锚自脚本真实位置解析，CWD 落工作区内 → 哨兵搜索锚定。
 
     env 刻意剥掉 TO_VIDEO_*：workspace_root 的 env 优先级高于 CWD 搜索，外部
     环境残留（如集成模式的 TO_VIDEO_WORKSPACE）会让所有用例静默锚去别处。
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
+    env = to_video_stripped_env()
     r = subprocess.run(
         [sys.executable, str(SCRIPT)],
         capture_output=True,
@@ -200,7 +201,7 @@ def test_clean_repo_passes(tmp_path, sentinel):
         {"docs/other.md": "无关内容\n"},
         sentinel=sentinel,
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -209,7 +210,7 @@ def test_spoken_other_title_fails(tmp_path):
     (ep_root(ws, EP1) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 上期我们讲过《乙集标题》。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则1" in out and "乙集标题" in out
 
 
@@ -219,7 +220,7 @@ def test_spoken_own_title_passes(tmp_path):
         f"## P0\n\n- [p0-02] 欢迎来到《{EP1['title']}》。\n- [p0-03] 我们下期再见。\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out  # 自身标题 + 「下期」白名单
 
 
@@ -227,14 +228,14 @@ def test_title_order_inverted_fails(tmp_path):
     # 中性位置（非本集工程内）出现 ≥2 集标题时按首现位置判序——knowledge-map/CHANGELOG 场景
     files = {"notes.md": "先提《乙集标题》再提《甲集标题》，顺序倒置。\n"}
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], files)
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则2" in out
 
 
 def test_ordinal_binding_fails(tmp_path):
     files = {"notes.md": "第一集是《乙集标题》。\n"}
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], files)
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则3" in out
 
 
@@ -243,14 +244,14 @@ def test_dead_link_fails(tmp_path):
         "episodes/ep-a/README.md": "# 甲集标题\n[已删除](../../video-package/README.md)\n"
     }
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], files)
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则5" in out and "video-package" in out
 
 
 def test_accent_not_in_theme_fails(tmp_path):
     bad = {**EP1, "accents": ["#F5C542", "#123456"]}
     ws = build_workspace(tmp_path, [S("t", bad, EP2)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "#123456" in out
 
 
@@ -260,7 +261,7 @@ def test_accent_not_in_theme_fails(tmp_path):
 def test_two_series_each_numbered_from_one_passes(tmp_path):
     """规则 4 的 1..N 连续性按系列内判定——两个系列各自都有第 1 集是合法的。"""
     ws = build_workspace(tmp_path, [S("alpha", EP1, EP2), S("beta", OTHER1)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -268,7 +269,7 @@ def test_cross_series_title_order_not_compared(tmp_path):
     """规则 2 只在系列内比顺序：先提 beta 首集再提 alpha 首集不构成倒置。"""
     files = {"notes.md": "先提《丙集标题》，再提《甲集标题》。\n"}
     ws = build_workspace(tmp_path, [S("alpha", EP1, EP2), S("beta", OTHER1)], files)
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -278,7 +279,7 @@ def test_cross_series_spoken_title_fails(tmp_path):
     (ep_root(ws, OTHER1) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 这和《甲集标题》讲的是一回事。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则1" in out and "甲集标题" in out
 
 
@@ -286,7 +287,7 @@ def test_ordinal_binding_matches_own_series_episode(tmp_path):
     """规则 3 判据是「标题 → 它自己的序号」：beta 首集旁写第一集合法。"""
     files = {"notes.md": "第一集是《丙集标题》。\n"}
     ws = build_workspace(tmp_path, [S("alpha", EP1, EP2), S("beta", OTHER1)], files)
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -294,7 +295,7 @@ def test_duplicate_slug_across_series_fails(tmp_path):
     """slug 是工程目录名，跨系列也必须唯一（否则两系列指向同一工程）。"""
     dup = {**OTHER1, "slug": EP1["slug"], "path": EP1["path"], "title": "丁集标题"}
     ws = build_workspace(tmp_path, [S("alpha", EP1), S("beta", dup)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则4" in out and "重复" in out
 
 
@@ -304,7 +305,7 @@ def test_series_without_episodes_exits(tmp_path):
         json.dumps({"seriesList": [{"id": "empty", "episodes": []}]}),
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc != 0 and "无 episodes" in out
 
 
@@ -323,7 +324,7 @@ def test_orphan_with_narration_fails(tmp_path):
     (orphan / "script" / "narration.md").write_text(
         "## P0\n\n- [p0-01] 独立成片。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则4" in out and "orphan-video" in out
     assert "已有 narration.md" in out
 
@@ -334,7 +335,7 @@ def test_orphan_scaffold_warns_not_fails(tmp_path):
     ws = build_workspace(tmp_path, [S("t", EP1)], {})
     orphan = ws / "episodes" / "orphan-video"
     (orphan / "script").mkdir(parents=True)  # 只有空 script/，narration 未落盘
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "WARN 规则4" in out and "orphan-video" in out
     assert "转 FAIL" in out
 
@@ -342,7 +343,7 @@ def test_orphan_scaffold_warns_not_fails(tmp_path):
 def test_registered_episode_no_orphan_message(tmp_path):
     """已登记集不触发反向登记消息（默认 fixture 即此形态，显式锁死）。"""
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "未登记到 series.json" not in out
 
 
@@ -353,7 +354,7 @@ def test_same_hex_within_series_fails(tmp_path):
     """系列内两集共用同一 accent 是视觉契约违规（references/08「已用色错开」）。"""
     clash = {**EP2, "accents": [EP1["accents"][0]]}
     ws = build_workspace(tmp_path, [S("t", EP1, clash)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则4" in out and "撞色" in out and EP1["accents"][0] in out
     assert "ep-a" in out and "ep-b" in out
 
@@ -362,14 +363,14 @@ def test_same_hex_across_series_passes(tmp_path):
     """跨系列撞色是接受态：两系列发布顺序与视觉契约各自独立（docstring 已固定）。"""
     clash = {**OTHER1, "accents": [EP1["accents"][0]]}
     ws = build_workspace(tmp_path, [S("alpha", EP1), S("beta", clash)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "撞色" not in out
 
 
 def test_occupied_hex_info_line_present(tmp_path):
     """每系列刷一行已用色登记（references/08 登记表的机器化输出）。"""
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "INFO 规则4：t 已用色" in out
     assert EP1["accents"][0] in out and EP2["accents"][0] in out
 
@@ -380,7 +381,7 @@ def test_occupied_hex_info_line_present(tmp_path):
 def test_storyboard_with_empty_scenes_fails(tmp_path):
     """storyboard 定稿后 scenes/ 仍空：口播已定、画面未写，规则 6 第一判据。"""
     ws = build_workspace(tmp_path, [S("t", EP1)], {}, scene_names={EP1["slug"]: ()})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则6" in out and EP1["slug"] in out and "为空" in out
 
 
@@ -392,7 +393,7 @@ def test_registry_entry_without_scene_file_fails(tmp_path):
     ws = build_workspace(tmp_path, [S("t", EP1)], {})
     # 删掉注册表里的 P0Hook 的实体文件：注册与 import 都在，文件没了
     (ep_root(ws, EP1) / "video/src/scenes/P0Hook.tsx").unlink()
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则6" in out and "P0Hook" in out
 
 
@@ -406,7 +407,7 @@ def test_registry_entry_without_import_fails(tmp_path):
         main.replace("import {P0Hook} from './scenes/P0Hook';\n", ""),
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则6" in out and "P0Hook" in out and "import" in out
 
 
@@ -418,14 +419,14 @@ def test_scene_file_not_registered_warns(tmp_path):
     (ep_root(ws, EP1) / "video/src/scenes/HelperCard.tsx").write_text(
         scene_file("HelperCard"), encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "WARN 规则6" in out and "HelperCard" in out
 
 
 def test_no_storyboard_rule6_silent(tmp_path):
     """storyboard 未落盘（阶段②完成前）是合法脚手架期，规则 6 整体不执法。"""
     ws = build_workspace(tmp_path, [S("t", EP1)], {}, scene_names={EP1["slug"]: None})
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "规则6" not in out
 
 
@@ -441,7 +442,7 @@ def test_project_falls_back_to_workspace_without_git(tmp_path):
     (ep_root(ws, EP1) / "README.md").write_text(
         "# 甲集标题\n[死链](../../video-package/README.md)\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "FAIL 规则5：episodes/ep-a/README.md 死链" in out
 
 
@@ -455,7 +456,7 @@ def test_project_anchors_to_git_file_pointer_above_workspace(tmp_path):
     (ep_root(ws, EP1) / "README.md").write_text(
         "# 甲集标题\n[死链](../../video-package/README.md)\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     # 「ws/」前缀 = PROJECT 锚在宿主层（工作区相对路径拼上了工作区目录名）
     assert rc == 1 and "FAIL 规则5：ws/episodes/ep-a/README.md 死链" in out
 
@@ -475,7 +476,7 @@ def test_project_globs_cover_host_repo_files(tmp_path):
     (host / "docs" / "knowledge-map.md").write_text(
         "第一集是《乙集标题》。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     # 消息路径相对 PROJECT（宿主层）：无「ws/」前缀
     assert rc == 1 and "规则3" in out and "docs/knowledge-map.md" in out
 
@@ -489,7 +490,7 @@ def test_project_globs_default_empty_host_files_uncovered(tmp_path):
     (host / "docs" / "knowledge-map.md").write_text(
         "第一集是《乙集标题》。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "规则3" not in out
 
 
@@ -515,7 +516,7 @@ def test_rule7_course_word_in_narration_fails(tmp_path):
     (ep_root(ws, COURSE_S) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 课程作者拆过源码，他说……\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "课程" in out
 
 
@@ -526,7 +527,7 @@ def test_rule7_chapter_id_in_storyboard_fails(tmp_path):
     (ep_root(ws, COURSE_S) / "script/storyboard.md").write_text(
         "## P0\n\n- 0-A 开场（对应 s01）\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "s01" in out
 
 
@@ -539,7 +540,7 @@ def test_rule7_site_url_in_scene_fails(tmp_path):
         "export const P0Hook = () => null;\n// 信源：learn.shareai.run/zh/s01/\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "learn.shareai" in out
 
 
@@ -551,7 +552,7 @@ def test_rule7_anonymized_attribution_passes(tmp_path):
     (ep_root(ws, COURSE_S) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 有人拆过它的源码，他说……\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -564,7 +565,7 @@ def test_rule7_research_layer_not_policed(tmp_path):
     (ep_root(ws, COURSE_S) / "research/source-notes.md").write_text(
         "课程作者拆过源码（具名归属，仓内义务）。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -576,7 +577,7 @@ def test_rule7_zhandian_word_course_series_fails(tmp_path):
     (ep_root(ws, COURSE_S) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 配套站点上还有一张图。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "站点" in out
 
 
@@ -586,7 +587,7 @@ def test_rule7_zhandian_word_paper_series_passes(tmp_path):
     (ep_root(ws, EP1) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 官方工程站点统计出的三张活地图。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -597,7 +598,7 @@ def test_rule7_strong_marker_in_paper_series_fails(tmp_path):
     (ep_root(ws, EP1) / "script/storyboard.md").write_text(
         "## P0\n\n- 0-A 开场（对应 s13 后台任务）\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "s13" in out
 
 
@@ -610,7 +611,7 @@ def test_rule7_chapter_id_cjk_adjacent_fails(tmp_path):
     (ep_root(ws, COURSE_S) / "script/storyboard.md").write_text(
         "## P0\n\n- 0-A 开场（对应s01的循环）\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "s01" in out
 
 
@@ -622,7 +623,7 @@ def test_rule7_chapter_id_cjk_adjacent_trailing_fails(tmp_path):
     (ep_root(ws, COURSE_S) / "script/narration.md").write_text(
         "## P0\n\n- [p0-02] 看s13的后台任务。\n", encoding="utf-8"
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "s13" in out
 
 
@@ -636,7 +637,7 @@ def test_rule7_chapter_id_prefix_suffix_ascii_still_exempt(tmp_path):
         "## P0\n\n- 0-A 开场（对比 as01 / s01e02 / s01_agent_loop 三种写法）\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -682,7 +683,7 @@ def test_rule8_next_card_stale_title_fails(tmp_path):
         COURSE_S,
         "// {'下期 · 规划层'} {'旧标题占位'}",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则8" in out and "视野是安排出来的" in out
 
 
@@ -699,7 +700,7 @@ def test_rule8_own_identity_card_missing_fails(tmp_path):
         COURSE_S,
         "// 只有下期卡：{'视野是安排出来的'}，身份卡标题没更新",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则8" in out and "身份卡缺本集标题" in out
 
 
@@ -727,7 +728,7 @@ def test_rule8_synced_cards_pass(tmp_path):
         NEXT_EP2,
         "// {'视野是安排出来的'}（末集，无下期断言）",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -738,7 +739,7 @@ def test_rule8_paper_series_not_policed(tmp_path):
     )
     # EP1 的 P6 只有「我们下期再见」，无任何标题卡
     _write_p6(ws, EP1, "// {'我们下期再见'}")
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -754,7 +755,7 @@ def test_rules_7_8_inactive_without_workspace_config(tmp_path):
         "## P0\n\n- [p0-02] 配套站点上还有一张图。\n", encoding="utf-8"
     )
     _write_p6(ws, COURSE_S, "// {'下期 · 规划层'} {'旧标题占位'}")
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0 and "规则7" not in out and "规则8" not in out
 
 
@@ -769,7 +770,7 @@ def test_rule1_en_ordinal_word_fails(tmp_path):
         "## P0\n\n- [p0-01] In the previous episode we covered the loop.\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则1" in out and "previous episode" in out
 
 
@@ -781,7 +782,7 @@ def test_rule1_en_next_time_closing_passes(tmp_path):
         "## P0\n\n- [p0-01] That is the whole picture. See you next time!\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
 
 
@@ -794,13 +795,13 @@ def test_rule1_en_ordinal_word_boundaries(tmp_path):
         "## P0\n\n- [p0-01] This series of commands builds the index.\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 0, out
     en_md.write_text(
         "## P0\n\n- [p0-01] In the last episode we built the index.\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则1" in out and "last episode" in out
 
 
@@ -814,5 +815,5 @@ def test_rule7_en_narration_in_audience_globs(tmp_path):
         "## P0\n\n- [p0-01] See the course site for details (s01).\n",
         encoding="utf-8",
     )
-    rc, out = run_check(ws)
+    rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "s01" in out and "narration.en.md" in out

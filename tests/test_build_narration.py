@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from helpers import zh_digest as _zh_digest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "build_narration.py"
 
@@ -204,11 +205,6 @@ def make_bi_project(
     if toml is not None:
         (root / "pipeline.toml").write_text(toml, encoding="utf-8")
     return root
-
-
-def _zh_digest(text: str) -> str:
-    """与 build_narration.zh_digest 同口径（sha1 前 12 位）——锁内容的期望值。"""
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
 def test_en_build_happy_path_json_and_lock(tmp_path):

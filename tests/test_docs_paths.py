@@ -29,18 +29,16 @@ references/ 下的手册（VOICE-CLONING.md 等，非 NN- 阶段规格）与根 
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from paths import skill_root  # noqa: E402
 
 REFERENCES = skill_root() / "references"
 #: 阶段规格（显式 NN- glob：同目录的手册不进变量/混锚规则的受检面）
 STAGE_SPECS = "[0-9][0-9]-*.md"
-README = REFERENCES / "PIPELINE.md"
+PIPELINE_MD = REFERENCES / "PIPELINE.md"
 SKILL_MD = skill_root() / "SKILL.md"
 RSI_MD = skill_root() / "RSI.md"
 PLAYBOOK_MD = REFERENCES / "MODELING-PLAYBOOK.md"
@@ -68,11 +66,11 @@ EXTERNAL_LINK_RE = re.compile(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|#)")
 
 
 def scanned_docs() -> list[Path]:
-    """受检面：README（变量 SSOT）+ 根 RSI.md + 建模手册 + 全部阶段文档 + SKILL.md。"""
+    """受检面：PIPELINE.md（变量 SSOT）+ 根 RSI.md + 建模手册 + 全部阶段文档 + SKILL.md。"""
     return [
         p
         for p in (
-            README,
+            PIPELINE_MD,
             SKILL_MD,
             RSI_MD,
             PLAYBOOK_MD,
@@ -145,10 +143,10 @@ def test_fences_are_balanced():
 def test_path_variables_defined_exactly_once_in_readme():
     """判据 1（SSOT 正向）：$T/$W/$P/$V 在 references/PIPELINE.md 各定义恰好一次。
 
-    「机制在哪、内容在哪」两个事实只在 README 落一次，其余文档全部引用；
+    「机制在哪、内容在哪」两个事实只在 PIPELINE.md 落一次，其余文档全部引用；
     重复定义意味着搬迁/改名时要同步 N 处——上次迁移正是靠 N 处未同步暴露的。
     """
-    readme = README.read_text(encoding="utf-8")
+    readme = PIPELINE_MD.read_text(encoding="utf-8")
     defined = [m.group(1) for m in VAR_DEF_RE.finditer(readme)]
     for var in "TWPV":
         n = defined.count(var)
@@ -161,7 +159,7 @@ def test_path_variables_defined_exactly_once_in_readme():
 def test_only_readme_defines_path_variables():
     """判据 1（SSOT 反向）：skills 与 SKILL.md 只引用不定义。"""
     for p in scanned_docs():
-        if p == README:
+        if p == PIPELINE_MD:
             continue
         hits = [m.group(1) for m in VAR_DEF_RE.finditer(p.read_text(encoding="utf-8"))]
         assert not hits, (
@@ -256,7 +254,7 @@ def user_facing_files() -> list[Path]:
     return (
         sorted(SCRIPTS.glob("*.py"))
         + sorted(REFERENCES.glob(STAGE_SPECS))
-        + [README, SKILL_MD, RSI_MD, PLAYBOOK_MD]
+        + [PIPELINE_MD, SKILL_MD, RSI_MD, PLAYBOOK_MD]
         + templates
     )
 
@@ -425,7 +423,7 @@ def test_pipeline_section_refs_resolve():
     「字体可复现性」节——该事实条在 08；链接可达门只验文件，不验节名）。"""
     headings = [
         ln
-        for ln in README.read_text(encoding="utf-8").splitlines()
+        for ln in PIPELINE_MD.read_text(encoding="utf-8").splitlines()
         if ln.startswith("#")
     ]
     checked, dangling = 0, []

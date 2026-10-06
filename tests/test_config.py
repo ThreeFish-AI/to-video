@@ -27,9 +27,8 @@ import pytest
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 GOLDEN_EPISODE_TOML = FIXTURES / "golden-episode" / "pipeline.toml"
-sys.path.insert(0, str(SCRIPTS))
 
-import config  # noqa: E402 - sys.path 注入后导入
+import config  # noqa: E402 - conftest 已注入 scripts/
 
 #: 删除前各集 toml 里逐字写着的值（机制常数）。删除后必须由默认值层还原出同一结果。
 LITERALS_BEFORE_DELETION = {
