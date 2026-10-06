@@ -51,7 +51,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver
 - [ ] `out/final.mp4`（1080p30，h264/aac192K；`remotion ffmpeg -i` 核流摘要）
 - [ ] `out/captions.srt` + `out/captions.vtt`
 - [ ] 封面帧（可从 `qa_frames.py` 挑一张标题卡帧，或 `remotion still` 单渲）
-- [ ] 全片逐幕抽帧复检 + `--last-n 6 --check`（时长在末次重配后又位移过，勿复用此前结论）
+- [ ] 全片逐幕抽帧复检 + `--last-n 6 --check`（时长在末次 TTS 后又位移过——edge 或克隆皆同，勿复用此前结论）
 - [ ] 交付时长以 `total_duration_in_frames`（timeline.py 纯函数）**现算**，登记时连复算式一起写（`= 23820 帧 @30fps = 794.00s` 形态）——勿抄上次输出/README/series.json 里的旧数字：四集曾统一短 2.19s（登记值取了音轨末点而非含 `tailSec` 的片尾），有复算式的那一集才对（ISSUE-171）
 - [ ] `pipeline.py check` 实测口径在预算窗内
 - [ ] deliver 归档副本（根路径已配置时）：`<根>/<系列id>/<集标题> vN.mp4`
