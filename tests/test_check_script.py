@@ -1236,3 +1236,145 @@ def test_subtitle_width_skips_old_gen_subtitle(project):
     rc, out = run_check(project)
     assert rc == 0, out
     assert "门不适用，点名跳过" in out
+
+
+# ---------- theme 死字符串门（RSI-043） ----------
+
+
+def test_quoted_theme_literal_fails(project):
+    """`background: 'theme.bgDeep'` 保留引号 = 字符串字面量非常量引用 → FAIL。
+
+    事故行取自 ep1 提交 b542a2ae5 的原样形态（hex→theme 批量替换保留引号，
+    12 处死字符串、8 轮门全绿，直到 git show 逐行对账才揭穿）。"""
+    write_scene(
+        project,
+        "P1Card.tsx",
+        "const card = {\n"
+        "  width: 380,\n"
+        "  background: 'theme.bgDeep',\n"
+        "  border: `2px solid ${theme.panelBorder}`,\n"
+        "};\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 1, out
+    assert "P1Card.tsx:3 带引号的 theme 死字符串 'theme.bgDeep'" in out, out
+    assert "去引号改读常量" in out
+
+
+def test_quoted_theme_unquoted_reference_passes(project):
+    """去引号后是常量引用（R9 修复形态）——不命中。"""
+    write_scene(
+        project,
+        "P1Card.tsx",
+        "const card = {\n  background: theme.bgDeep,\n  color: theme.text,\n};\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "死字符串" not in out
+
+
+def test_quoted_theme_comments_skipped(project):
+    """注释行（//、JSX {/* */}、JSDoc * 续行）里的形态不报——说明文字提到
+    theme 常量是评审留痕常态，不是缺陷。"""
+    write_scene(
+        project,
+        "P1Card.tsx",
+        "// 原 '#0B0E13' 已收敛为 'theme.bgDeep'（RSI-043 判例）\n"
+        "const card = {\n"
+        "  background: theme.bgDeep,\n"
+        "};\n"
+        "{/* 上一版写的是 'theme.bgDeep' 被门拦下 */}\n"
+        "/**\n"
+        " * 历史上 'theme.bgDeep' 曾是死字符串\n"
+        " */\n"
+        "export default card;\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "死字符串" not in out
+
+
+def test_quoted_theme_filename_literal_exempt(project):
+    """`theme.ts` 文件名字面引用是合法上屏形态（agent-skills 集图表配色
+    code 标注先例）——词表豁免不报。"""
+    write_scene(
+        project,
+        "P5Note.tsx",
+        "const NOTES = [\n  {zh: '图表配色沿用', code: 'theme.ts'},\n];\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "死字符串" not in out
+
+
+def test_quoted_theme_inside_longer_string_not_hit(project):
+    """引号内**整串**恰为 theme 成员路径才算——长文案含该子串（说明文字）
+    不命中，这是零误报的判据核心。"""
+    write_scene(
+        project,
+        "P5Note.tsx",
+        "const label = 'theme.bgDeep 是画框内衬色，见 theme.ts';\n"
+        "const tip = `use theme.bgDeep via import`;\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "死字符串" not in out
+
+
+def test_quoted_theme_ok_annotation_downgrades_to_warn(project):
+    """命中行注 `quoted-theme-ok: <理由>` 豁免 → WARN 留痕，退出码 0。"""
+    write_scene(
+        project,
+        "P1Card.tsx",
+        "const card = {\n"
+        "  // quoted-theme-ok: 教学演示死字符串形态本尊\n"
+        "  background: 'theme.bgDeep',\n"
+        "};\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 0, out
+    assert "quoted-theme-ok 豁免" in out
+
+
+def test_quoted_theme_double_quotes_in_components(project):
+    """components/ 同在扫面；双引号形态同罪。"""
+    d = project / "video" / "src" / "components"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "Banner.tsx").write_text(
+        'const style = {background: "theme.bg"};\n', encoding="utf-8"
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 1, out
+    assert "components/Banner.tsx:1 带引号的 theme 死字符串 'theme.bg'" in out, out
+
+
+def test_quoted_theme_same_line_dedup(project):
+    """同行同串多命中只报一条（行尾注释复述同一串不双报）。"""
+    write_scene(
+        project,
+        "P1Card.tsx",
+        "const card = {\n"
+        "  background: 'theme.bgDeep', // 原 '#0B0E13' → 'theme.bgDeep'\n"
+        "  color: 'theme.text', color2: 'theme.text',\n"
+        "};\n",
+    )
+    write_board(project, BOARD_OK)
+    write_config(project, CFG_OK)
+    rc, out = run_check(project)
+    assert rc == 1, out
+    assert out.count("'theme.bgDeep'") == 1, out
+    assert out.count("'theme.text'") == 1, out

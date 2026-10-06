@@ -27,6 +27,11 @@ t({zh, en}) 双语对的含汉字字面量，WARN-only）。
 静默缩小，同 ISSUE-168）：场景代码里与口播逐字相同的画面文字，与烧录字幕叠成
 同屏两层。语言相关门，zh / en 各自对本语言字幕面执法；--pre-tts 不跑（场景未写）。
 
+theme 死字符串门（RSI-043，FAIL，**缺省执法、无需 flag**）：`'theme.bgDeep'`
+带引号 = 字符串字面量而非常量引用——非法 CSS 色值被浏览器静默丢弃（背景透明），
+tsc 放行（style 值类型是 string），色值探针也失明（ep1 实锤 12 处、8 轮门全绿）。
+语言无关，只在主稿执法；--pre-tts 不跑（场景未写）。
+
 可选 --check-scenes：从 video/src/scenes/*.tsx 提取 beatWindow/w('id','id')
 调用，与分镜表互比（WARN，TSX 正则本质近似）；at()/dur() 引用的句 id 须真实
 存在（FAIL，ISSUE-190）。
@@ -1009,6 +1014,77 @@ def check_motion(root: Path, msgs: list[str]) -> None:
             warn(msgs, f"镜 {beat}：分镜声明 @{verb}，但 {scene_pref} 场景代码未调用")
 
 
+#: 引号内整串恰为 theme 成员路径的字符串字面量（单/双引号同罪）——`'theme.bgDeep'`
+#: 是死字符串不是常量引用（RSI-043）。反引号不抓：含插值时前缀后缀混排，整串判据
+#: 失效；引号自带的定界使引号外字符不影响命中。
+QUOTED_THEME_RE = re.compile(r"'(theme\.[A-Za-z_]\w*)'|\"(theme\.[A-Za-z_]\w*)\"")
+#: 词表豁免：`theme.ts` 恰为设计文件名，画面 code 标注字面引用它是合法上屏形态
+#: （agent-skills 集「图表配色沿用 theme.ts」先例）；作为 style 值的场景不存在。
+THEME_FILENAME_LITERALS = {"theme.ts"}
+#: 逐处豁免：命中行或其上一行注 `quoted-theme-ok: <理由>`（理由必填）→ 降为 WARN
+#: 留痕。逃逸口必须存在且必须被记录（同 caption-dup-ok 立场）。
+_QUOTED_OK_RE = re.compile(r"quoted-theme-ok[:：](.*)$")
+
+
+def _quoted_ok_reason(line: str) -> str:
+    """→ 该行 `quoted-theme-ok:` 标记的理由（剥注释闭合符）；无标记或理由为空 → ""。"""
+    m = _QUOTED_OK_RE.search(line)
+    return re.sub(r"\*/\}?\s*$", "", m.group(1)).strip() if m else ""
+
+
+def check_quoted_theme_literals(root: Path, msgs: list[str]) -> None:
+    """带引号的 theme 死字符串 → FAIL（RSI-043，语言无关，缺省执法）。
+
+    `background: 'theme.bgDeep'` 保留引号 = 字符串字面量：浏览器把它当非法 CSS
+    色值静默丢弃（背景透明），tsc 放行（React style 值类型是 string），「裸 hex
+    vs theme.ts 登记集」探针也不认识这个形态——三类既有门全部失明（ep1 实锤
+    12 处、8 轮人工评审与全部机器门全绿，直到 git show 逐行对账才揭穿）。
+
+    判据窄到零误报：引号内**整串**恰为 `theme.<标识符>` 才算（`'theme.bgDeep
+    的用法'` 长文案、`'use theme.bgDeep'` 不命中）；注释行跳过（同
+    _SCENE_COMMENT_RE 口径：`//`、`/* */`、JSDoc `*` 续行、JSX `{/* */}`）；
+    `theme.ts` 文件名字面引用豁免（THEME_FILENAME_LITERALS）；同行同串去重。
+    命中行或其上一行注 `quoted-theme-ok: <理由>` 降为 WARN 留痕。
+    """
+    for sub in ("scenes", "components"):
+        src_dir = root / "video" / "src" / sub
+        if not src_dir.is_dir():
+            continue
+        for tsx in sorted(src_dir.glob("*.tsx")):
+            lines = tsx.read_text(encoding="utf-8").splitlines()
+            for lineno, line in enumerate(lines, 1):
+                if _SCENE_COMMENT_RE.match(line):
+                    continue
+                seen_lits: set[str] = set()  # 同行同串只报一条（行尾注释复述不双报）
+                for m in QUOTED_THEME_RE.finditer(line):
+                    lit = m.group(1) or m.group(2)
+                    if lit in THEME_FILENAME_LITERALS or lit in seen_lits:
+                        continue
+                    ok = next(
+                        (
+                            r
+                            for ln in (lineno, lineno - 1)
+                            if ln >= 1 and (r := _quoted_ok_reason(lines[ln - 1]))
+                        ),
+                        "",
+                    )
+                    where = f"{tsx.relative_to(root)}:{lineno} "
+                    if ok:
+                        warn(
+                            msgs,
+                            f"{where}带引号的 theme 死字符串 '{lit}'"
+                            f"（quoted-theme-ok 豁免：{ok}）",
+                        )
+                    else:
+                        fail(
+                            msgs,
+                            f"{where}带引号的 theme 死字符串 '{lit}'——字符串字面量非常量"
+                            "引用，浏览器静默丢弃（背景透明，tsc/色值探针均不拦）；"
+                            "去引号改读常量（刻意为之则注 quoted-theme-ok: <理由>）",
+                        )
+                    seen_lits.add(lit)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="④⑥ 内容门：覆盖性/预算/淡入不变式")
     ap.add_argument("--project", default=".", help="视频工程根目录")
@@ -1194,6 +1270,7 @@ def main() -> None:
         check_opening_hook(items, lang, msgs)
         check_fade_invariant(root, msgs)
         check_caption_duplication(root, items, msgs)
+        check_quoted_theme_literals(root, msgs)
         if args.term_density:
             check_term_density(items, args.terms.split(","), msgs)
         if args.check_scenes:
