@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import tts  # noqa: E402
+
+from helpers import timing_constants
 
 # dream-rsi P0 前 11 句（test_tts_blocks 的回归语料，与 .temp 试听集同源）
 P0 = [
@@ -826,7 +828,7 @@ def _story_steady_plan(tmp_path, lang: str = "zh"):
     )
     (proj / "video" / "src").mkdir(parents=True)
     (proj / "video" / "src" / "timing.json").write_text(
-        '{"fps": 30, "sentenceGapSec": 0.32, "sceneGapSec": 0.9, "leadInSec": 0.6, "tailSec": 2.0, "sceneCrossFadeSec": 0.4}',
+        json.dumps(timing_constants()),
         encoding="utf-8",
     )
     ref = tmp_path / "ref.wav"

@@ -14,8 +14,9 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_archify_coverage.py"
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from check_archify_coverage import extract_cues  # noqa: E402 - 直调观测 fit（CLI 门输出不含）
+
+from helpers import timing_constants  # noqa: E402 - conftest 已注入 scripts/
 
 NARRATION = [
     {"id": "p0-01", "scene": "P0", "text": "甲"},
@@ -122,16 +123,7 @@ def build(
             encoding="utf-8",
         )
         (src / "timing.json").write_text(
-            json.dumps(
-                {
-                    "fps": 30,
-                    "sentenceGapSec": 0.32,
-                    "sceneGapSec": 0.9,
-                    "leadInSec": 0.6,
-                    "tailSec": 2.0,
-                    "sceneCrossFadeSec": 0.4,
-                }
-            ),
+            json.dumps(timing_constants()),
             encoding="utf-8",
         )
     if manifest is not None:
@@ -145,7 +137,7 @@ def build(
     return root
 
 
-def run_gate(root: Path) -> tuple[int, str]:
+def run_coverage_gate(root: Path) -> tuple[int, str]:
     r = subprocess.run(
         [sys.executable, str(SCRIPT), "--project", str(root)],
         capture_output=True,
@@ -160,7 +152,7 @@ def run_gate(root: Path) -> tuple[int, str]:
 
 def test_all_green(tmp_path):
     root = build(tmp_path)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
     assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
     assert "FAIL 0" in out and "WARN 0" in out, out
@@ -169,7 +161,7 @@ def test_all_green(tmp_path):
 def test_id_gaps_and_suffixes_counted(tmp_path):
     """跳号（p1-02 不存在）与后缀句（p1-01a 被锚）不影响统计口径。"""
     root = build(tmp_path)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
     assert "3/5（60.0%）" in out
     assert "Traceback" not in out
@@ -180,7 +172,7 @@ def test_id_gaps_and_suffixes_counted(tmp_path):
 
 def test_anchor_ratio_floor_fails(tmp_path):
     root = build(tmp_path, toml=TOML_OK + "\n[archify]\nmin_anchor_ratio = 0.9\n")
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "锚定率" in out and "还差" in out
 
@@ -190,7 +182,7 @@ def test_zero_anchor_scene_fails_then_exempted(tmp_path):
     root = build(
         tmp_path, board=board, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": SCENE_EMPTY}
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "P1：整幕" in out and "豁免须在" in out
 
@@ -201,7 +193,7 @@ def test_zero_anchor_scene_fails_then_exempted(tmp_path):
         scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": SCENE_EMPTY},
         toml=TOML_OK + '\n[archify]\nexempt_scenes = ["P1"]\n',
     )
-    rc2, out2 = run_gate(root2)
+    rc2, out2 = run_coverage_gate(root2)
     assert rc2 == 0, out2
     assert "P1 豁免零锚判定" in out2
     assert not [
@@ -217,7 +209,7 @@ def test_declared_beat_range_zero_anchor_fails(tmp_path):
     )
     # 1-B 区间只有 p1-03，无锚句（p1-01a 在 1-A）→ 声明镜零锚 FAIL
     root = build(tmp_path, board=board)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "镜 1-B" in out and "句区间零锚" in out
 
@@ -228,7 +220,7 @@ def test_declared_beat_range_zero_anchor_fails(tmp_path):
 def test_unresolvable_token_fails(tmp_path):
     board = BOARD_OK.replace("章 `ch1`+`ch2`", "章 `symptoms`")
     root = build(tmp_path, board=board)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "无法解析" in out and "`symptoms`" in out
 
@@ -242,7 +234,7 @@ def test_declared_chapter_not_implemented_fails(tmp_path):
     root = build(
         tmp_path, board=board, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": SCENE_EMPTY}
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "未在任何 cue 实现" in out and "三章" in out
 
@@ -250,7 +242,7 @@ def test_declared_chapter_not_implemented_fails(tmp_path):
 def test_undeclared_cue_warns_not_fails(tmp_path):
     board = BOARD_OK.replace("章 `ch1`+`ch2`", "章 `ch1`")
     root = build(tmp_path, board=board)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0
     assert "未在分镜声明" in out and "ch2" in out
 
@@ -258,7 +250,7 @@ def test_undeclared_cue_warns_not_fails(tmp_path):
 def test_label_token_resolves(tmp_path):
     """章 token 写 label（三章）同样可对账——分镜用中文 label 是既有惯例。"""
     root = build(tmp_path)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
     assert "三章" not in [ln for ln in out.splitlines() if "无法解析" in ln]
 
@@ -272,7 +264,7 @@ def test_chapter_monotonicity_warns(tmp_path):
         "{chapterId: 'ch1', at: at('p0-02') - bA.from, durationInFrames: dur('p0-02')},",
     )
     root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0  # 合法叙事重组 → WARN 不判死
     assert "逆序" in out and "ch2" in out and "ch1" in out
 
@@ -281,7 +273,7 @@ def test_chapter_not_in_views_fails(tmp_path):
     scene = SCENE_P1.replace("chapterId: 'ch3'", "chapterId: 'chX'")
     board = BOARD_OK.replace("章 `三章`", "章 `chX`")
     root = build(tmp_path, board=board, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "views 里不存在的章节" in out
 
@@ -293,7 +285,7 @@ def test_cue_at_form_assertion(tmp_path):
         "at: 0, durationInFrames: 60",
     )
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc != 0
     assert "未识别出" in out and "at('句id')" in out
 
@@ -302,7 +294,7 @@ def test_cue_count_assertion(tmp_path):
     """ArchifyRecap 块外的 `chapterId:` 字面量 → 计数断言硬失败。"""
     scene = SCENE_P1 + "const stray = {chapterId: 'ch9'};\n"
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc != 0
     assert "只识别出" in out
 
@@ -332,7 +324,7 @@ def test_prettier_multiline_cue_objects_parse(tmp_path):
     把合法 cue 打成「声明 N 只识别 M」——多行与 `{ ` 空格两形态均可解析，锚定
     统计与单行基线逐数一致。"""
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0_PRETTIER, "P1X.tsx": SCENE_P1})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
     assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
     assert "FAIL 0" in out and "WARN 0" in out, out
@@ -346,7 +338,7 @@ def test_multiline_cue_still_enforces_at_form(tmp_path):
         "at: 0,\n        durationInFrames: 60,",
     )
     root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc != 0
     assert "未识别出" in out and "at('句id')" in out
 
@@ -356,7 +348,7 @@ def test_prettier_form_count_assertion_still_fires(tmp_path):
     识别 M」——放宽的是格式容错，不是对账口径。"""
     scene = SCENE_P0_PRETTIER + "const stray = {\n  chapterId: 'ch9',\n};\n"
     root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc != 0
     assert "只识别出" in out
 
@@ -375,7 +367,7 @@ def test_prettier_double_quote_cues_parse(tmp_path):
         .replace("dur('p0-02')", 'dur("p0-02")')
     )
     root = build(tmp_path, scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
     assert "锚定 3/5" in out and "P0 2/2 · P1 1/3" in out
     assert "FAIL 0" in out and "WARN 0" in out, out
@@ -404,14 +396,14 @@ def test_prettier_double_quote_fit_extracted(tmp_path):
 
 def test_legacy_sidecar_only_skips_with_warn(tmp_path):
     root = build(tmp_path, views_files=None, manifest=None, sidecar=True)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0
     assert "旧形态" in out
 
 
 def test_no_assets_skips_clean(tmp_path):
     root = build(tmp_path, views_files=None, manifest=None)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0
     assert "无 archify 资产" in out
     assert "WARN" not in out  # 没打算用 archify 不是债——干净跳过不是 WARN
@@ -420,7 +412,7 @@ def test_no_assets_skips_clean(tmp_path):
 def test_missing_manifest_degrades_but_crosscheck_runs(tmp_path):
     board = BOARD_OK.replace("章 `ch1`+`ch2`", "章 `symptoms`")
     root = build(tmp_path, board=board, manifest=None)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1  # 章口径 WARN 跳过，但对账 FAIL 照报
     assert "跳过章" in out and "无法解析" in out
 
@@ -428,7 +420,7 @@ def test_missing_manifest_degrades_but_crosscheck_runs(tmp_path):
 def test_storyboard_without_annotations_degrades(tmp_path):
     board = "# 分镜\n## P0\n| 镜 | 句区间 | 画面 | 动效 |\n|---|---|---|---|\n| 0-A | p0-01..02 | x | y |\n"
     root = build(tmp_path, board=board)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0
     assert "分镜无任何 archify 标注" in out
     assert "未在分镜声明" not in out  # 降级为单条 WARN，不逐 cue 刷屏
@@ -440,7 +432,7 @@ def test_scenes_missing_skips_reconciliation(tmp_path):
 
     root = build(tmp_path)
     shutil.rmtree(root / "video" / "src" / "scenes")
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out  # 默认宽松地板不红；「白录」是点名 WARN 不是 FAIL
     assert "跳过锚定率/对账/单调性" in out
     assert "未在任何 cue 实现" not in out
@@ -452,7 +444,7 @@ def test_scenes_dir_missing_warns_richness_still_fails(tmp_path):
 
     root = build(tmp_path, toml=TOML_OK + "\n[archify]\nmin_diagrams = 5\n")
     shutil.rmtree(root / "video" / "src" / "scenes")
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1  # 丰富度 FAIL 照报
     assert "scenes 不存在" in out and "图数 1 < 下限 5" in out
 
@@ -472,7 +464,7 @@ def test_min_diagrams_floor(tmp_path):
         manifest=manifest,
         toml=TOML_OK + "\n[archify]\nmin_diagrams = 3\n",
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "图数 2 < 下限 3" in out
     assert "白录" in out  # other 图未引用 → WARN
@@ -495,7 +487,7 @@ def test_max_unanchored_run_fails(tmp_path):
         scenes={"P0X.tsx": scene, "P1X.tsx": SCENE_P1},
         toml=TOML_OK + "\n[archify]\nmax_unanchored_run = 1\n",
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "最长连续无锚 2 句（p0-02 起）> 上限 1" in out
 
@@ -504,7 +496,7 @@ def test_scene_anchor_ratio_floor_fails_then_exempted(tmp_path):
     """分幕锚定率下限：P1 1/3 < 0.9 → FAIL；豁免后 ℹ️ 放行。"""
     toml = TOML_OK + "\n[archify]\nmin_scene_anchor_ratio = 0.9\n"
     root = build(tmp_path, toml=toml)
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "分幕锚定率" in out and "P1" in out
 
@@ -513,7 +505,7 @@ def test_scene_anchor_ratio_floor_fails_then_exempted(tmp_path):
         name="fixture-archify-ratio-exempt",
         toml=toml + '\nexempt_scenes = ["P1"]\n',
     )
-    rc2, out2 = run_gate(root2)
+    rc2, out2 = run_coverage_gate(root2)
     assert rc2 == 0, out2
     assert "P1 豁免分幕锚定率判定" in out2
 
@@ -521,7 +513,7 @@ def test_scene_anchor_ratio_floor_fails_then_exempted(tmp_path):
 def test_cues_per_minute_skips_without_audio(tmp_path):
     """audio/timing 缺失 → WARN 点名跳过（不造第二时长真相源），rc 0。"""
     root = build(tmp_path, toml=TOML_OK + "\n[archify]\nmin_cues_per_minute = 99.0\n")
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
     assert "跳过 cue 密度门" in out
 
@@ -533,7 +525,7 @@ def test_cues_per_minute_floor_fails_with_audio(tmp_path):
         audio=True,
         toml=TOML_OK + "\n[archify]\nmin_cues_per_minute = 99.0\n",
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "cue 密度" in out and "99.0/分钟" in out
 
@@ -545,7 +537,7 @@ def test_min_diagram_types_with_backfill(tmp_path):
         sidecar=True,
         toml=TOML_OK + "\n[archify]\nmin_diagram_types = 2\n",
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     # demo.json sidecar 无 type → untyped 1 种 < 2 → FAIL + 回填 WARN
     assert rc == 1
     assert "图型多样性 1 种" in out and "缺 type 字段" in out
@@ -556,14 +548,14 @@ def test_min_diagram_types_with_backfill(tmp_path):
     d = _json.loads(sidecar.read_text(encoding="utf-8"))
     d["type"] = "workflow"
     sidecar.write_text(_json.dumps(d), encoding="utf-8")
-    rc2, out2 = run_gate(root)
+    rc2, out2 = run_coverage_gate(root)
     assert rc2 == 1  # 单一 workflow 种 < 2，仍 FAIL（但回填 WARN 消失）
     assert "图型多样性 1 种" in out2 and "缺 type 字段" not in out2
 
     (root / "video" / "public" / "archify" / "other.json").write_text(
         '{"slug": "other", "type": "sequence", "chapters": []}', encoding="utf-8"
     )
-    rc3, out3 = run_gate(root)
+    rc3, out3 = run_coverage_gate(root)
     assert rc3 == 0, out3
     assert "图型 2 种" in out3
 
@@ -571,7 +563,7 @@ def test_min_diagram_types_with_backfill(tmp_path):
 def test_forbid_inset_scene_and_board_fails(tmp_path):
     """forbid_inset=true：场景 variant 残留与分镜 inset 标注双向 FAIL。"""
     root = build(tmp_path, toml=TOML_OK + "\n[archify]\nforbid_inset = true\n")
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert 'variant="inset"' in out and "P0X.tsx" in out
     assert "分镜标注 archify inset" in out and "镜 0-A" in out
@@ -589,7 +581,7 @@ def test_forbid_inset_clean_passes(tmp_path):
         },
         toml=TOML_OK + "\n[archify]\nforbid_inset = true\n",
     )
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
 
 
@@ -601,7 +593,7 @@ def test_duplicate_anchor_sentence_fails(tmp_path):
         "      {chapterId: 'ch1', at: at('p1-01a') - bA.from, durationInFrames: dur('p1-01a')},",
     )
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 1
     assert "同锚句双 cue" in out and "p1-01a" in out
 
@@ -613,7 +605,7 @@ def test_multi_sentence_duration_form_fails(tmp_path):
         "at: at('p1-01a') - bA.from, durationInFrames: dur('p1-01a', 'p1-03')",
     )
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc != 0
     assert "单参时长" in out
 
@@ -626,7 +618,7 @@ def test_sum_form_duration_is_recognized(tmp_path):
         "at: at('p1-01a') - bA.from, durationInFrames: dur('p1-01a') + dur('p1-03')",
     )
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc == 0, out
 
 
@@ -637,7 +629,7 @@ def test_mismatched_at_dur_sentence_fails(tmp_path):
         "at: at('p1-01a') - bA.from, durationInFrames: dur('p1-03')",
     )
     root = build(tmp_path, scenes={"P0X.tsx": SCENE_P0, "P1X.tsx": scene})
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert rc != 0
     assert "不一致" in out
 
@@ -653,13 +645,13 @@ def test_all_zero_lead_sec_warns(tmp_path):
     d = json.loads(sidecar.read_text(encoding="utf-8"))
     d["chapters"] = [{"id": "c1", "lead_sec": 0}, {"id": "c2", "lead_sec": 0}]
     sidecar.write_text(json.dumps(d), encoding="utf-8")
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert "lead_sec == 0" in out and "archify_lead" in out, out
 
     # 任一章有真实 lead 即不触发
     d["chapters"][0]["lead_sec"] = 2.1
     sidecar.write_text(json.dumps(d), encoding="utf-8")
-    rc2, out2 = run_gate(root)
+    rc2, out2 = run_coverage_gate(root)
     assert "lead_sec == 0" not in out2, out2
 
 
@@ -680,10 +672,10 @@ def test_zero_lead_sec_warns_per_diagram(tmp_path):
 
     put("demo", [0, 0])  # 被 cue 引用、刚重录未测 lead
     put("legacy", [2.4])  # 未被 cue 引用、保留实测值
-    rc, out = run_gate(root)
+    rc, out = run_coverage_gate(root)
     assert "lead_sec == 0：demo" in out, out
 
     put("demo", [2.1, 1.9])
     put("legacy", [0])  # 遗迹全 0 但无 cue 引用 → 不点名
-    rc2, out2 = run_gate(root)
+    rc2, out2 = run_coverage_gate(root)
     assert "lead_sec == 0" not in out2, out2

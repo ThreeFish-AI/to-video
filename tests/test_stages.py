@@ -15,8 +15,9 @@
      且声明「关键不变量」节（**校验而非生成**：生成物会被手改，那是更隐蔽的
      第二事实源）
 
-另覆盖 pipeline.py 的语言维度（--lang 注册/转发/缺省语义/完成行/qa 推断/
-render 旧骨架预检）。
+另覆盖 pipeline.py 的 CLI 行为（约六成本文件篇幅）：语言维度（--lang 注册/
+转发/缺省语义/完成行/qa 推断/render 旧骨架预检）、--series 扇出白名单与
+sub_argv 逐字转发、render/all 不串 deliver、doctor 分支与浏览器孤儿窄域清理。
 """
 
 from __future__ import annotations
@@ -33,9 +34,10 @@ import tomllib
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 PIPELINE_PY = SCRIPTS / "pipeline.py"
 
-sys.path.insert(0, str(SCRIPTS))
 
-import paths  # noqa: E402 - sys.path 注入后导入
+import paths  # noqa: E402 - conftest 已注入 scripts/
+
+from helpers import offline_doctor_project, timing_constants  # noqa: E402 - conftest 已注入 scripts/
 
 #: skill 根（paths.SKILL 的存在理由就是「不数层数」；此处若改回 parents[N]，
 #: SKILL.md 被软链/换安装位时这些断言会静默锚错树）
@@ -602,42 +604,9 @@ def test_doctor_offline_tts_server_is_warning_not_failure(
     其余检查全绿时退出码必须为 0——离线计入失败会让 doctor 在正常关停态恒红，
     反过来诱导 Agent 预启动服务。
     """
-    import hashlib
-    import json
-    import urllib.error
-
     import pipeline
 
-    (tmp_path / "video" / "src").mkdir(parents=True)
-    (tmp_path / "video" / "src" / "timing.json").write_text(
-        json.dumps(
-            {
-                "fps": 30,
-                "sentenceGapSec": 0.32,
-                "sceneGapSec": 0.9,
-                "leadInSec": 0.6,
-                "tailSec": 2.0,
-                "sceneCrossFadeSec": 0.4,
-            }
-        ),
-        encoding="utf-8",
-    )
-    ref = tmp_path / "ref.wav"
-    ref.write_bytes(b"RIFF-fixture")
-    (tmp_path / ".to-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
-
-    def offline(*_a, **_k):
-        raise urllib.error.URLError("Connection refused")
-
-    monkeypatch.setattr(pipeline.urllib.request, "urlopen", offline)
-    cfg = {
-        "tts": {
-            "engine": "indextts",
-            "ref": "ref.wav",
-            "ref_sha1": hashlib.sha1(ref.read_bytes()).hexdigest()[:12],
-        }
-    }
+    cfg = offline_doctor_project(tmp_path, monkeypatch)
     rc = pipeline.cmd_doctor(tmp_path, cfg, None)
     out = capsys.readouterr().out
     assert rc == 0, out
@@ -1111,16 +1080,7 @@ def test_status_reports_per_language_and_lock(monkeypatch, tmp_path, capsys):
 
     (tmp_path / "video" / "src").mkdir(parents=True)
     (tmp_path / "video" / "src" / "timing.json").write_text(
-        json.dumps(
-            {
-                "fps": 30,
-                "sentenceGapSec": 0.32,
-                "sceneGapSec": 0.9,
-                "leadInSec": 0.6,
-                "tailSec": 2.0,
-                "sceneCrossFadeSec": 0.4,
-            }
-        ),
+        json.dumps(timing_constants()),
         encoding="utf-8",
     )
     zh_items = [{"id": "p0-01", "scene": "P0", "text": "你好。"}]
@@ -1196,16 +1156,7 @@ def test_doctor_clean_browsers_flag_cleans_orphans(monkeypatch, tmp_path, capsys
 
     (tmp_path / "video" / "src").mkdir(parents=True)
     (tmp_path / "video" / "src" / "timing.json").write_text(
-        json.dumps(
-            {
-                "fps": 30,
-                "sentenceGapSec": 0.32,
-                "sceneGapSec": 0.9,
-                "leadInSec": 0.6,
-                "tailSec": 2.0,
-                "sceneCrossFadeSec": 0.4,
-            }
-        ),
+        json.dumps(timing_constants()),
         encoding="utf-8",
     )
     fake_orphans = [

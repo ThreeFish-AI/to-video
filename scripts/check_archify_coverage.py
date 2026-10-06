@@ -230,15 +230,23 @@ def load_views(
     return views, id_map, label_map, fails
 
 
+def extract_archify_literal(text: str) -> str | None:
+    """提取 `export const ARCHIFY = ( … ) as const` 的字面量源文本（JSON 文本）。
+
+    archify.manifest.ts 双解析器漂移的收敛点（ISSUE-187 教训 6 同族）：正则只在
+    此一份；json.loads 与各自失败语义（check_archify 的 SystemExit+指引 vs 本文件
+    的 None）由调用方自持。
+    """
+    m = re.search(r"export const ARCHIFY = ([\s\S]+?) as const", text)
+    return m.group(1) if m else None
+
+
 def load_manifest_ts(manifest_ts: Path) -> dict | None:
-    m = re.search(
-        r"export const ARCHIFY = ([\s\S]+?) as const",
-        manifest_ts.read_text(encoding="utf-8"),
-    )
-    if not m:
+    lit = extract_archify_literal(manifest_ts.read_text(encoding="utf-8"))
+    if lit is None:
         return None
     try:
-        return json.loads(m.group(1))
+        return json.loads(lit)
     except json.JSONDecodeError:
         return None
 

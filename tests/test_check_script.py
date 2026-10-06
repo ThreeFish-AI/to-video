@@ -1,14 +1,18 @@
-"""check_script 的覆盖性 / 预算 / 淡入不变式判定。"""
+"""check_script ④⑥ 内容门的 CLI 回归：覆盖性 / 时长预算双口径 / 淡入不变式 /
+读音陷阱（--pron-gate 的语义门在 test_pron_gate）/ 字幕宽度 / 开篇钩子 /
+术语密度（--term-density）/ 画面复述口播（缺省 FAIL）/ en 译稿门 /
+--check-scenes 分镜↔代码互比。"""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from helpers import zh_digest as _zh_digest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_script.py"
 
@@ -993,10 +997,6 @@ words_per_min = 150
 [narration.en]
 target_minutes = [0.0, 99.0]
 """
-
-
-def _zh_digest(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
 def fresh_lock(project: Path) -> dict[str, dict[str, str]]:

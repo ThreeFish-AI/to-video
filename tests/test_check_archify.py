@@ -70,7 +70,7 @@ def build(tmp_path: Path, *, chapter_fps: dict, cue_slug: str = "demo") -> Path:
     return root
 
 
-def run_gate(root: Path) -> tuple[int, str]:
+def run_archify_gate(root: Path) -> tuple[int, str]:
     r = subprocess.run(
         [sys.executable, str(SCRIPT), "--project", str(root)],
         capture_output=True,
@@ -82,12 +82,12 @@ def run_gate(root: Path) -> tuple[int, str]:
 
 def test_low_capture_fps_warns_despite_cfr_measured_fps(tmp_path):
     """CDP 档 measured_fps 恒 25：门须按逐章 capture_fps 判，否则 min_fps 形同虚设。"""
-    rc, out = run_gate(
+    rc, out = run_archify_gate(
         build(tmp_path, chapter_fps={"measured_fps": 25.0, "capture_fps": 12.0})
     )
     assert rc == 0 and "录制帧率 12.0 < 18.0" in out, out
 
-    rc, out = run_gate(
+    rc, out = run_archify_gate(
         build(tmp_path / "ok", chapter_fps={"measured_fps": 25.0, "capture_fps": 24.0})
     )
     assert rc == 0 and "录制帧率" not in out, out
@@ -95,13 +95,13 @@ def test_low_capture_fps_warns_despite_cfr_measured_fps(tmp_path):
 
 def test_legacy_sidecar_falls_back_to_measured_fps(tmp_path):
     """playwright 档无 capture_fps：回退逐章 measured_fps（VFR 实测值）。"""
-    rc, out = run_gate(build(tmp_path, chapter_fps={"measured_fps": 15.0}))
+    rc, out = run_archify_gate(build(tmp_path, chapter_fps={"measured_fps": 15.0}))
     assert "录制帧率 15.0 < 18.0" in out, out
 
 
 def test_cue_with_unknown_slug_fails_not_crashes(tmp_path):
     """cue 引用 manifest 外的图 → 点名 FAIL，而非 KeyError traceback。"""
-    rc, out = run_gate(
+    rc, out = run_archify_gate(
         build(tmp_path, chapter_fps={"capture_fps": 25.0}, cue_slug="ghost")
     )
     assert rc == 1 and "ghost" in out and "不存在的图" in out, out

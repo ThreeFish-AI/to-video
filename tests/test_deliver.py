@@ -1,6 +1,6 @@
 """deliver 子命令契约：根路径两渠道、series.json 身份锚、标题 vN 版本管理。
 
-形态沿 test_check_series.run_check 先例：subprocess + cwd=ws + 剥 TO_VIDEO_* env
+形态沿 test_check_series.run_series_check 先例：subprocess + cwd=ws + 剥 TO_VIDEO_* env
 （防集成模式 env 残留锚走别的树）。纯函数（清洗/计号）in-process 直测；
 deliver.py 的 WORKSPACE 消费全在函数内（paths 惰性解析），subprocess 形态
 天然走真解析路径。交付根一律落 tmp_path——conftest 的真树守卫只盯
@@ -19,11 +19,12 @@ from pathlib import Path
 
 import pytest
 
+from helpers import to_video_stripped_env
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 DELIVER = SCRIPTS / "deliver.py"
-sys.path.insert(0, str(SCRIPTS))
 
-import deliver  # noqa: E402 - sys.path 注入后导入；纯函数 in-process 直测
+import deliver  # noqa: E402 - conftest 已注入 scripts/；纯函数 in-process 直测
 
 SLUG = "blueprint-video"
 TITLE = "Context Layer Blueprint"
@@ -74,7 +75,7 @@ def run_deliver(
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """按真实调用形态驱动 deliver.py；剥 TO_VIDEO_* 防外层 env 改变锚走向。"""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
+    env = to_video_stripped_env()
     env.update(env_extra or {})
     return subprocess.run(
         [
@@ -91,7 +92,7 @@ def run_deliver(
     )
 
 
-def tree_snapshot(root: Path) -> set[str]:
+def tree_listing(root: Path) -> set[str]:
     """文件与目录全收——dry-run 的「连目录都不建」声明需要目录级可见性。"""
     return {str(p.relative_to(root)) for p in root.rglob("*")}
 
@@ -451,11 +452,11 @@ def test_missing_final_mp4_exits(tmp_path: Path):
 def test_dry_run_prints_plan_and_writes_nothing(tmp_path: Path):
     ws = build_ws(tmp_path)
     root = tmp_path / "dv"
-    before = tree_snapshot(tmp_path)
+    before = tree_listing(tmp_path)
     r = run_deliver(ws, "--root", str(root), "--dry-run")
     assert r.returncode == 0, out_text(r)
     assert f"{TITLE} v1.mp4" in r.stdout and SID in r.stdout
-    assert tree_snapshot(tmp_path) == before  # 零写入（连目录都不建）
+    assert tree_listing(tmp_path) == before  # 零写入（连目录都不建）
 
 
 def test_dry_run_still_exits_without_root(tmp_path: Path):

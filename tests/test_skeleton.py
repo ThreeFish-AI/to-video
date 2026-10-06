@@ -51,6 +51,8 @@ from pathlib import Path
 
 import pytest
 
+from helpers import to_video_stripped_env as _clean_env
+
 #: 本仓根 = 真 skill 根（含 SKILL.md）。scaffold 行为用例经绝对路径调真脚本。
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = SKILL_ROOT / "scripts"
@@ -100,12 +102,6 @@ needs_real_tree = pytest.mark.skipif(
 
 def skeleton() -> dict:
     return tomllib.loads((TEMPLATE / "skeleton.toml").read_text(encoding="utf-8"))
-
-
-def _clean_env() -> dict[str, str]:
-    """剥掉 TO_VIDEO_*：锚点 env（TO_VIDEO_WORKSPACE）优先级高于 CWD 搜索，
-    外部残留会让用例静默锚去别处；集成模式的 env 尤其必须挡在门外。"""
-    return {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
 
 
 def run(
@@ -786,15 +782,21 @@ def test_paths_docstring_lists_all_real_importers():
     m = re.search(r"## 导入边界.*?`(.*?)`.*?可以 `import paths`", doc, re.DOTALL)
     assert m, "paths.py 导入边界小节形态变化，检测器该更新了"
 
-    r = subprocess.run(
-        ["grep", "-l", r"from paths import", "-r", str(SCRIPTS)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    # 两种导入形态都算（`import paths` 与 `from paths import` 互不为子串，须分别扫）；
+    # 行首锚定排除注释散文（「不得 import paths」的说明文字不是导入方）。
+    # 执法盲区教训：只认 from 形态时 check_playbook.py 的裸 import 曾全部漏检
+    real: set[str] = set()
+    for pat in (r"^\s*from paths import", r"^\s*import paths\b"):
+        r = subprocess.run(
+            ["grep", "-lE", pat, "-r", str(SCRIPTS)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        real |= {Path(p).name for p in r.stdout.split() if p.endswith(".py")}
     # 只认 .py：grep -r 会扫进 __pycache__ 的 paths.cpython-*.pyc（本测试自身的
     # 导入副作用），把缓存文件当「导入方」报假红
-    real = {Path(p).name for p in r.stdout.split() if p.endswith(".py")} - {"paths.py"}
+    real -= {"paths.py"}
     allowed = set(re.findall(r"`(\w+\.py)`", doc))
     assert real <= allowed, f"实际导入方超出清单：{real - allowed}"
     assert "tts.py" not in real, "红线：tts.py 不可 import paths（拷出路径会断）"
