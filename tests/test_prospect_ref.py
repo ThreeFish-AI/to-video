@@ -16,13 +16,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from prospect_ref import (  # noqa: E402
     CLIP_LEVEL,
     MAX_NOISE_DBFS,

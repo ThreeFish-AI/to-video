@@ -14,8 +14,9 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_archify_coverage.py"
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from check_archify_coverage import extract_cues  # noqa: E402 - 直调观测 fit（CLI 门输出不含）
+
+from helpers import timing_constants  # noqa: E402 - conftest 已注入 scripts/
 
 NARRATION = [
     {"id": "p0-01", "scene": "P0", "text": "甲"},
@@ -122,16 +123,7 @@ def build(
             encoding="utf-8",
         )
         (src / "timing.json").write_text(
-            json.dumps(
-                {
-                    "fps": 30,
-                    "sentenceGapSec": 0.32,
-                    "sceneGapSec": 0.9,
-                    "leadInSec": 0.6,
-                    "tailSec": 2.0,
-                    "sceneCrossFadeSec": 0.4,
-                }
-            ),
+            json.dumps(timing_constants()),
             encoding="utf-8",
         )
     if manifest is not None:

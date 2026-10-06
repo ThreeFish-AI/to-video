@@ -16,12 +16,13 @@ to-video.toml（内容策略随内容走），空默认的「不激活」态同�
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from helpers import to_video_stripped_env
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 SCRIPT = SCRIPTS_DIR / "check_series.py"
@@ -180,7 +181,7 @@ def run_check(ws: Path) -> tuple[int, str]:
     env 刻意剥掉 TO_VIDEO_*：workspace_root 的 env 优先级高于 CWD 搜索，外部
     环境残留（如集成模式的 TO_VIDEO_WORKSPACE）会让所有用例静默锚去别处。
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
+    env = to_video_stripped_env()
     r = subprocess.run(
         [sys.executable, str(SCRIPT)],
         capture_output=True,

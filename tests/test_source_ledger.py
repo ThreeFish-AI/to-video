@@ -10,14 +10,12 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 import tomllib
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import source_ledger as sl
 
 SHA = "f9e8b280f715f9ba107d4517fd39bc5f8ddda618"

@@ -19,11 +19,12 @@ from pathlib import Path
 
 import pytest
 
+from helpers import to_video_stripped_env
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 DELIVER = SCRIPTS / "deliver.py"
-sys.path.insert(0, str(SCRIPTS))
 
-import deliver  # noqa: E402 - sys.path 注入后导入；纯函数 in-process 直测
+import deliver  # noqa: E402 - conftest 已注入 scripts/；纯函数 in-process 直测
 
 SLUG = "blueprint-video"
 TITLE = "Context Layer Blueprint"
@@ -74,7 +75,7 @@ def run_deliver(
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """按真实调用形态驱动 deliver.py；剥 TO_VIDEO_* 防外层 env 改变锚走向。"""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("TO_VIDEO_")}
+    env = to_video_stripped_env()
     env.update(env_extra or {})
     return subprocess.run(
         [

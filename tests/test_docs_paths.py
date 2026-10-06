@@ -29,12 +29,10 @@ references/ 下的手册（VOICE-CLONING.md 等，非 NN- 阶段规格）与根 
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from paths import skill_root  # noqa: E402
 
 REFERENCES = skill_root() / "references"

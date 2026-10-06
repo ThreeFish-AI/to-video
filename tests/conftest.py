@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -75,16 +74,6 @@ def _episodes_stay_pristine():
         "用例改动了真集工程文件（请改用 tmp_path 镜像，见 test_skeleton.py::mirror）：\n  "
         + "\n  ".join(Path(p).relative_to(EPISODES).as_posix() for p in diff)
     )
-
-
-@pytest.fixture()
-def constants() -> dict:
-    return json.loads((FIXTURES / "timing.json").read_text(encoding="utf-8"))
-
-
-@pytest.fixture()
-def manifest_items() -> list[dict]:
-    return json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture()

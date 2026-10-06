@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from helpers import zh_digest as _zh_digest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_script.py"
 
@@ -993,10 +994,6 @@ words_per_min = 150
 [narration.en]
 target_minutes = [0.0, 99.0]
 """
-
-
-def _zh_digest(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
 def fresh_lock(project: Path) -> dict[str, dict[str, str]]:

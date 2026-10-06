@@ -18,11 +18,8 @@
 
 from __future__ import annotations
 
-import sys
 import tomllib
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from paths import skill_root  # noqa: E402
 
 #: 受检锚点：skill 仓根（含 SKILL.md 的目录）。由哨兵法派生而非数层数——

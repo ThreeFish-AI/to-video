@@ -12,7 +12,6 @@ import pytest
 
 pytest.importorskip("playwright")  # record_archify 模块级依赖，缺则跳过整个文件
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import record_archify_all as raa  # noqa: E402
 

@@ -9,24 +9,22 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import http.client
-import json
 import re
 import signal
 import socket
 import subprocess
-import sys
 import urllib.error
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import pipeline  # noqa: E402
 import tts  # noqa: E402
 import tts_resume  # noqa: E402
+
+from helpers import offline_doctor_project
 
 
 # ---------------- 退出码解析（表因③：`cmd | tail; $?` 管道尾食） ----------------
@@ -586,46 +584,12 @@ def test_stop_server_no_listeners_is_noop(monkeypatch):
 # ---------------- doctor 客户端依赖预检（pipeline.py） ----------------
 
 
-def _doctor_fixture(tmp_path, monkeypatch):
-    """复用 test_stages.py 离线服务用例的夹具形态：其余检查全绿。"""
-    (tmp_path / "video" / "src").mkdir(parents=True)
-    (tmp_path / "video" / "src" / "timing.json").write_text(
-        json.dumps(
-            {
-                "fps": 30,
-                "sentenceGapSec": 0.32,
-                "sceneGapSec": 0.9,
-                "leadInSec": 0.6,
-                "tailSec": 2.0,
-                "sceneCrossFadeSec": 0.4,
-            }
-        ),
-        encoding="utf-8",
-    )
-    ref = tmp_path / "ref.wav"
-    ref.write_bytes(b"RIFF-fixture")
-    (tmp_path / ".to-video-root").touch()
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
-
-    def offline(*_a, **_k):
-        raise urllib.error.URLError("Connection refused")
-
-    monkeypatch.setattr(pipeline.urllib.request, "urlopen", offline)
-    return {
-        "tts": {
-            "engine": "indextts",
-            "ref": "ref.wav",
-            "ref_sha1": hashlib.sha1(ref.read_bytes()).hexdigest()[:12],
-        }
-    }
-
-
 def test_doctor_preflights_missing_mutagen_as_warning_not_failure(
     monkeypatch, tmp_path, capsys
 ):
     """缺 mutagen：⚠️ 可操作提示（含 --with mutagen 与 tts_resume 指针），
     不计失败——doctor 规范调用本就不带 --with，计入会让正常态恒红。"""
-    cfg = _doctor_fixture(tmp_path, monkeypatch)
+    cfg = offline_doctor_project(tmp_path, monkeypatch)
     real = importlib.util.find_spec
     monkeypatch.setattr(
         importlib.util,
@@ -641,7 +605,7 @@ def test_doctor_preflights_missing_mutagen_as_warning_not_failure(
 
 def test_doctor_silent_when_client_deps_present(monkeypatch, tmp_path, capsys):
     """依赖在场（pytest 解释器带 --with mutagen）：不出现缺失行。"""
-    cfg = _doctor_fixture(tmp_path, monkeypatch)
+    cfg = offline_doctor_project(tmp_path, monkeypatch)
     rc = pipeline.cmd_doctor(tmp_path, cfg, None)
     out = capsys.readouterr().out
     assert rc == 0, out

@@ -8,8 +8,6 @@ browser.close 与每章 ctx.close 原是顺序语句非结构保证——pump_un
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -17,7 +15,6 @@ import pytest
 
 pytest.importorskip("playwright")  # 被测模块顶部 import playwright，缺则跳过
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import record_archify as ra  # noqa: E402
 
