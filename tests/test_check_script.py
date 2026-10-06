@@ -1,4 +1,7 @@
-"""check_script 的覆盖性 / 预算 / 淡入不变式判定。"""
+"""check_script ④⑥ 内容门的 CLI 回归：覆盖性 / 时长预算双口径 / 淡入不变式 /
+读音陷阱（--pron-gate 的语义门在 test_pron_gate）/ 字幕宽度 / 开篇钩子 /
+术语密度（--term-density）/ 画面复述口播（缺省 FAIL）/ en 译稿门 /
+--check-scenes 分镜↔代码互比。"""
 
 from __future__ import annotations
 

@@ -15,8 +15,9 @@
      且声明「关键不变量」节（**校验而非生成**：生成物会被手改，那是更隐蔽的
      第二事实源）
 
-另覆盖 pipeline.py 的语言维度（--lang 注册/转发/缺省语义/完成行/qa 推断/
-render 旧骨架预检）。
+另覆盖 pipeline.py 的 CLI 行为（约六成本文件篇幅）：语言维度（--lang 注册/
+转发/缺省语义/完成行/qa 推断/render 旧骨架预检）、--series 扇出白名单与
+sub_argv 逐字转发、render/all 不串 deliver、doctor 分支与浏览器孤儿窄域清理。
 """
 
 from __future__ import annotations
