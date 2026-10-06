@@ -20,11 +20,11 @@ import pytest
 
 import source_ledger as sl
 
-_TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+_TEST_WS = os.environ.get("VIBE_VIDEO_TEST_WORKSPACE")
 pytestmark = pytest.mark.skipif(
     not _TEST_WS,
     reason="整文件只断言真树内容（source-map + series.json + episodes "
-    "归档）；集成模式设 TO_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
+    "归档）；集成模式设 VIBE_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
 )
 
 #: 内容工作区根（env 指派）。未设 env 时全文件已 skip，占位值仅保模块体可导入。

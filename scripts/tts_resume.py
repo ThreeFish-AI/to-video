@@ -119,9 +119,9 @@ def default_server_argv(
 
 
 def index_tts_root(override: str | None = None) -> Path:
-    """服务运行环境（uv --frozen 的 cwd）：env TO_VIDEO_INDEX_TTS_ROOT 优先。"""
+    """服务运行环境（uv --frozen 的 cwd）：env VIBE_VIDEO_INDEX_TTS_ROOT 优先。"""
     return Path(
-        override or os.environ.get("TO_VIDEO_INDEX_TTS_ROOT", "~/tools/index-tts")
+        override or os.environ.get("VIBE_VIDEO_INDEX_TTS_ROOT", "~/tools/index-tts")
     ).expanduser()
 
 
@@ -284,7 +284,7 @@ def start_server(
         # 本脚本的靶场景，配置错误不许以裸 traceback 退场（对齐 port_listeners
         # 对 lsof 缺失的可操作退出先例）。
         sys.exit(
-            f"服务起不来：{e}\n  检查 --index-tts-root / TO_VIDEO_INDEX_TTS_ROOT"
+            f"服务起不来：{e}\n  检查 --index-tts-root / VIBE_VIDEO_INDEX_TTS_ROOT"
             f"（当前 {cwd}，须为存在的 index-tts checkout）与 --server-cmd"
             " 可执行（缺省经 uv，须在 PATH）"
         )
@@ -427,7 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--index-tts-root",
         default=None,
-        help="index-tts checkout 根（缺省 env TO_VIDEO_INDEX_TTS_ROOT 或 ~/tools/index-tts）",
+        help="index-tts checkout 根（缺省 env VIBE_VIDEO_INDEX_TTS_ROOT 或 ~/tools/index-tts）",
     )
     p.add_argument(
         "--server-log",
@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         # traceback——配置错误在入口就大声退出，不等到半夜长跑掉线才炸。
         sys.exit(
             f"index-tts checkout 不存在: {root}——设 --index-tts-root 或 env"
-            " TO_VIDEO_INDEX_TTS_ROOT 指向实际 checkout（冷重启的运行目录）"
+            " VIBE_VIDEO_INDEX_TTS_ROOT 指向实际 checkout（冷重启的运行目录）"
         )
     log_path = (
         Path(args.server_log)

@@ -336,7 +336,7 @@ _BROWSER_MAIN_EXES = frozenset(
 _VISIBLE_AUTOMATION_RE = re.compile(
     r"(?:playwright_chromiumdev_profile-|puppeteer_dev_chrome_profile-|"
     r"--enable-automation\b|"
-    r"--user-data-dir=(?:['\"]?)(?:/tmp/|/private/tmp/|/var/folders/|[^\s]*(?:\.temp/|/browser-data|/to-video)))"
+    r"--user-data-dir=(?:['\"]?)(?:/tmp/|/private/tmp/|/var/folders/|[^\s]*(?:\.temp/|/browser-data|/vibe-video)))"
 )
 
 
@@ -351,7 +351,7 @@ def scan_automation_browsers(ps_text: str | None = None) -> list[dict]:
          - `visible-automation`：未带 `--headless`，不含用户个人资料目录
            （`Library/Application Support/Google/Chrome` / `--profile-directory=`），且带
            Playwright/Puppeteer 临时 profile、`--enable-automation` 或指向 `/tmp/`、
-           `/var/folders/`、`.temp/`、`/browser-data`、`/to-video` 的 `--user-data-dir=`。
+           `/var/folders/`、`.temp/`、`/browser-data`、`/vibe-video` 的 `--user-data-dir=`。
       用户日常个人 Chrome（即使按 Browser Validation Protocol 开启 `--remote-debugging-port`）恒不命中。
     """
     if ps_text is None:
@@ -555,15 +555,15 @@ def cmd_doctor(
         print("  ⚠️  video/node_modules 未安装（渲染前: cd video && pnpm install）")
     # 交付归档根是工作区级机器属性（不在 pipeline.toml SCHEMA 内），doctor 只报
     # env 渠道存在性——解析序 SSOT 在 deliver.py，此处不复制。
-    if env_root := os.environ.get("TO_VIDEO_DELIVER_ROOT", "").strip():
+    if env_root := os.environ.get("VIBE_VIDEO_DELIVER_ROOT", "").strip():
         print(
             f"  ℹ️  交付归档根: {Path(env_root).expanduser()}"
-            "（env:TO_VIDEO_DELIVER_ROOT；deliver 子命令消费）"
+            "（env:VIBE_VIDEO_DELIVER_ROOT；deliver 子命令消费）"
         )
     else:
         print(
             "  ℹ️  交付归档未配置（deliver 子命令；渠道 --root 一次性 或 env"
-            " TO_VIDEO_DELIVER_ROOT 持久）"
+            " VIBE_VIDEO_DELIVER_ROOT 持久）"
         )
     browsers = scan_automation_browsers()
     orphans = [p for p in browsers if p["orphan"]]
@@ -1196,7 +1196,7 @@ def main() -> None:
     p.add_argument(
         "--root",
         help="交付归档根路径（一次性/prompt 指定；持久统一配置用 env"
-        " TO_VIDEO_DELIVER_ROOT）",
+        " VIBE_VIDEO_DELIVER_ROOT）",
     )
     p.add_argument(
         "--dry-run", action="store_true", help="只打印目的地与下一版本号，不写入"
@@ -1295,9 +1295,9 @@ def main() -> None:
     # 工作区锚三级优先：--workspace 显式 > 自 --project 向上推断 > CWD 搜索（env 亦然）。
     # 写回 env 而非模块全局：下游惰性 paths.WORKSPACE / 子进程扇出读同一事实源。
     if args.workspace:
-        os.environ["TO_VIDEO_WORKSPACE"] = str(Path(args.workspace).resolve())
+        os.environ["VIBE_VIDEO_WORKSPACE"] = str(Path(args.workspace).resolve())
     elif (ws := paths.find_upward(root, paths.WORKSPACE_MARKERS)) is not None:
-        os.environ.setdefault("TO_VIDEO_WORKSPACE", str(ws))
+        os.environ.setdefault("VIBE_VIDEO_WORKSPACE", str(ws))
     # 与具体工程无关的子命令不读 pipeline.toml —— 否则「某集 toml 写坏」会连带
     # 让「清理生物特征小样」和「查阶段表」都无法执行，属荒谬耦合。
     if args.cmd == "stages":

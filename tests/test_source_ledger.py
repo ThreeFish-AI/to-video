@@ -3,7 +3,7 @@
 sync/audit 用例同样无网络：抓取一律经 fake_http 打桩（与 fetch 用例同一姿势）。
 
 真树切分：仅末节三条读真树内容（claude-code-explained 台账 + 系列
-地图 + series.json），按 env 门控（`real_tree` 标记：设 TO_VIDEO_TEST_WORKSPACE
+地图 + series.json），按 env 门控（`real_tree` 标记：设 VIBE_VIDEO_TEST_WORKSPACE
 =<工作区根> 启用）；其余用例纯离线（tmp_path + fake_http 打桩），无门控常跑。"""
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ SHA2 = "67a9126c6435a8654ba7a6f68c0fd2130f00a462"
 
 #: 真树门控：skill 仓内无 episodes/ 与 source-map/（双锚点：内容在工作区侧），
 #: 这三条端到端用例只在集成模式下有受检对象。
-_TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+_TEST_WS = os.environ.get("VIBE_VIDEO_TEST_WORKSPACE")
 real_tree = pytest.mark.skipif(
     not _TEST_WS,
     reason="读真树内容（claude-code-explained 台账 + source-map + "
-    "series.json）；集成模式设 TO_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
+    "series.json）；集成模式设 VIBE_VIDEO_TEST_WORKSPACE=<工作区根> 启用",
 )
 
 #: 真实 ep1 台账与系列地图（env 指向的内容工作区内，只读；None=未设 env）

@@ -1122,7 +1122,7 @@ def test_plan_eta_excludes_store_recoverable_blocks(tmp_path):
         text=True,
         check=False,
         cwd=tmp_path,
-        env={**os.environ, "TO_VIDEO_TTS_STORE": str(store)},
+        env={**os.environ, "VIBE_VIDEO_TTS_STORE": str(store)},
     )
     assert r.returncode == 0, r.stderr
     assert "版本库整块直收" in r.stdout
@@ -1271,7 +1271,7 @@ def test_sample_all_styles_applies_preset_seed(tmp_path):
     import subprocess
 
     script = Path(__file__).resolve().parents[1] / "scripts" / "tts_sample.py"
-    (tmp_path / ".to-video-root").write_text("", encoding="utf-8")
+    (tmp_path / ".vibe-video-root").write_text("", encoding="utf-8")
     ref = tmp_path / "ref.wav"
     ref.write_bytes(b"x" * 16)
     r = subprocess.run(
@@ -1280,7 +1280,7 @@ def test_sample_all_styles_applies_preset_seed(tmp_path):
         text=True,
         check=False,
         cwd=tmp_path,
-        env={**os.environ, "TO_VIDEO_WORKSPACE": str(tmp_path)},
+        env={**os.environ, "VIBE_VIDEO_WORKSPACE": str(tmp_path)},
     )
     assert r.returncode == 0, r.stderr
     lines = {ln.split()[0]: ln for ln in r.stdout.splitlines() if ln.startswith("   ")}
@@ -1292,8 +1292,8 @@ def test_sample_story_sends_perform_punct_text(monkeypatch, tmp_path):
     """story 小样与管线块合成同一合成文本口径（`……`→`…`）；其余档仍按默认映射 `。`。"""
     import importlib
 
-    (tmp_path / ".to-video-root").write_text("", encoding="utf-8")
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
+    (tmp_path / ".vibe-video-root").write_text("", encoding="utf-8")
+    monkeypatch.setenv("VIBE_VIDEO_WORKSPACE", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     ts = importlib.import_module("tts_sample")
     sent: list[str] = []

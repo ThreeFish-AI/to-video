@@ -10,7 +10,7 @@ PROJECT 锚（工作区所在 git 仓库根）的两种形态各有专门用例�
 回退工作区自身；宿主层 .git 为**文件**（git worktree 指针，内容 `gitdir: …`）
 时锚到宿主层——FAIL 消息里的 `relative_to(PROJECT)` 路径形态即锚点的可观测
 证据。工程级受检面（project_globs）与规则 7/8 的系列 id 集都住工作区
-to-video.toml（内容策略随内容走），空默认的「不激活」态同样被钉住。
+vibe-video.toml（内容策略随内容走），空默认的「不激活」态同样被钉住。
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers import to_video_stripped_env
+from helpers import vibe_video_stripped_env
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 SCRIPT = SCRIPTS_DIR / "check_series.py"
@@ -86,7 +86,7 @@ def scene_file(name: str) -> str:
 
 
 #: 规则 7「去站点化」的课程型系列 id 集（「站点」一词只对课程系执法）。
-#: 内容策略随工作区 to-video.toml 走，skill 不携带具体系列身份。
+#: 内容策略随工作区 vibe-video.toml 走，skill 不携带具体系列身份。
 COURSE_TOML = '[check_series]\ncourse_series_ids = ["claude-code-explained"]\n'
 #: 规则 8「下期卡同步」的系列 id 集（配了统一收尾装置的系列才进门）。
 NEXT_CARD_TOML = '[check_series]\nnext_card_series_ids = ["claude-code-explained"]\n'
@@ -98,20 +98,20 @@ def build_workspace(
     files: dict[str, str],
     scene_names: dict[str, tuple[str, ...]] | None = None,
     *,
-    sentinel: str = ".to-video-root",
+    sentinel: str = ".vibe-video-root",
     git_host: bool = False,
     toml: str | None = None,
 ) -> Path:
     """搭建平铺假工作区 → 返回工作区根。
 
-    - sentinel：`.to-video-root`。
+    - sentinel：`.vibe-video-root`。
     - git_host：True 时把工作区嵌进一个上层放 **.git 文件**（git worktree 指针
       形态，内容 `gitdir: …`）的宿主目录——PROJECT 锚到宿主层（negentropy 式
       嵌套工作区同款）；False 时 tmp 树内无任何 .git，PROJECT 回退工作区自身。
       两种都是 project_root 文档化的真实路径，须各自走到。
     - files：键为**工作区相对**。宿主仓库层文件（project_globs 受检面）由调用方
       自行落到 `ws.parent`——那层在工作区之外，正是工程级受检面存在的意义。
-    - toml：工作区 to-video.toml 内容；None = 不落盘 = 全空默认（新独立工作区
+    - toml：工作区 vibe-video.toml 内容；None = 不落盘 = 全空默认（新独立工作区
       的初始态，规则 7/8 与工程级受检面均不激活）。
 
     scene_names：slug → 场景组件名元组；值 `None` 表示该集**完全无场景层**
@@ -167,7 +167,7 @@ def build_workspace(
         encoding="utf-8",
     )
     if toml is not None:
-        (ws / "to-video.toml").write_text(toml, encoding="utf-8")
+        (ws / "vibe-video.toml").write_text(toml, encoding="utf-8")
     for rel, content in files.items():
         dest = ws / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -178,10 +178,10 @@ def build_workspace(
 def run_series_check(ws: Path) -> tuple[int, str]:
     """真脚本原地运行：SKILL 锚自脚本真实位置解析，CWD 落工作区内 → 哨兵搜索锚定。
 
-    env 刻意剥掉 TO_VIDEO_*：workspace_root 的 env 优先级高于 CWD 搜索，外部
-    环境残留（如集成模式的 TO_VIDEO_WORKSPACE）会让所有用例静默锚去别处。
+    env 刻意剥掉 VIBE_VIDEO_*：workspace_root 的 env 优先级高于 CWD 搜索，外部
+    环境残留（如集成模式的 VIBE_VIDEO_WORKSPACE）会让所有用例静默锚去别处。
     """
-    env = to_video_stripped_env()
+    env = vibe_video_stripped_env()
     r = subprocess.run(
         [sys.executable, str(SCRIPT)],
         capture_output=True,
@@ -193,7 +193,7 @@ def run_series_check(ws: Path) -> tuple[int, str]:
     return r.returncode, r.stdout + r.stderr
 
 
-@pytest.mark.parametrize("sentinel", [".to-video-root"])
+@pytest.mark.parametrize("sentinel", [".vibe-video-root"])
 def test_clean_repo_passes(tmp_path, sentinel):
     ws = build_workspace(
         tmp_path,
@@ -451,7 +451,7 @@ def test_project_anchors_to_git_file_pointer_above_workspace(tmp_path):
     锚到宿主层——`(p/".git").is_dir()` 式判据会在此形态失效，文件/目录皆认
     是 paths.project_root 的承重契约（negentropy 式嵌套工作区即此形态）。"""
     ws = build_workspace(
-        tmp_path, [S("t", EP1)], {}, sentinel=".to-video-root", git_host=True
+        tmp_path, [S("t", EP1)], {}, sentinel=".vibe-video-root", git_host=True
     )
     (ep_root(ws, EP1) / "README.md").write_text(
         "# 甲集标题\n[死链](../../video-package/README.md)\n", encoding="utf-8"
@@ -462,7 +462,7 @@ def test_project_anchors_to_git_file_pointer_above_workspace(tmp_path):
 
 
 def test_project_globs_cover_host_repo_files(tmp_path):
-    """工程级受检面：to-video.toml 声明 project_globs 后，**宿主仓库层**文件
+    """工程级受检面：vibe-video.toml 声明 project_globs 后，**宿主仓库层**文件
     （工作区之外）进门受检——knowledge-map/CHANGELOG 整目录迁移断链的执法点。"""
     ws = build_workspace(
         tmp_path,
@@ -482,7 +482,7 @@ def test_project_globs_cover_host_repo_files(tmp_path):
 
 
 def test_project_globs_default_empty_host_files_uncovered(tmp_path):
-    """空默认（to-video.toml 缺席）：宿主层文件不进门——独立工作区没有宿主
+    """空默认（vibe-video.toml 缺席）：宿主层文件不进门——独立工作区没有宿主
     文档层，刻意的空默认而非全收（连带执法宿主既存债只会促使有人删配置）。"""
     ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {}, git_host=True)
     host = ws.parent
@@ -592,7 +592,7 @@ def test_rule7_zhandian_word_paper_series_passes(tmp_path):
 
 
 def test_rule7_strong_marker_in_paper_series_fails(tmp_path):
-    """强标识全系列执法（**不随 to-video.toml 配置**）：论文系出现课程章号
+    """强标识全系列执法（**不随 vibe-video.toml 配置**）：论文系出现课程章号
     同样异常——不落 toml 即钉住「无配置也执法」的强标识口径。"""
     ws = build_workspace(tmp_path, [S("self-evolution", EP1)], {})
     (ep_root(ws, EP1) / "script/storyboard.md").write_text(
@@ -744,7 +744,7 @@ def test_rule8_paper_series_not_policed(tmp_path):
 
 
 def test_rules_7_8_inactive_without_workspace_config(tmp_path):
-    """空默认（to-video.toml 缺席）：系列 id 集为空 → 规则 7 的「站点」判据与
+    """空默认（vibe-video.toml 缺席）：系列 id 集为空 → 规则 7 的「站点」判据与
     规则 8 整体不激活——独立新工作区在声明内容策略前不被误伤。
 
     与 test_rule7_zhandian_word_course_series_fails / 规则 8 各 FAIL 用例

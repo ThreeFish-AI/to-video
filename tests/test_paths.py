@@ -25,7 +25,7 @@ REPO = SCRIPTS.parent
 @pytest.fixture(autouse=True)
 def _no_env_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
     """清掉 env 显式指派：它优先于哨兵搜索，外层（集成模式）设过
-    TO_VIDEO_WORKSPACE 会让「哨兵搜索」用例静默走错分支、假绿。"""
+    VIBE_VIDEO_WORKSPACE 会让「哨兵搜索」用例静默走错分支、假绿。"""
     monkeypatch.delenv(paths.ENV_WORKSPACE, raising=False)
 
 
@@ -66,7 +66,7 @@ def test_skill_root_finds_marker_above_explicit_start(tmp_path: Path):
 def test_workspace_root_hits_new_sentinel(tmp_path: Path):
     ws = tmp_path / "ws"
     (ws / "episodes").mkdir(parents=True)
-    (ws / ".to-video-root").write_text("", encoding="utf-8")
+    (ws / ".vibe-video-root").write_text("", encoding="utf-8")
     assert paths.workspace_root(ws / "episodes") == ws.resolve()
 
 
@@ -76,8 +76,8 @@ def test_workspace_root_takes_nearest_when_nested(tmp_path: Path):
     outer = tmp_path / "outer"
     inner = outer / "inner"
     (inner / "leaf").mkdir(parents=True)
-    (outer / ".to-video-root").write_text("", encoding="utf-8")
-    (inner / ".to-video-root").write_text("", encoding="utf-8")
+    (outer / ".vibe-video-root").write_text("", encoding="utf-8")
+    (inner / ".vibe-video-root").write_text("", encoding="utf-8")
     assert paths.workspace_root(inner / "leaf") == inner.resolve()
 
 
@@ -86,8 +86,8 @@ def test_env_workspace_wins_over_cwd_search(tmp_path: Path, monkeypatch):
     cwd_side = tmp_path / "by-cwd"
     ws.mkdir()
     cwd_side.mkdir()
-    (cwd_side / ".to-video-root").write_text("", encoding="utf-8")
-    (ws / ".to-video-root").write_text("", encoding="utf-8")
+    (cwd_side / ".vibe-video-root").write_text("", encoding="utf-8")
+    (ws / ".vibe-video-root").write_text("", encoding="utf-8")
     monkeypatch.setenv(paths.ENV_WORKSPACE, str(ws))
     assert paths.workspace_root(cwd_side) == ws.resolve()
 
@@ -111,7 +111,7 @@ def test_workspace_root_without_sentinel_exits_with_init_hint(tmp_path: Path):
     with pytest.raises(SystemExit) as ei:
         paths.workspace_root(bare)
     msg = str(ei.value)
-    assert ".to-video-root" in msg
+    assert ".vibe-video-root" in msg
     assert "--init-workspace" in msg  # 报错必须带修复动作，不只报状态
 
 

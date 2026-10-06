@@ -28,7 +28,7 @@ export const P0: React.FC<{scene: SceneRange}> = ({scene}) => {
               color={theme.ok}
               style={{fontSize: 56, fontWeight: 700, padding: '20px 48px'}}
             >
-              to-video
+              vibe-video
             </Pill>
           </FadeUp>
           <div style={{display: 'flex', gap: 24}}>

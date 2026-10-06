@@ -19,7 +19,7 @@ title 的确定性派生：改题后新题另起 v1、旧版本文件原样保�
 tests/test_config.py::test_machine_property_never_in_toml）——~/Documents/video
 这类本机目录 clone 到他机即死数据。解析序只有两层，且只在本模块定义一处：
 
-    --root（一次性 / prompt 指定）> env TO_VIDEO_DELIVER_ROOT（持久统一配置）
+    --root（一次性 / prompt 指定）> env VIBE_VIDEO_DELIVER_ROOT（持久统一配置）
 
 两渠道取值一律 strip，空串 = 未配置；expanduser 展开；相对路径锚工作区根
 （绝不锚 CWD——本命令常自任意目录调起）。皆无 → 大声退出并列出两渠道。
@@ -55,8 +55,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import langs  # noqa: E402 - 后缀/命名规则的单一事实源（pipeline.py 家族）
 import paths  # noqa: E402 - 导入边界见 paths.py 文件头（pipeline.py 家族）
 
-#: 持久统一配置渠道（机器属性注册处 = references/PIPELINE.md「环境变量」节，同 TO_VIDEO_TTS_STORE）。
-ENV_ROOT = "TO_VIDEO_DELIVER_ROOT"
+#: 持久统一配置渠道（机器属性注册处 = references/PIPELINE.md「环境变量」节，同 VIBE_VIDEO_TTS_STORE）。
+ENV_ROOT = "VIBE_VIDEO_DELIVER_ROOT"
 
 #: 文件名/目录名禁用字符：/ 与 : 是 macOS 真实分隔符，\\ ? * " < > | 是迁往
 #: exFAT/NTFS 时的常见雷，控制字符无处合法。全角标点与空格保留——用户示例
@@ -95,7 +95,7 @@ def sha1_of(p: Path) -> str:
 
 
 def resolve_root(root_arg: str | None) -> tuple[Path, str]:
-    """→ (归档根, 来源标记)。解析序 SSOT 在此一处：--root > env TO_VIDEO_DELIVER_ROOT。"""
+    """→ (归档根, 来源标记)。解析序 SSOT 在此一处：--root > env VIBE_VIDEO_DELIVER_ROOT。"""
     if root_arg and root_arg.strip():
         raw, via = root_arg.strip(), "--root"
     elif env := os.environ.get(ENV_ROOT, "").strip():

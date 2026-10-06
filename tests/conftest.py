@@ -6,7 +6,7 @@
 
 真集锚定是 **env 门控** 的（双锚点架构的必然）：本仓是 skill 仓，机制与内容
 物理分离后这里**没有** episodes/；真集只存在于 skill 之外的内容工作区，
-由 `TO_VIDEO_TEST_WORKSPACE` 指过来（集成模式）。若改为「自 CWD 向上找哨兵」，
+由 `VIBE_VIDEO_TEST_WORKSPACE` 指过来（集成模式）。若改为「自 CWD 向上找哨兵」，
 在 skill 仓里跑测试会静默锚到别处或 no-op 得不明不白——env 缺席即明确的
 「无真树可守」，不猜。
 """
@@ -24,7 +24,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 #: 集成模式真树：env 指向的内容工作区（含哨兵与 episodes/ 真集）。
 #: None = 纯 skill 仓形态，真集守卫 no-op。
-_TEST_WS = os.environ.get("TO_VIDEO_TEST_WORKSPACE")
+_TEST_WS = os.environ.get("VIBE_VIDEO_TEST_WORKSPACE")
 EPISODES = Path(_TEST_WS).resolve() / "episodes" if _TEST_WS else None
 sys.path.insert(0, str(PIPELINE_SCRIPTS))
 
@@ -60,7 +60,7 @@ def _episodes_stay_pristine():
     单行正则必漏，而漏报的门等于没门；快照对任何改动机制（含 subprocess 写盘、
     误传真路径的脚手架）一律有效，且 mtime 参与比对 ⇒ 「删掉再原样写回」也会红。
 
-    `TO_VIDEO_TEST_WORKSPACE` 未设时 no-op：本仓（skill 仓）没有 episodes/，
+    `VIBE_VIDEO_TEST_WORKSPACE` 未设时 no-op：本仓（skill 仓）没有 episodes/，
     真树守卫只对 env 指来的内容工作区有意义。
     """
     if EPISODES is None:

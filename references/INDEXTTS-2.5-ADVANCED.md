@@ -8,7 +8,7 @@
 > [VOICE-CLONING.md](./VOICE-CLONING.md) §4.1 为准，可执行参数一律以各集 `pipeline.toml` 为准。
 > 本文只写「上游事实」（源码坐标 + 论文表号）与「二者的映射关系」。
 >
-> **证据锚点**：上游为本机 clone `~/tools/index-tts`（默认位置，可经 `TO_VIDEO_INDEX_TTS_ROOT` 覆盖）<sup>[[8]](#ref8)</sup>，**HEAD `4f8792f`**；权重为 HF 公开发布的
+> **证据锚点**：上游为本机 clone `~/tools/index-tts`（默认位置，可经 `VIBE_VIDEO_INDEX_TTS_ROOT` 覆盖）<sup>[[8]](#ref8)</sup>，**HEAD `4f8792f`**；权重为 HF 公开发布的
 > `IndexTeam/IndexTTS-2.5` 基座（`gpt.pth` 字节数与 HF 发布版逐字节一致）。所有 `file:line`
 > 均指该 HEAD；升级上游后需复核。实测数据一律标注日期与口径（机器空闲／有负载、单句／整集）。
 

@@ -58,7 +58,7 @@ uv run hf download IndexTeam/IndexTTS-2.5 --local-dir checkpoints
 
 ### 2.3 启动推理服务
 
-在 index-tts 根目录（`~/tools/index-tts` 为默认位置，工具侧可经 `TO_VIDEO_INDEX_TTS_ROOT` 覆盖）：
+在 index-tts 根目录（`~/tools/index-tts` 为默认位置，工具侧可经 `VIBE_VIDEO_INDEX_TTS_ROOT` 覆盖）：
 
 ```bash
 cd ~/tools/index-tts

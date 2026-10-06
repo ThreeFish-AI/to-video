@@ -588,10 +588,10 @@ def test_doctor_reports_deliver_root_presence(monkeypatch, tmp_path, capsys):
     """doctor 的 deliver root ℹ️ 行两分支：已配置显示生效值，未配置显示两渠道提示。"""
     import pipeline
 
-    monkeypatch.setenv("TO_VIDEO_DELIVER_ROOT", "/tmp/some-dv")
+    monkeypatch.setenv("VIBE_VIDEO_DELIVER_ROOT", "/tmp/some-dv")
     pipeline.cmd_doctor(tmp_path, {}, None)
     assert "交付归档根: /tmp/some-dv" in capsys.readouterr().out
-    monkeypatch.delenv("TO_VIDEO_DELIVER_ROOT")
+    monkeypatch.delenv("VIBE_VIDEO_DELIVER_ROOT")
     pipeline.cmd_doctor(tmp_path, {}, None)
     assert "交付归档未配置" in capsys.readouterr().out
 
@@ -779,8 +779,8 @@ def test_tts_en_engine_view_overrides(monkeypatch, tmp_path):
     zh 无覆写时不传 --voice（命令 token 与现状一致）。"""
     import pipeline
 
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
-    (tmp_path / ".to-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
+    monkeypatch.setenv("VIBE_VIDEO_WORKSPACE", str(tmp_path))
+    (tmp_path / ".vibe-video-root").touch()  # 工作区哨兵：tts.ref 相对工作区根解析
     (tmp_path / "voices").mkdir()
     (tmp_path / "voices" / "en.wav").write_bytes(b"ref")
     commands: list[list[str]] = []
@@ -1197,8 +1197,8 @@ def _indextts_cfg(duration_factor=None) -> dict:
 
 
 def _indextts_workspace(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("TO_VIDEO_WORKSPACE", str(tmp_path))
-    (tmp_path / ".to-video-root").touch()
+    monkeypatch.setenv("VIBE_VIDEO_WORKSPACE", str(tmp_path))
+    (tmp_path / ".vibe-video-root").touch()
     (tmp_path / "voices").mkdir()
     (tmp_path / "voices" / "me.wav").write_bytes(b"ref")
 

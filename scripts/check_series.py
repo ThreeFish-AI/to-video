@@ -63,11 +63,11 @@ from pathlib import Path
 from paths import PROJECT, WORKSPACE
 
 SERIES_JSON = WORKSPACE / "series.json"
-WORKSPACE_TOML = WORKSPACE / "to-video.toml"
+WORKSPACE_TOML = WORKSPACE / "vibe-video.toml"
 
 
 def _cfg_list(section_key: str) -> tuple[str, ...]:
-    """读工作区 to-video.toml 的字符串列表键；文件/键缺失 = 空元组（新工作区默认态）。
+    """读工作区 vibe-video.toml 的字符串列表键；文件/键缺失 = 空元组（新工作区默认态）。
 
     课程站匿名化与下期卡规则是**内容策略**而非机制：系列 id 集随内容走，
     留在工作区配置里，skill 不携带任何具体系列的身份。"""
@@ -151,7 +151,7 @@ COVERED_GLOBS = (
     "**/*.tsx",
     "**/*.ts",
 )
-#: 宿主仓库（PROJECT）级受检文件：工作区 to-video.toml 的
+#: 宿主仓库（PROJECT）级受检文件：工作区 vibe-video.toml 的
 #: `check_series.project_globs` 声明（如 negentropy 工作区的 knowledge-map 与
 #: CHANGELOG——它们链接进工作区内容，整目录迁移会一次性打断）。默认空：
 #: 独立工作区没有宿主仓库文档层。刻意的空默认而非 `.agent/skills/**` 之类

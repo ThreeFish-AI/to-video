@@ -42,7 +42,7 @@ cd $P/video
 # 字幕（B 站/YouTube 上传件；cue 终点不含句间停顿——外挂字幕静默期不留字）
 uv run --no-project $T/scripts/captions.py --project $P
 
-# 交付归档（根路径 = --root 一次性 或 env TO_VIDEO_DELIVER_ROOT 持久；机器属性不进 toml）
+# 交付归档（根路径 = --root 一次性 或 env VIBE_VIDEO_DELIVER_ROOT 持久；机器属性不进 toml）
 uv run --no-project $T/scripts/pipeline.py --project $P deliver
 ```
 
@@ -61,7 +61,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver
 
 `out/final.mp4` 是**新鲜渲槽位**（重渲即覆盖、gitignored）；`deliver` 把成片复制进统一归档根 `<根>/<系列id>/<集标题> v<N>.mp4`——系列子目录与集标题取自 `$W/series.json`（发布顺序 SSOT），版本号扫目录自增：首投 v1，**内容变化才升版**，同字节重投打印跳过不产生重复副本；改题后新题另起 v1、旧版本原样保留。
 
-- **配置渠道**：`--root ~/Documents/video`（一次性 / prompt 指定）或 `export TO_VIDEO_DELIVER_ROOT=~/Documents/video`（持久统一配置，可写 shell profile / Claude Code settings env）。根路径是机器属性，不写进受版本控制的 toml（同 tts.server / tts-store 立场）；两渠道皆无时 deliver 大声退出并列出用法。
+- **配置渠道**：`--root ~/Documents/video`（一次性 / prompt 指定）或 `export VIBE_VIDEO_DELIVER_ROOT=~/Documents/video`（持久统一配置，可写 shell profile / Claude Code settings env）。根路径是机器属性，不写进受版本控制的 toml（同 tts.server / tts-store 立场）；两渠道皆无时 deliver 大声退出并列出用法。
 - **agent 契约**：用户在 prompt 中给出目标路径时，`render --final` 成功后**显式**执行 `pipeline.py --project $P deliver --root <路径>`，并建议用户以 env 固化。`render --final` 刻意不自动串联 deliver——本规格把编排层 `>> render 完成` 标记钉为判完成唯一信号，串联外部写操作会在失败时产生「标记已打 + 退出码非零」的混合信号。
 - 先 `deliver --dry-run` 预览目的地与下一版本号，确认后再实投。
 - **收尾关服务与浏览器终扫（RSI-033）**：deliver 成功后，按 [07-tts-voice.md](./07-tts-voice.md)「服务生命周期」判在用并关闭 IndexTTS 服务端（同机无其他使用者时），并执行一次 `uv run --no-project $T/scripts/pipeline.py --project $P doctor --clean-browsers`（详见 [PIPELINE.md §十](./PIPELINE.md)）回收任何 `ppid=1` 的自动化 Chrome 孤儿进程（含 Headless 与自动化可见实例，不动用户日常 Chrome）——制片会话不留常驻服务、不留浏览器孤儿进程。
@@ -78,7 +78,7 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
 `voices/`（生物特征）与 `node_modules` 都不随 clone 走。因此**换一个 worktree/机器就要重建一次，
 这是常规操作而非异常路径**。按依赖序六步（TTS 可恢复时总量级 ≈ 1 小时，对比整集重合成 2 小时）：
 
-1. **装 skill**：clone 本仓并软链或设 `TO_VIDEO_HOME`（见 [PIPELINE.md §路径变量约定](./PIPELINE.md)）——
+1. **装 skill**：clone 本仓并软链或设 `VIBE_VIDEO_HOME`（见 [PIPELINE.md §路径变量约定](./PIPELINE.md)）——
    工作区/分集薄包装靠它解析机制，缺席是大声失败而非静默跳过。
 2. **`cd video && pnpm install`（裸 install，勿加 `--ignore-workspace`；必须先于 archify 录制）**：
    录制器要起 Remotion 打包浏览器，`node_modules` 半残会在录制中途裸 traceback。构建许可配在
@@ -93,7 +93,7 @@ git 只带走入库字节——`out/` 渲染产物、archify 的 mp4/末帧 PNG�
      [VOICE-CLONING §六](VOICE-CLONING.md)；RSI-040 延续条款：恢复操作照带授权即可）；
      **有待合成**（store 丢失即整集重合成）＝新的一次显式要求，先向本人确认再跑。
      换 worktree 须先从旧工作区/私有录音恢复 `voices/` 并过 `refs.py verify`（参考音频
-     不随 git 走）；换机则随行拷贝 tts-store 目录（或以 `TO_VIDEO_TTS_STORE` 指位）。
+     不随 git 走）；换机则随行拷贝 tts-store 目录（或以 `VIBE_VIDEO_TTS_STORE` 指位）。
 4. **archify 全量重录（~45 分钟）**：`uv run --with playwright python
    $T/scripts/record_archify_all.py --project $P`（串行是刻意的：多实例互抢 CPU/GPU 资源
    会掉帧——headless 无前台焦点——静默污染产物；浏览器进程纪律见

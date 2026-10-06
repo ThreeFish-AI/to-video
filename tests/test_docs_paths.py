@@ -3,8 +3,8 @@
 抽取为独立技能后，机制（skill 仓）与内容（工作区）不再同址，文档里的命令
 一律用四变量组合，定义 SSOT 在 references/PIPELINE.md 的路径变量约定节：
 
-  - ``$T`` = skill 根（机制所在，随安装位置变化：``~/.claude/skills/to-video``
-    软链 / ``TO_VIDEO_HOME`` / 任意 clone 路径）
+  - ``$T`` = skill 根（机制所在，随安装位置变化：``~/.claude/skills/vibe-video``
+    软链 / ``VIBE_VIDEO_HOME`` / 任意 clone 路径）
   - ``$W`` / ``$P`` / ``$V`` = 工作区根 / 分集工程 / 音色样本目录（内容所在，
     随用户把工作区放在哪变化）
 
@@ -13,7 +13,7 @@
      skills 与 SKILL.md 只引用不定义——重复定义意味着搬迁/改名时要同步 N 处。
   2. 命令锚定：$T 锚定的命令行里不得混入工作区相对字面量（voices/、episodes/
      裸前缀）——$T 是 skill 根，配上工作区相对路径在任何安装位置都不成立
-     （混锚）。$W/$P/$V 引用合法。注意 `to-video.toml` 的 tts.ref 与
+     （混锚）。$W/$P/$V 引用合法。注意 `vibe-video.toml` 的 tts.ref 与
      series.json 的 path 是工作区根相对的**配置契约**，不是命令，不在受检面。
   3. 散文里的 Markdown 相对链接必须落到 skill 仓内真实文件——AGENTS.md 强制
      可跳转链接；把链接变量化会一次性造出十几条死链。
@@ -377,7 +377,7 @@ def test_no_npx_for_remotion_tools():
     [
         ("见 pipeline/skills/06", True),
         ("`$T/pipeline/VOICE-CLONING.md` §3.3", True),
-        ("[x](https://github.com/o/to-video/blob/main/pipeline/templates/x)", True),
+        ("[x](https://github.com/o/vibe-video/blob/main/pipeline/templates/x)", True),
         ("cp $T/docs/quickstart/P0.tsx", True),
         ("[x](../pipeline/stages.toml)", True),
         ("%% source: pipeline/VOICE-CLONING.md — §一", True),
@@ -389,7 +389,7 @@ def test_no_npx_for_remotion_tools():
         ("$T/pipeline/scripts/tts.py", True),
         ("映射见 pipeline/README.md", True),
         ("assets/video-skeleton/skeleton.toml", False),
-        ("ln -s <目录> ~/.claude/skills/to-video", False),
+        ("ln -s <目录> ~/.claude/skills/vibe-video", False),
     ],
 )
 def test_legacy_path_detector_forms(line, legacy):

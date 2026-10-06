@@ -1,20 +1,20 @@
 ---
-name: to-video
-description: 把论文、技术文档、代码仓库、课程站点或 guided-learn 精读产物（精读与通俗拆解文档）等信源做成动效图解科普视频（animated explainer video）的十阶段流水线：信源精读取证、策划、逐字稿（单一事实源）、真实性与易懂性校验、成文优化（把 AI 稿改得像人写、适合人读人听）、分镜、声音克隆或预置音色配音（TTS）、Remotion 代码动画、抽帧 QA、终渲字幕与交付归档，支持中英双语版本。Use when 用户想把一篇论文、文档、代码或已有的精读拆解文档讲成视频，制作或迭代科普解说视频（改稿后重配音、重渲染），初始化视频工作区或新建一集，编写或润色 narration.md / storyboard.md，跑配音、渲染、抽帧质检或交付归档，或询问这套流水线的用法——即使没有点名 to-video。不用于剪辑或转码已有视频、通用产品宣传片、幻灯片、单独绘制架构图，或不产出视频的论文精读。
+name: vibe-video
+description: 把论文、技术文档、代码仓库、课程站点或 guided-learn 精读产物（精读与通俗拆解文档）等信源做成动效图解科普视频（animated explainer video）的十阶段流水线：信源精读取证、策划、逐字稿（单一事实源）、真实性与易懂性校验、成文优化（把 AI 稿改得像人写、适合人读人听）、分镜、声音克隆或预置音色配音（TTS）、Remotion 代码动画、抽帧 QA、终渲字幕与交付归档，支持中英双语版本。Use when 用户想把一篇论文、文档、代码或已有的精读拆解文档讲成视频，制作或迭代科普解说视频（改稿后重配音、重渲染），初始化视频工作区或新建一集，编写或润色 narration.md / storyboard.md，跑配音、渲染、抽帧质检或交付归档，或询问这套流水线的用法——即使没有点名 vibe-video。不用于剪辑或转码已有视频、通用产品宣传片、幻灯片、单独绘制架构图，或不产出视频的论文精读。
 license: MIT
 compatibility: 渲染与抽帧 QA 仅支持 macOS（场景字体依赖系统 CJK 字体栈）；需要 uv、pnpm 与 Node.js（版本要求见 README 前置依赖）；全程（含终渲与交付）edge-tts 草声默认（需联网），IndexTTS-2.5 本人声音克隆仅本人显式点名启用（实跑带 --final-voice 具名授权，需本地服务）；宿主须能执行 Bash。
 metadata:
-  version: "2.0.0"
+  version: "3.0.0"
   author: "ThreeFish-AI"
   source: "extracted from ThreeFish-AI/negentropy apps/negentropy-influence"
 allowed-tools: Read Write Edit Glob Grep Bash
 ---
 
-# to-video：动效图解科普视频流水线（路由壳）
+# vibe-video：动效图解科普视频流水线（路由壳）
 
 本 Skill 是**路由层**：内容 SSOT 在 `references/NN-*.md`，工具 SSOT 在 `scripts/`，阶段唯一机器可读声明是 [references/stages.toml](references/stages.toml)；只给路由、指针与不变量，不复制正文。
 
-命令统一用路径变量（唯一定义处 [PIPELINE.md](references/PIPELINE.md)）：`$T` = skill 根（本文件所在目录；Claude Code 下即 `${CLAUDE_SKILL_DIR}`），`$W` = 内容工作区根（含 `.to-video-root` 哨兵），`$P` = `$W/episodes/<slug>-video` 分集工程，`$V` = `$W/voices` 音色样本目录（gitignored）。
+命令统一用路径变量（唯一定义处 [PIPELINE.md](references/PIPELINE.md)）：`$T` = skill 根（本文件所在目录；Claude Code 下即 `${CLAUDE_SKILL_DIR}`），`$W` = 内容工作区根（含 `.vibe-video-root` 哨兵），`$P` = `$W/episodes/<slug>-video` 分集工程，`$V` = `$W/voices` 音色样本目录（gitignored）。
 
 ## 先判任务类型
 
@@ -26,7 +26,7 @@ allowed-tools: Read Write Edit Glob Grep Bash
 | 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④ 复核 → `build` → `check`（无分镜时改跑 `check_script.py --pre-tts`） | 速查表 ⑤ |
 | 出英文版 / 双语 | `pipeline.toml` 声明 `narration.langs = ["zh","en"]` + 句 id 对齐的译稿 `narration.en.md`；tts/render/captions/deliver 加 `--lang en`（build/check 缺省全覆盖，产物加 `.en` 后缀） | [PIPELINE.md §五「双语渲染」](references/PIPELINE.md) |
 | 评审后重配音（本人声音） | 零改稿换声：toml 升 indextts＋填 ref 指纹 → tts --allow-voice-switch --final-voice → render → qa → check → captions → render --final；en 追配同轨 [tts.en]（先跨语种试听，独立一次显式要求） | [07](references/07-tts-voice.md) |
-| 交付归档 | 终渲后显式 `deliver`；根路径 `--root`（一次性）或 env `TO_VIDEO_DELIVER_ROOT`（持久，不进 toml） | 速查表 ⑩ |
+| 交付归档 | 终渲后显式 `deliver`；根路径 `--root`（一次性）或 env `VIBE_VIDEO_DELIVER_ROOT`（持久，不进 toml） | 速查表 ⑩ |
 | 环境 / 状态排障 | `pipeline.py doctor`（配置/时序/指纹/TTS/浏览器 `--clean-browsers`）/ `status`（新鲜度） | [PIPELINE.md §三](references/PIPELINE.md) |
 | 本 Skill 自身缺陷或改进 | 走「自改进回路（RSI）」，不顺手改 `$T` | [RSI.md](RSI.md) |
 
@@ -100,7 +100,7 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 ## 运行时陷阱
 
 - **Bash 调用间不保留 shell 变量**：`$T/$W/$P/$V` 是文档记号，命令写实际路径；工作目录保留，先 `cd` 进 `$W`。
-- **`$T` 锚定的命令须在工作区内执行**：脚本读 env `TO_VIDEO_WORKSPACE` 或自 CWD 向上找 `.to-video-root`，找不到即大声退出——照报错指引处置，绝不静默猜根；包装器缺 skill 同照其打印指引处置。
+- **`$T` 锚定的命令须在工作区内执行**：脚本读 env `VIBE_VIDEO_WORKSPACE` 或自 CWD 向上找 `.vibe-video-root`，找不到即大声退出——照报错指引处置，绝不静默猜根；包装器缺 skill 同照其打印指引处置。
 - **脚本当黑盒**：优先走 `pipeline.py` 子命令；直调独立脚本先跑 `--help`，用途与调用形态查 [PIPELINE.md §三](references/PIPELINE.md)；不为使用通读源码。
 - **机器属性只走 env**：交付根、TTS 音频库、IndexTTS 服务地址等永不进版本控制的 toml，注册表见 [PIPELINE.md「环境变量」](references/PIPELINE.md)。
 - **浏览器任务一律 headless**：录制/渲染无头复用；孤儿回收走 `doctor --clean-browsers`，禁全局 pkill。
