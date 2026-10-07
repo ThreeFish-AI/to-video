@@ -22,6 +22,7 @@
 | [INDEXTTS-2.5-ADVANCED.md](../../references/INDEXTTS-2.5-ADVANCED.md) | 上游能力面与进阶：机制循证、配音质量提升路线图 |
 | [PRON-GLOSSARY.md](../../references/PRON-GLOSSARY.md) | 易错字台账：发音标注跨集复用表 |
 | [MODELING-PLAYBOOK.md](../../references/MODELING-PLAYBOOK.md) | 动效画面建模手册（有界经验库，门 `check_playbook.py`） |
+| [DIRECTING-CRAFT.md](../../references/DIRECTING-CRAFT.md) | 导演手艺知识库：镜头语言/节奏/动画原则/导演级审查判据（`@shot` 词表 SSOT，RSI-048） |
 
 ## 元机制、评测与研究
 

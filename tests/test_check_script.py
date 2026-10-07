@@ -802,6 +802,47 @@ def test_check_motion_unknown_verb_and_missing_layer(project):
     assert rc == 0 and "未调用" not in out, out
 
 
+def test_shot_tag_in_visual_column_is_motion_silent(project):
+    """RSI-048：@shot 景别标注约定落画面列——check-motion 只读动效列，零干扰（parser 零改动回归钉）。"""
+    board = BOARD_MOTION.replace(
+        "| 0-A | p0-01..02 | x |", "| 0-A | p0-01..02 | `@shot:CU` 单主体特写 |"
+    )
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    write_narration(project, [BENIGN, BENIGN, BENIGN, BENIGN])
+    write_motion_hooks(project)
+    write_scene(
+        project,
+        "P0Hook.tsx",
+        "import {useEnter} from '../motion';\nconst e = useEnter('fall');\n",
+    )
+    write_scene(project, "P1Loop.tsx", "export const P1Loop = () => null;\n")
+    rc, out = run_check(project, "--check-motion")
+    assert rc == 0, out
+    assert "@shot" not in out, out  # 画面列标注不产生任何 motion 相关输出
+
+
+def test_shot_tag_in_effect_column_gets_free_guardrail(project):
+    """RSI-048：@shot 误写动效列 → 「不在词表」WARN——免费护栏是预期行为，防未来被"修掉"。"""
+    board = BOARD_MOTION.replace(
+        "| 1-A | p1-01..02 | x | `@stagger` 依次点亮 |",
+        "| 1-A | p1-01..02 | x | `@shot:CU` `@stagger` 依次点亮 |",
+    )
+    write_board(project, board)
+    write_config(project, CFG_OK)
+    write_narration(project, [BENIGN, BENIGN, BENIGN, BENIGN])
+    write_motion_hooks(project)
+    write_scene(
+        project,
+        "P0Hook.tsx",
+        "import {useEnter} from '../motion';\nconst e = useEnter('fall');\n",
+    )
+    write_scene(project, "P1Loop.tsx", "export const P1Loop = () => null;\n")
+    rc, out = run_check(project, "--check-motion")
+    assert rc == 0, out  # WARN-only
+    assert any("@shot" in line and "词表" in line for line in out.splitlines()), out
+
+
 def test_scene_anchor_unknown_id_fails(project):
     """ISSUE-190 防 5：场景代码 at()/dur() 引用不存在的句 id → FAIL（渲染期才抛的跳号句前移拦截）。"""
     board = "| 镜 | 句区间 | 画面 | 动效 |\n|---|---|---|---|\n| 0-A | p0-01..02 | 卡 | ；`@stagger` |\n"
