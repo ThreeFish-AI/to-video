@@ -225,6 +225,11 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
   3. **反例必演消融对比**：破坏性实验采用左/右或前/后同屏消融，警示红 `#FF5C5C` 演崩溃链路与退化数据 ↔ 确认绿 `#7ED321` 演机制在位拦截（Counterfactual Ablation Contrast）；
   4. **数字必带基线标尺**：实证对比通过 `useCount` 驱动动态计数，标尺底部恒常驻基线值与基准标签（Baseline-Anchored Counter）。
 - **开篇首镜视听合力（RSI-039）**：对照 [06](./06-storyboard.md)「开篇首镜视听合力定式」——0-A 首镜第一秒以高反差核心意象或动态冲击入场（入场动画 / `useCount` 冲击计数 / 核心意象放大定格），与口播「这是 XXX ……」同步发力，严禁静止文字卡；P0 首镜与全景坐标冲突时以本定式优先（坐标后移一镜或动态高亮融入）。
+- **导演级动画三则（RSI-048，判据与原理见 [导演手艺](./DIRECTING-CRAFT.md)）**：
+  1. **AAS（Anticipation-Action-Settle）**：关键揭示用「主作用前 ≤3 帧小反相位移（`useEnter` 组合）+ 主作用 + `SPRING.settle` 收束」表达预备与落定，**零新 hook**；settle 窗（0.2–0.3s）内禁叠第二个动画；
+  2. **Eye-Trace**：镜切换前后焦点位移 ≤1/3 屏宽，超限须引导动画（`@travel` 接力、连线延伸）——相邻镜焦点衔接与新元素入场落点对齐句内关键词（Land on the Word，词级落点细化）；
+  3. **数据本体红线**：柱高/点位/数值标注等数据语义元素**永不吃过冲弹簧**（钳 seat=1，3D「弹簧过冲要钳行程」实践泛化）——squash/夸张只作用于概念隐喻层。
+- **运镜实现约定**：pullOut = `usePushIn(at, {scale: -0.06})`（scale 为增量：1.0→0.94）组合、pan/tracking = 容器 transform + `useProgress`（bespoke 逃生舱合法形态，Easing.inOut 禁匀速）、静态图兜底 Ken Burns = 长周期 `usePushIn`（8–15s 内 1.0→1.08）；完整映射表与动机律见 [导演手艺 §1.2](./DIRECTING-CRAFT.md)。**frozen 化触发条件**：≥2 集真实使用 pullOut/pan 且评审出现「组合约定失真」事故 ⇒ 另立 RSI 评估（届时词表迁 hooks 派生）。
 
 ## 双语 i18n（场景文案，双语集）
 

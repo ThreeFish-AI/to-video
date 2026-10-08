@@ -110,17 +110,18 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 | 文件 | 何时读 |
 |---|---|
 | 阶段规格 `references/NN-*.md` | 进入该阶段时（入口见速查） |
-| [PIPELINE.md](references/PIPELINE.md) | 查脚本清单、`pipeline.toml` 字段、路径/环境变量、交付归档、双语、新集脚手架清单 |
+| [PIPELINE.md](references/PIPELINE.md) | 查脚本/配置/路径/交付/双语/脚手架 |
 | [MODELING-PLAYBOOK.md](references/MODELING-PLAYBOOK.md) | ② 视觉与 ⑥ 分镜设计前（必读） |
-| [PRON-GLOSSARY.md](references/PRON-GLOSSARY.md) | 写逐字稿遇多音字/英文专名、复听纠读音时 |
-| [VOICE-CLONING.md](references/VOICE-CLONING.md) | 首次部署 IndexTTS、准备样本、选风格档、配音排障 |
-| [INDEXTTS-2.5-ADVANCED.md](references/INDEXTTS-2.5-ADVANCED.md) | 上游机制循证、配音质量调优（非日常） |
+| [DIRECTING-CRAFT.md](references/DIRECTING-CRAFT.md) | ②⑥⑧⑨ 导演判据设计时 |
+| [PRON-GLOSSARY.md](references/PRON-GLOSSARY.md) | 遇多音字/专名读音、复听纠音时 |
+| [VOICE-CLONING.md](references/VOICE-CLONING.md) | 部署 IndexTTS、备样、选风格档、配音排障 |
+| [INDEXTTS-2.5-ADVANCED.md](references/INDEXTTS-2.5-ADVANCED.md) | 机制循证、配音调优（非日常） |
 | [RSI.md](RSI.md) | 发现本 Skill 自身缺陷或改进项时 |
-| [README.md](README.md) | 安装、更新、前置依赖版本 |
+| [README.md](README.md) | 安装/更新/依赖版本 |
 
 ## 相邻技能协作
 
-- **Stage ① 信源输入**：已有 /guided-learn 产出作 C 型信源直接成片（01「C 型」），不重新精读；无产物可先跑 /guided-learn。
+- **Stage ① 信源输入**：已有 /guided-learn 产出作 C 型信源直接成片（01「C 型」），不重新精读；无产物可先跑。
 - **Stage ⑥/⑧ 图示资产**：需要架构/流程类图解时调 `/archify` 出图，HTML 落 `$W` 下，`record_archify_all.py` 逐章录成动效素材；句级锚定覆盖门已串联进 `check`。
 - **Stage ⑧ 精确 3D 资产（可选）**：信源涉机械结构/硬件、示意级几何不够时，装 text-to-cad 的 **cad 单 skill** 出 GLB；安装命令与 3D 宪法见 [08「外部 CAD 资产」](references/08-remotion-implementation.md)。
 

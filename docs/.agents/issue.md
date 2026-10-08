@@ -727,7 +727,21 @@
 
 **同类问题影响**：凡只消费既有产物、不触发上游合成的阶段（⑩ captions/deliver 同理）都适用「阶段说明须声明其消费的产物档位」规则；机制正确而规格空白的领域，优先补显式声明+锚点执法而非再造机制门。
 
-## RSI-048 字幕单行约束未规定长句切换，内容门与渲染层之间存在语义断层
+## RSI-048 镜头语言·节奏·动画原则等导演知识全仓零覆盖：视频专业表达缺理论坐标系
+
+**表因**：用户点名要求融入「专业动画制作导演」的知识与机制以提升视频专业性与表达能力；调研实证（2026-10-07，双 Explore + 六路联网调研）：`景别`/`运镜`/`anticipation`/`staging`/`eye-trace`/`转场语义`/`视觉节奏曲线` 在 references/scripts/tests/SKILL 全仓零命中——导演语言体系性缺失，仅有零散实战定式（四定式 RSI-032、Visual Hook RSI-039、Morph Continuity、声音表演导演规则 03:99-107——音频侧有导演学、视觉侧无对应物）。
+
+**根因**：既有视觉质量资产是「实战事故驱动的补丁式积累」，每条都有实证锚点但无理论坐标系组织——补丁只在已知失败形态上生效，未知形态（节奏均质化、焦点漂移、眼动跳切、镜头无动机）无判据可依。08 运动层（frozen）只管「怎么动」的机制正确，MODELING-PLAYBOOK 只管「画什么」的策略经验，「怎么导」（景别/运镜/转场/节奏/构图/动画原则）恰落两层都不管的夹缝。
+
+**定性**：非阻断改进（知识融入·用户点名启动；零 parser/frozen/stages.toml/机器门改动）。
+
+**处理方式**：[PR #41](https://github.com/ThreeFish-AI/vibe-video/pull/41)（commit 006125d，分支 `ThreeFish-AI/rsi-048-directing-craft`）。新建 [DIRECTING-CRAFT.md](../../references/DIRECTING-CRAFT.md)（工艺层 SSOT，六节+28 反模式表）+ [研究文档](../research/directing-craft.md)（G2 比选存证+数据契约 roadmap）；⑥ 规格 `@shot:` 景别约定（落画面列，check_motion 不读该列零干扰，误写动效列得「不在词表」WARN 免费护栏）；②⑥⑧⑨ 四阶段规格注入指针+核心规范（⑤ 冻结清单另加 `@shot` 记号）；09 目检清单 +「导演级四维」（焦点/节奏/连续性/静音语义）；SKILL 按需加载表 +1 行（等量压缩保 8000 预算）；05 §七.4 冻结清单加 `@shot`；tests/test_directing_craft.py 5 锚点 + test_check_script 2 护栏钉。机械门族（@cam 词表门/eye-trace/read-time lint）作为后续 RSI roadmap 存证于研究文档——「先有数据再有门」，首集 @shot 实践产出校准数据后再立项。
+
+**后续防范**：新增视觉质量维度先查 DIRECTING-CRAFT 是否已有判据，再决定立新定式或扩展词表；导演经验（构图/隐喻类）仍走建模手册策展分支，镜头语言/节奏类归 DIRECTING-CRAFT——两层候选不互投。
+
+**同类问题影响**：02/06/08/09 四阶段规格的视觉规划面；后续若 @shot 标注使用率与失约样本积累（≥2 集），触发机械门族 RSI（触发条件详见研究文档 roadmap 节）。
+
+## RSI-049 字幕单行约束未规定长句切换，内容门与渲染层之间存在语义断层
 
 **表因**：实际终渲中，过长的 zh 片头字幕在字幕容器内自动折成两行；即使 `Subtitle.tsx` 已有 `whiteSpace: 'nowrap'` 路径，系列片头等 seeded 组件仍可能保留 `overflowWrap: 'break-word'`，且 Stage ⑥ 只写「底部单行」没有规定长句如何前后切换。
 
@@ -735,7 +749,7 @@
 
 **定性**：非阻断改进（补齐字幕内容与渲染契约；既有 frozen `Subtitle.tsx` 机制不变；用户在终渲验收中显式提出）。
 
-**处理方式**：本 PR 更新 [06 分镜规格](../../references/06-storyboard.md)、[08 Remotion 实现规格](../../references/08-remotion-implementation.md) 与 [09 渲染 QA](../../references/09-render-qa.md)：zh 强制单行；过长句必须按语义边界拆为连续字幕窗口并用淡入淡出切换；禁止依赖自动换行、压缩字距、持续缩小字号或画布外溢；抽帧验收覆盖第二行、裁切、挤压、外溢及切换帧。视频侧同步修复系列片头组件，将两句长字幕拆为五个单行显示窗口并完成 IndexTTS 2.5 终渲验收。
+**处理方式**：[PR #40](https://github.com/ThreeFish-AI/vibe-video/pull/40)。原登记号 RSI-048 与先合入的 PR #41（导演手艺知识库）撞号——按「首创得号」纪律让位重编号为 RSI-049。更新 [06 分镜规格](../../references/06-storyboard.md)、[08 Remotion 实现规格](../../references/08-remotion-implementation.md) 与 [09 渲染 QA](../../references/09-render-qa.md)：zh 强制单行；过长句必须按语义边界拆为连续字幕窗口并用淡入淡出切换；禁止依赖自动换行、压缩字距、持续缩小字号或画布外溢；抽帧验收覆盖第二行、裁切、挤压、外溢及切换帧。视频侧同步修复系列片头组件，将两句长字幕拆为五个单行显示窗口并完成 IndexTTS 2.5 终声集的终渲验收。
 
 **后续防范**：字幕内容门与 `fitText` 渲染适配不得互相替代；zh 字幕出现第二行即 FAIL，优先回到 narration/storyboard 在语义边界拆句，再回到 Remotion 做窗口时序；每次字幕布局变更必须抽查长句本身及其前后切换帧。
 
