@@ -763,7 +763,7 @@
 
 **定性**：阻断性缺陷（机器门漏放行已上线违规口播；收口代价＝整段重配音 + 重排 T 表）。
 
-**处理方式**：本 PR（分支 ThreeFish-AI/rsi-050-series-intro-knowledge-batch，PR 链接合入后回填）。`scripts/check_series.py` 规则1 新增扫描面：`episodes/*/video/src/{scenes,components}/*.tsx` 中 `const (NARRATION|SUBS) = …;` 块（DOTALL 非贪婪到首个分号）内的单/双引号字符串字面量，过 ORDINAL_WORDS / EN_ORDINAL_WORDS / 他集标题互查（跨系列全局、与 narration 扫描同权；组件按宿主集路径段排除自身标题）。容器名 NARRATION/SUBS 硬编码为机制契约，不进 toml——与 course_series_ids 的内容策略分置。方案比选：**B**（全量扫 tsx 观众层文本）否决——实测误伤 self-evolving 系 P6Ending.tsx 合法视觉层 `ep: '第一集'` 进度卡序数词（「序号活在视觉层」是既定不变量；常假报的门等于被关掉的门）；**C**（组件口播与 narration.md 对账）否决——片头口播设计上就不入 narration.md（独立音轨资产契约），对账要么恒 FAIL 要么排除后零对象，结构性不可行。红绿闭环：tests/test_check_series.py 新节「组件口播字面量（RSI-050）」+7（NARRATION 顺序词 FAIL 事故复刻 / SUBS 数组序数词 FAIL / 场景内联视觉层序数词 PASS 钉死方案 B 否决 / 干净容器 PASS / en 顺序词 FAIL / 他集标题 FAIL / 宿主集自身标题 PASS），扩面前 4 条命中型用例全红（rc==0 漏放行）、扩面后 7/7 绿。真实树对拍：修复前组件（595b8bfdf^ 版本）放入 15 集真实 series.json 的 tmp 工作区，旧门规则1 零命中、新门报出 NARRATION/SUBS 两条「本系列」FAIL；修复后真实工作区（negentropy ulaanbaatar-v1）新门 FAIL 0（存量 WARN 5 条为规则 6 既有，零新增误报）。PIPELINE.md 脚本表与 03 系列纪律条同步。
+**处理方式**：[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42)（commit 1b34f55，分支 ThreeFish-AI/rsi-050-series-intro-knowledge-batch）。`scripts/check_series.py` 规则1 新增扫描面：`episodes/*/video/src/{scenes,components}/*.tsx` 中 `const (NARRATION|SUBS) = …;` 块（DOTALL 非贪婪到首个分号）内的单/双引号字符串字面量，过 ORDINAL_WORDS / EN_ORDINAL_WORDS / 他集标题互查（跨系列全局、与 narration 扫描同权；组件按宿主集路径段排除自身标题）。容器名 NARRATION/SUBS 硬编码为机制契约，不进 toml——与 course_series_ids 的内容策略分置。方案比选：**B**（全量扫 tsx 观众层文本）否决——实测误伤 self-evolving 系 P6Ending.tsx 合法视觉层 `ep: '第一集'` 进度卡序数词（「序号活在视觉层」是既定不变量；常假报的门等于被关掉的门）；**C**（组件口播与 narration.md 对账）否决——片头口播设计上就不入 narration.md（独立音轨资产契约），对账要么恒 FAIL 要么排除后零对象，结构性不可行。红绿闭环：tests/test_check_series.py 新节「组件口播字面量（RSI-050）」+7（NARRATION 顺序词 FAIL 事故复刻 / SUBS 数组序数词 FAIL / 场景内联视觉层序数词 PASS 钉死方案 B 否决 / 干净容器 PASS / en 顺序词 FAIL / 他集标题 FAIL / 宿主集自身标题 PASS），扩面前 4 条命中型用例全红（rc==0 漏放行）、扩面后 7/7 绿。真实树对拍：修复前组件（595b8bfdf^ 版本）放入 15 集真实 series.json 的 tmp 工作区，旧门规则1 零命中、新门报出 NARRATION/SUBS 两条「本系列」FAIL；修复后真实工作区（negentropy ulaanbaatar-v1）新门 FAIL 0（存量 WARN 5 条为规则 6 既有，零新增误报）。PIPELINE.md 脚本表与 03 系列纪律条同步。
 
 **后续防范**：新增口播承载形态（片头/预告/品牌声画组件）时，口播文本一律进 NARRATION/SUBS 命名容器——容器名是规则1 扩面的执法锚（命名约定见 references/SERIES-INTRO.md §五，RSI-051）；改稿先过机器门、再人工核对禁词表（机器门拦形态、人工拦语义——五同步检查单第 5 条）。已知残余不改判（近似口径，同 check_scenes 家族既定声明）：反引号模板串不扫；容器体内字符串含 ASCII 分号会截断容器体；注释掉的字符串可能误收。
 
@@ -777,7 +777,7 @@
 
 **定性**：非阻断改进（知识融入·攒批启动；零 parser/frozen/机器门改动）。
 
-**处理方式**：本 PR（分支 ThreeFish-AI/rsi-050-series-intro-knowledge-batch，PR 链接合入后回填）。新建 [references/SERIES-INTRO.md](../../references/SERIES-INTRO.md)（资产层 SSOT，五节 ≤55 行：资产形态契约——独立音轨 gitignored/不入 narration SSOT 且显式声明这不是不变量 2 的例外而是系列级资产与分集 narration 并行/leadInSec 仍读 timing.json 的时序归属/五集同构 seeded 复制与逐集差异全数据驱动；静音带实测 T 表方法论——三阈值一致口径/起播偏移/词首非对称吸收/顿号间隙实测优先/改稿重测只改 T 表/重排后三处派生注释穷举对账且先排 T 后改注；改稿五同步检查单；双语 drift 登记范式；口播容器命名约定——文档执法互锚）。**实测数字不入册**：take 时长/阈值/帧数一律留在各集组件 T 表头注作 SSOT（防数字时鲜性，ISSUE-179 活数据教训）；命令全用 $T/$W/$P/$V 记法；音色只写 refs.toml 指纹记法不写样本文件名（生物特征纪律）。入链：07（独立音轨配方）/08（seeded 组件与 components/ 约定）/09（T 表验收目检条）各 +1 行指针、03 系列纪律条补约定链接、SKILL.md 按需加载表 +1 行（等量压缩守 8000 字符：GL 行/重配音行尾/双语行/排障行/ADVANCED 行五处压缩共 57 字符，压缩后 7996/8000，全部避开测试锚串）、knowledge-map references 表 +1 行（同 commit 纪律义务）。回归：tests/test_series_intro.py 5 锚点（存在+目录+≤500 行 / 07-08-09 指针 / 单行字幕切换只含指针不含契约正文锚串 / NARRATION-SUBS 命名约定声明 / SKILL 路由行）。
+**处理方式**：[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42)（commit 3e08878，分支 ThreeFish-AI/rsi-050-series-intro-knowledge-batch）。新建 [references/SERIES-INTRO.md](../../references/SERIES-INTRO.md)（资产层 SSOT，五节 ≤55 行：资产形态契约——独立音轨 gitignored/不入 narration SSOT 且显式声明这不是不变量 2 的例外而是系列级资产与分集 narration 并行/leadInSec 仍读 timing.json 的时序归属/五集同构 seeded 复制与逐集差异全数据驱动；静音带实测 T 表方法论——三阈值一致口径/起播偏移/词首非对称吸收/顿号间隙实测优先/改稿重测只改 T 表/重排后三处派生注释穷举对账且先排 T 后改注；改稿五同步检查单；双语 drift 登记范式；口播容器命名约定——文档执法互锚）。**实测数字不入册**：take 时长/阈值/帧数一律留在各集组件 T 表头注作 SSOT（防数字时鲜性，ISSUE-179 活数据教训：https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md）；命令全用 $T/$W/$P/$V 记法；音色只写 refs.toml 指纹记法不写样本文件名（生物特征纪律）。入链：07（独立音轨配方）/08（seeded 组件与 components/ 约定）/09（T 表验收目检条）各 +1 行指针、03 系列纪律条补约定链接、SKILL.md 按需加载表 +1 行（等量压缩守 8000 字符：GL 行/重配音行尾/双语行/排障行/ADVANCED 行五处压缩共 57 字符，压缩后 7996/8000，全部避开测试锚串）、knowledge-map references 表 +1 行（同 commit 纪律义务）。回归：tests/test_series_intro.py 5 锚点（存在+目录+≤500 行 / 07-08-09 指针 / 单行字幕切换只含指针不含契约正文锚串 / NARRATION-SUBS 命名约定声明 / SKILL 路由行）。
 
 **后续防范**：片头/预告/品牌声画类系列资产的新形态先查 SERIES-INTRO 是否已有契约，再决定扩节或立新册；组件头注写方法论时同步自查是否已有册面（头注是本集数字 SSOT，册是跨集方法论 SSOT，两层不复制）。
 
@@ -791,7 +791,7 @@
 
 **定性**：非阻断改进（排队待议；成片陈旧可由人工评审兜底发现，但每轮共享件修复都要重演一次全量对账）。
 
-**处理方式**：排队待处理。候选方向：改共享冻结件（assets/video-skeleton 与 frozen 档）的提交走检查单——PR/commit 须登记「波及集清单 + 重渲待办」；交付侧加对账线（成片文件时间戳 ≥ 最后一个触及其共享件的修复提交，mdls/manifest 双源）。
+**处理方式**：排队待处理（[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42) 登记，commit 88fd306）。候选方向：改共享冻结件（assets/video-skeleton 与 frozen 档）的提交走检查单——PR/commit 须登记「波及集清单 + 重渲待办」；交付侧加对账线（成片文件时间戳 ≥ 最后一个触及其共享件的修复提交，mdls/manifest 双源）。
 
 **后续防范**：改共享冻结件的 PR 不登记波及面即视为未完成；交付验收以成片时间戳 ≥ 修复提交为硬线。
 
@@ -805,7 +805,7 @@
 
 **定性**：非阻断改进（排队待议；纸面漂移不破环成片，但系统性侵蚀登记层的可信度）。
 
-**处理方式**：排队待处理。候选方向：`deliver` 收尾输出一节「登记数字摘要」（时长复算/锚定率/块数/归档计数），散文登记只许抄该输出；或加 `check` 汇对账门（散文声称与派生值不符即 FAIL）。
+**处理方式**：排队待处理（[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42) 登记，commit 88fd306）。候选方向：`deliver` 收尾输出一节「登记数字摘要」（时长复算/锚定率/块数/归档计数），散文登记只许抄该输出；或加 `check` 汇对账门（散文声称与派生值不符即 FAIL）。
 
 **后续防范**：交付登记数字一律走 build/deliver 派生或 check 汇对账，散文手写视为未验证（上游三源对账口径：mdls mp4 / manifest 复算 / 声称）。
 
@@ -819,7 +819,7 @@
 
 **定性**：非阻断改进（排队待议；属内容侧事故的机制纵容面——skill 侧缺预检与互斥提示）。
 
-**处理方式**：排队待处理。候选方向：qa_frames `--check` 前置产物完整性预检（同文件取两个相距较远时间戳，解码帧 md5 必须不同——秒级成本拦住「整轮 QA 结论全是伪信号」这类最贵错误）；render 入口检测在跑的 remotion 实例并大声退出。
+**处理方式**：排队待处理（[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42) 登记，commit 88fd306）。候选方向：qa_frames `--check` 前置产物完整性预检（同文件取两个相距较远时间戳，解码帧 md5 必须不同——秒级成本拦住「整轮 QA 结论全是伪信号」这类最贵错误）；render 入口检测在跑的 remotion 实例并大声退出。
 
 **后续防范**：抽帧 QA 之前先验产物本身；起渲染前确认无并发实例（macOS 无 `setsid`，长跑用 nohup 或前台）；WARN 突增且集中未改动幕 ⇒ 先怀疑产物再怀疑代码。
 
@@ -833,7 +833,7 @@
 
 **定性**：非阻断改进（排队待议；单点修复手法问题，但同一陷阱会在每次跨 Sequence 搬运时复发）。
 
-**处理方式**：排队待处理。候选方向：08 场景组件模式节补一条「语境纪律」：跨 Sequence/宿主移动带 hooks 的层一律组件化（封装为子组件挂进目标 Sequence），禁内联搬运；`--transition`/`--beat-heads` 抽帧验收对收尾层必查。
+**处理方式**：排队待处理（[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42) 登记，commit 88fd306）。候选方向：08 场景组件模式节补一条「语境纪律」：跨 Sequence/宿主移动带 hooks 的层一律组件化（封装为子组件挂进目标 Sequence），禁内联搬运；`--transition`/`--beat-heads` 抽帧验收对收尾层必查。
 
 **后续防范**：搬任何带 hooks 的渲染层先问「它的 useCurrentFrame 语境变了吗」；幕内全局收尾层（渐黑/完结语/水印）必须悬于该幕所有 Sequence 之后（层级对账入评审清单）。
 
@@ -847,8 +847,36 @@
 
 **定性**：非阻断改进（排队待议；单章重录即可修，但门档位与交付语义不一致）。
 
-**处理方式**：排队待处理。候选方向：check_archify 的 capture_fps 判据升 FAIL（min ≥18；重录指引按既有惯例先单帧 still 判别资源态、排除负载瞬时假 FAIL 再 `record_archify.py --only <图> --force` 空闲机重录）。
+**处理方式**：排队待处理（[PR #42](https://github.com/ThreeFish-AI/vibe-video/pull/42) 登记，commit 88fd306）。候选方向：check_archify 的 capture_fps 判据升 FAIL（min ≥18；重录指引按既有惯例先单帧 still 判别资源态、排除负载瞬时假 FAIL 再 `record_archify.py --only <图> --force` 空闲机重录）。
 
 **后续防范**：录制后帧率是交付判据不是观测指标；升门前先在真树实测误报面（负载瞬时退化的重录即过先例——ISSUE-201）。
 
 **同类问题影响**：全部 archify 资产章节；未来任何「质量下限只 WARN」的判据都应按「下限=交付线=FAIL」口径重审。
+
+## RSI-057 规则7 AUDIENCE_GLOBS 不含 components/：组件内观众可见口播串不受站点标识执法
+
+**表因**（2026-10-08，PR #42 对抗核验 warning）：课程型系列（course_series_ids）的片头等组件（`episodes/*/video/src/components/*.tsx`）内观众可见口播串（NARRATION/SUBS 容器）出现课程站点标识词时规则7 全绿漏放行——与 RSI-050 修复的规则1 盲区同源不同面：规则1 已扩面至 components/ 的口播容器，规则7 的受检面仍停在 scenes/。
+
+**根因**：`scripts/check_series.py` 的 `AUDIENCE_GLOBS` 枚举只含 `episodes/*/script/narration.md`、`narration.en.md`、`storyboard.md`、`episodes/*/video/src/scenes/*.tsx` 四类 glob——规则7（去站点化）先于组件承载形态落地，components/ 出现后受检面未随之对账扩面（RSI-050 只补了规则1）。
+
+**定性**：非阻断改进（排队待议；组件口播撞站点标识词属低频形态，改稿五同步第 5 条人工核对兜底）。
+
+**处理方式**：排队待处理。候选方向：按 RSI-050 同一容器锚（NARRATION/SUBS）扩规则7 受检面——只扫组件口播容器字面量而非全量 components/ 字符串（防误伤视觉层合法具名，同规则1 扩面方案 B 的否决口径）；或直接把 AUDIENCE_GLOBS 扩至 `components/*.tsx`（升门前须真树实测误报面）。
+
+**后续防范**：扩「观众可见层」执法面时同步对账规则1 与规则7 的受检面覆盖是否一致；新增口播承载组件时自查两条规则都罩得住。
+
+**同类问题影响**：课程型系列（COURSE_SERIES_IDS）一切 components/ 观众可见文本；未来预告/品牌声画组件。
+
+## RSI-058 check_series 模块 docstring 计数漂移：「六条规则」实际列 8 条
+
+**表因**（2026-10-08，PR #42 对抗核验 warning）：`scripts/check_series.py` 模块 docstring 写「本脚本按价值降序执行六条规则」而其下枚举 1..8 共八条——规则 7（去站点化）与规则 8（下期卡同步）追加后计数句未随迁。
+
+**根因**：规则追加只扩枚举、不更新计数句——origin/main 既有债（非本批引入；RSI-050 规则1 扩面同样只改规则描述、未触碰计数），「计数 + 枚举」同文件的注释面漂移实例。
+
+**定性**：非阻断改进（排队待议；纯注释口径，零行为影响）。
+
+**处理方式**：排队待处理。候选方向：计数句改「八条规则」，或去数字化为「按价值降序执行以下规则」（后者免于下次追加再漂移）。
+
+**后续防范**：追加新规则时同步对账 docstring 计数句；计数 + 枚举同文件的注释优先去数字化。
+
+**同类问题影响**：一切「计数 + 枚举」同文件的注释面。

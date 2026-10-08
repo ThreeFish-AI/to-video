@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - **系列片头资产契约（SERIES-INTRO）**（RSI-051）：新建 [references/SERIES-INTRO.md](references/SERIES-INTRO.md) 资产层 SSOT——系列片头（独立口播音轨 + 静音带实测 T 表 + NARRATION/SUBS 口播容器）的形态契约此前只活在单集组件头注与上游事故台账（ISSUE-208 三方漂移实证），references 零覆盖。五节：①资产形态契约（独立音轨 gitignored 不入库；不入 narration SSOT——显式声明这不是不变量 2 的例外，片头口播是系列级资产、与分集 narration 并行；leadInSec 仍读 timing.json，T 表只是组件内口播词级对位；五集同构 seeded 复制、逐集差异全数据驱动）；②静音带实测 T 表方法论（三阈值一致口径、起播偏移、词首非对称吸收、顿号间隙实测优先、改稿重测只改 T 表、重排后三处派生注释穷举对账且先排 T 后改注）；③改稿五同步检查单（音轨时长/静音带/字幕安全带/视觉拍点/禁词表——机器门已扩面 RSI-050，人工核对仍是第一道防线）；④双语 drift 登记范式；⑤口播容器命名约定（NARRATION/SUBS 是规则1 扩面的执法锚，文档—执法互锚；字幕单行语义切换只留指针到 06/08/09 防 RSI-049 第二事实源）。**实测数字不入册**（take 时长/阈值/帧数留在各集组件 T 表头注作 SSOT，防数字时鲜性）；命令全用 `$T/$W/$P/$V` 记法；音色只写 refs.toml 指纹记法（生物特征纪律）。入链：[07](references/07-tts-voice.md)/[08](references/08-remotion-implementation.md)/[09](references/09-render-qa.md) 各 +1 行指针、[03](references/03-narration.md) 系列纪律条补约定链接、SKILL.md 按需加载表 +1 行（等量压缩守 8000 预算，压缩后 7996）、[knowledge-map](docs/.agents/knowledge-map.md) +1 行。回归：[tests/test_series_intro.py](tests/test_series_intro.py) 5 锚点。
+- **RSI 台账排队登记（RSI-052..058）**：七条非阻断改进项登记待议——五条上游机制改进项回流（ISSUE-207 共享冻结件修复波及面对账 / ISSUE-204 交付登记数字机器对账 / ISSUE-181 渲染产物完整性预检 / ISSUE-205 useCurrentFrame 语境纪律 / ISSUE-206 archify 录制帧率门升 FAIL）＋两条本批对抗核验回流（规则7 AUDIENCE_GLOBS 受检面缺 components/——与 RSI-050 规则1 盲区同源不同面；check_series 模块 docstring「六条规则」计数漂移——origin/main 既有债）。均定性排队待议、攒批后逐条启动子代理，详见 [RSI 台账](docs/.agents/issue.md)。
 
 ### Fixed
 
