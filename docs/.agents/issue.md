@@ -782,3 +782,73 @@
 **后续防范**：片头/预告/品牌声画类系列资产的新形态先查 SERIES-INTRO 是否已有契约，再决定扩节或立新册；组件头注写方法论时同步自查是否已有册面（头注是本集数字 SSOT，册是跨集方法论 SSOT，两层不复制）。
 
 **同类问题影响**：一切「独立挂载音轨」的系列级资产；RSI-050 的容器命名执法从此有册面发现通道（文档—执法互锚闭环）。
+
+## RSI-052 共享冻结件修复的波及面对账无机制：重渲待办与交付验收线全靠人记
+
+**表因**（上游 ISSUE-207 回流）：多集共享冻结件（Archify 三件/Subtitle/i18n 系）的修复天然使全系列成片陈旧，而重渲登记按「直接涉事集」窄登记——上游 09-30 修复批（6973c570f 等）落地后五集 v1 成片全部不含修复，ISSUE-205/206 只登记了 ep5/ep1 重渲，同样吃到共享件修复的 ep2/3/4 无登记，评审再挖出 10 处视觉缺陷后才补全量重渲对账。上游台账：https://github.com/ThreeFish-AI/negentropy/blob/feature/1.x.x/docs/.agents/issue.md（分支 feature/1.x.x）。
+
+**根因**：`deliver`/渲染链对「本次提交改了哪些共享冻结件、波及哪些集」零感知——波及面是 git diff 与 series.json 的派生信息，却没有任何门或检查单承接它；交付登记（statusNote/CHANGELOG）也不校验成片时间戳与修复提交的先后。
+
+**定性**：非阻断改进（排队待议；成片陈旧可由人工评审兜底发现，但每轮共享件修复都要重演一次全量对账）。
+
+**处理方式**：排队待处理。候选方向：改共享冻结件（assets/video-skeleton 与 frozen 档）的提交走检查单——PR/commit 须登记「波及集清单 + 重渲待办」；交付侧加对账线（成片文件时间戳 ≥ 最后一个触及其共享件的修复提交，mdls/manifest 双源）。
+
+**后续防范**：改共享冻结件的 PR 不登记波及面即视为未完成；交付验收以成片时间戳 ≥ 修复提交为硬线。
+
+**同类问题影响**：一切跨集共享资产（frozen 组件、模板、Subtitle/ChapterProgress、系列片头 seeded 复制件——SERIES-INTRO §一第 4 条已按此口径引用本条）。
+
+## RSI-053 交付登记数字无机器对账：时长/锚定率/块数/归档计数散文手写即漂移
+
+**表因**（上游 ISSUE-204 回流）：v1 评审 13 条中 6 条集中在人写登记层——series.json statusNote、series.md、CHANGELOG 三处时长全部虚高 6–8s（三个不同实测被统一抄成一个数）；锚定率自矛盾（同句「锚定 36.6%」与门输出 39.0% 打架）；「43 块 cues」无源（cues.toml 从未存在）；五集 README 停在脚手架占位态；`_captions/` 归档缺口（CHANGELOG 称 ×5 实得 1）。上游台账：https://github.com/ThreeFish-AI/negentropy/blob/feature/1.x.x/docs/.agents/issue.md（分支 feature/1.x.x）。
+
+**根因**：交付期的散文登记不走机器门——时长/锚定率/块数/归档计数无一处被 build 派生或 check 汇对账，「抄上次输出」与「占位态忘更新」零摩擦进入主干；mp4 与 manifest 逐位一致（渲染链无辜），错的只是纸面。
+
+**定性**：非阻断改进（排队待议；纸面漂移不破环成片，但系统性侵蚀登记层的可信度）。
+
+**处理方式**：排队待处理。候选方向：`deliver` 收尾输出一节「登记数字摘要」（时长复算/锚定率/块数/归档计数），散文登记只许抄该输出；或加 `check` 汇对账门（散文声称与派生值不符即 FAIL）。
+
+**后续防范**：交付登记数字一律走 build/deliver 派生或 check 汇对账，散文手写视为未验证（上游三源对账口径：mdls mp4 / manifest 复算 / 声称）。
+
+**同类问题影响**：所有系列的 statusNote/README/CHANGELOG 交付登记面；`_captions` 归档验收（find 实物计数）。
+
+## RSI-054 渲染产物完整性预检缺失：损坏 mp4 让整轮抽帧 QA 输出伪信号
+
+**表因**（上游 ISSUE-181 回流）：两个 remotion render 进程并发写同一 `out/draft.mp4` 致索引损坏，`ffmpeg -ss <任意时间戳>` 全部解码回第 0 帧——`--check` 报出 52 条伪 WARN（伪冻帧+伪字幕缺失），同代码态 `remotion still` 直渲却完全正常；干净重渲后恢复 FAIL 0 · WARN 1 基线。上游台账：https://github.com/ThreeFish-AI/negentropy/blob/master/docs/.agents/issue.md（分支 master）。
+
+**根因**：`pipeline.py render` 无锁（渲染是独占写操作），且 qa_frames 抽帧前不验产物本身——判据正确不等于输入正确；异常数量的 WARN 集中在**未改动的幕**而改动幕反而干净，这个分布本身就是产物损坏的信号，但无人/无门去读它。
+
+**定性**：非阻断改进（排队待议；属内容侧事故的机制纵容面——skill 侧缺预检与互斥提示）。
+
+**处理方式**：排队待处理。候选方向：qa_frames `--check` 前置产物完整性预检（同文件取两个相距较远时间戳，解码帧 md5 必须不同——秒级成本拦住「整轮 QA 结论全是伪信号」这类最贵错误）；render 入口检测在跑的 remotion 实例并大声退出。
+
+**后续防范**：抽帧 QA 之前先验产物本身；起渲染前确认无并发实例（macOS 无 `setsid`，长跑用 nohup 或前台）；WARN 突增且集中未改动幕 ⇒ 先怀疑产物再怀疑代码。
+
+**同类问题影响**：所有 `out/*.mp4` 产物；A/B 对拍尤险（两个损坏文件对拍得出「差异为 0」假结论）。
+
+## RSI-055 useCurrentFrame 语境随宿主搬迁漂移：窗口类 hooks 内联搬运即语境错位
+
+**表因**（上游 ISSUE-205 回流）：ep5 终幕修复把渐黑遮罩+完结语的 hooks 从子组件内联搬到 P6 场景主体——`useCurrentFrame` 语境从镜内局部帧变成场景局部帧，`tailKeep` 在该镜全程为 0、遮罩满黑盖死整幕；`remotion still` 亮度抽样抓出（机器门全盲），改回组件化放归镜内语境后逐帧复验通过。上游台账：https://github.com/ThreeFish-AI/negentropy/blob/feature/1.x.x/docs/.agents/issue.md（分支 feature/1.x.x）。
+
+**根因**：Remotion 的 `useCurrentFrame`/`useVideoConfig` 等窗口类 hooks 语义绑定宿主 Sequence 的局部时间轴，跨 Sequence 移动带 hooks 的层时语境随宿主变——这是机制特性，但规格层（08）未把「窗口类 hooks 必须与消费点同语境、组件化而非内联搬运」写成纪律，修复者只能靠踩坑习得。
+
+**定性**：非阻断改进（排队待议；单点修复手法问题，但同一陷阱会在每次跨 Sequence 搬运时复发）。
+
+**处理方式**：排队待处理。候选方向：08 场景组件模式节补一条「语境纪律」：跨 Sequence/宿主移动带 hooks 的层一律组件化（封装为子组件挂进目标 Sequence），禁内联搬运；`--transition`/`--beat-heads` 抽帧验收对收尾层必查。
+
+**后续防范**：搬任何带 hooks 的渲染层先问「它的 useCurrentFrame 语境变了吗」；幕内全局收尾层（渐黑/完结语/水印）必须悬于该幕所有 Sequence 之后（层级对账入评审清单）。
+
+**同类问题影响**：一切跨 Sequence/跨宿主的 hooks 层搬迁；收尾层与常驻 chrome 层。
+
+## RSI-056 archify 录制帧率门只 WARN 不拦：capture_fps 低于下限可静默入成片
+
+**表因**（上游 ISSUE-206 回流）：ep1 checkchain-order 图 scan-claim 章 capture_fps=17.0（五集其余 59 图全部 ≥23），`check_archify` 仅 WARN 不拦门——录制期负载瞬时退化（CDP 档补帧合成 CFR25 掩盖低采集率）直接进了成片。上游台账：https://github.com/ThreeFish-AI/negentropy/blob/feature/1.x.x/docs/.agents/issue.md（分支 feature/1.x.x）。
+
+**根因**：录制质量下限（min ≥18）在 check_archify 里是 WARN 档——低帧率章节是「可重录修复的资源态」而非「可接受的交付态」，但门不拦就意味着它可以在负载高的时候静默过检入片。
+
+**定性**：非阻断改进（排队待议；单章重录即可修，但门档位与交付语义不一致）。
+
+**处理方式**：排队待处理。候选方向：check_archify 的 capture_fps 判据升 FAIL（min ≥18；重录指引按既有惯例先单帧 still 判别资源态、排除负载瞬时假 FAIL 再 `record_archify.py --only <图> --force` 空闲机重录）。
+
+**后续防范**：录制后帧率是交付判据不是观测指标；升门前先在真树实测误报面（负载瞬时退化的重录即过先例——ISSUE-201）。
+
+**同类问题影响**：全部 archify 资产章节；未来任何「质量下限只 WARN」的判据都应按「下限=交付线=FAIL」口径重审。
