@@ -240,7 +240,7 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
 - **章节条标题自动双语**：chapters.json 条目的 `i18n.en` 由 build 从 `narration.en.md` 幕标题派生（声明见 references/03「英文译稿」）；series.json 集条目可选 `i18n: {"en": …}` 会以 `titleI18n`/`nextI18n` 透传进 series-layers.json，P6 身份卡/下期卡按需消费。
 - **archify 录制件保持 zh**：英文版 = 英文配音 + 中文图示（录制件文字已焙进画面；`archify/en/` 重录机制属后续演进，先在 planning.md 声明该取舍）。
 - **英文字幕两行回落（frozen Subtitle.tsx）**：en 单行 fitText < 30px 时回落两行 30px（`textWrap: balance`）；盒几何 `marginBottom 35 + padding 24 + 2×30×1.3 = 137 ≤ 137.4`（zh 单行满字号包络）——**守恒设计**：字幕带侵入检测（qa `SUBTITLE_BOX_H_PX=132`）两语言共用同一判据，无需豁免。
-- **字幕单行契约**：zh 路径必须 `whiteSpace: 'nowrap'`，不得用 CSS 自动换行解决过长文案；当单句按实际字体测量可能超出字幕安全宽度时，先在 narration/storyboard 层按语义边界拆成连续字幕窗口，再由窗口间淡入淡出完成前后切换。不得靠继续缩小字号、压缩字距或让文字溢出画布换取单行。`fitText` 只负责渲染层适配，不能替代内容长度门。en 仍遵守上一条 frozen 两行回落规则。
+- **字幕单行契约**：zh 路径必须 `whiteSpace: 'nowrap'`，不得用 CSS 自动换行解决过长文案；当单句超出或逼近单行内容门上限（全角当量 ≤50，RSI-024，`check_script` 执法）时，先在 narration/storyboard 层按语义边界拆成连续字幕窗口，再由窗口间淡入淡出完成前后切换。不得靠继续缩小字号、压缩字距或让文字溢出画布换取单行。`fitText` 只负责渲染层适配，不能替代内容长度门。en 仍遵守上一条 frozen 两行回落规则。
 
 ## 顶部章节进度条（frozen chrome · ChapterProgress）
 
