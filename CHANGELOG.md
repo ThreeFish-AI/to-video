@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **系列片头资产契约（SERIES-INTRO）**（RSI-051）：新建 [references/SERIES-INTRO.md](references/SERIES-INTRO.md) 资产层 SSOT——系列片头（独立口播音轨 + 静音带实测 T 表 + NARRATION/SUBS 口播容器）的形态契约此前只活在单集组件头注与上游事故台账（ISSUE-208 三方漂移实证），references 零覆盖。五节：①资产形态契约（独立音轨 gitignored 不入库；不入 narration SSOT——显式声明这不是不变量 2 的例外，片头口播是系列级资产、与分集 narration 并行；leadInSec 仍读 timing.json，T 表只是组件内口播词级对位；五集同构 seeded 复制、逐集差异全数据驱动）；②静音带实测 T 表方法论（三阈值一致口径、起播偏移、词首非对称吸收、顿号间隙实测优先、改稿重测只改 T 表、重排后三处派生注释穷举对账且先排 T 后改注）；③改稿五同步检查单（音轨时长/静音带/字幕安全带/视觉拍点/禁词表——机器门已扩面 RSI-050，人工核对仍是第一道防线）；④双语 drift 登记范式；⑤口播容器命名约定（NARRATION/SUBS 是规则1 扩面的执法锚，文档—执法互锚；字幕单行语义切换只留指针到 06/08/09 防 RSI-049 第二事实源）。**实测数字不入册**（take 时长/阈值/帧数留在各集组件 T 表头注作 SSOT，防数字时鲜性）；命令全用 `$T/$W/$P/$V` 记法；音色只写 refs.toml 指纹记法（生物特征纪律）。入链：[07](references/07-tts-voice.md)/[08](references/08-remotion-implementation.md)/[09](references/09-render-qa.md) 各 +1 行指针、[03](references/03-narration.md) 系列纪律条补约定链接、SKILL.md 按需加载表 +1 行（等量压缩守 8000 预算，压缩后 7996）、[knowledge-map](docs/.agents/knowledge-map.md) +1 行。回归：[tests/test_series_intro.py](tests/test_series_intro.py) 5 锚点。
+
 ### Fixed
 
 - **check_series 规则1 扩面至组件口播字面量容器（NARRATION/SUBS）**（RSI-050）：系列片头等组件的口播是独立音轨资产、不入 narration.md，规则1 只扫 narration.md 时组件字面量即执法盲区——上游 ISSUE-208 实证「本系列」在 `series-intro.tsx` NARRATION 全绿漏放行、人工核对才发现、重配音（take 18.08s）收口。修复：规则1 新增扫描面 `episodes/*/video/src/{scenes,components}/*.tsx` 的 `const (NARRATION|SUBS) = …;` 块内字符串字面量，过 zh/en 顺序词与他集标题互查（跨系列全局、与 narration 同权，宿主集排除自身标题）；容器名硬编码为机制契约（不进 toml）。全量扫 tsx 观众层的替代方案因误伤视觉层合法进度卡序数词（`ep: '第一集'`）否决——序号活在视觉层是既定不变量。回归测试 +7（含事故形态复刻与方案 B 否决钉），扩面前红 / 扩面后绿；真实 15 集工作区新门零误报。
