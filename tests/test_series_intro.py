@@ -58,9 +58,13 @@ def test_subtitle_contract_pointer_only():
     """单行语义切换契约 SSOT 在 06/08/09（RSI-049）——SERIES-INTRO 只许指针，
     出现契约正文锚串即第二事实源。"""
     text = _read(INTRO)
-    assert "单行语义切换" in text, "SERIES-INTRO §五 须留字幕切换概念的指针面"
-    assert "](./06-storyboard.md)" in text and "](./09-render-qa.md)" in text, (
-        "SERIES-INTRO 字幕切换指针须指向 06/09（RSI-049 SSOT）"
+    # 指针断言限定在 §五：开篇分层导语本就带 06/09 链接，对全文件判恒真——
+    # 把 §五 指针换成换措辞的契约正文，断言仍绿，防第二事实源的意图即失效。
+    assert "## 五、" in text, "SERIES-INTRO 缺 §五（口播容器命名约定）"
+    sec5 = text.split("## 五、", 1)[1]
+    assert "单行语义切换" in sec5, "SERIES-INTRO §五 须留字幕切换概念的指针面"
+    assert "](./06-storyboard.md)" in sec5 and "](./09-render-qa.md)" in sec5, (
+        "SERIES-INTRO §五 字幕切换指针须指向 06/09（RSI-049 SSOT）"
     )
     for anchor in CONTRACT_BODY_ANCHORS:
         assert anchor not in text, (

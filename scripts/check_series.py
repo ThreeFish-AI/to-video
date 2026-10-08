@@ -108,16 +108,27 @@ SPOKEN_CONTAINER_GLOBS = (
     "episodes/*/video/src/scenes/*.tsx",
     "episodes/*/video/src/components/*.tsx",
 )
-#: `const (NARRATION|SUBS) = …;`：DOTALL 非贪婪到首个分号。已知残余（近似
-#: 口径，TSX 正则本质近似的仓内既定声明，同 check_scenes 家族）：反引号模板
-#: 串不扫；容器体内字符串字面量含 ASCII 分号会截断容器体；注释掉的字符串
-#: 可能误收。
+#: 容器 = `const NARRATION|SUBS[_XX][: 类型] = …`，体到「分号」或「下一条声明起点」
+#: 或文件尾为止；体内按词法单元逐项吞（字符串 / 注释 / 其余字符），故串内与注释内
+#: 的分号不截断、无分号写法不越界吞后文视觉层。`_XX` 是两位大写语种码（en 口播
+#: 用 NARRATION_EN / SUBS_EN）。**已知残余的唯一声明处**（近似口径，TSX 正则本质
+#: 近似的仓内既定声明，同 check_scenes 家族；issue.md / SERIES-INTRO 只留指针）：
+#: ① 反引号模板串不扫；② 无分号写法仅当后继行以声明关键字（_DECL）开头才终止；
+#: ③ 顺序词按单个字面量判，不跨字面量拼接（他集标题则按拼接串判）；④ 类型注解
+#: 内含 `=` / `;` 的复杂类型不扫。
+_STR = r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\""
+_DECL = r"(?:export|const|let|var|function|import|type|interface|class)"
 SPOKEN_CONTAINER_RE = re.compile(
-    r"\bconst\s+(NARRATION|SUBS)\s*=\s*(?P<body>.*?);", re.DOTALL
+    r"\bconst\s+(?P<name>(?:NARRATION|SUBS)(?:_[A-Z]{2})?)\s*(?::[^=;]*)?=\s*"
+    rf"(?P<body>(?:{_STR}|//[^\n]*|/\*.*?\*/|(?!\n[ \t]*{_DECL}\b)[^;'\"/]|/(?![/*]))*)"
+    rf"(?:;|(?=\n[ \t]*{_DECL}\b)|\Z)",
+    re.DOTALL,
 )
-#: 容器体内的单/双引号字符串字面量（不支持转义序列——叙事容器是纯口播文本，
-#: 转义形态无先例，同属近似口径的既定残余）。
-SPOKEN_LITERAL_RE = re.compile(r"'([^'\\\n]*)'|\"([^\"\\\n]*)\"")
+#: 容器体内的词法单元：注释（跳过）/ 单引号串 / 双引号串。
+SPOKEN_TOKEN_RE = re.compile(
+    r"(?P<cmt>//[^\n]*|/\*.*?\*/)|'(?P<s>(?:[^'\\\n]|\\.)*)'|\"(?P<d>(?:[^\"\\\n]|\\.)*)\"",
+    re.DOTALL,
+)
 SPOKEN_LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$", re.M)
 REL_LINK_RE = re.compile(r"\]\((\.{1,2}/[^)#?]+)\)")
 EP_NUM = re.compile(r"第([一二三四五六七八九十])集")
@@ -249,6 +260,21 @@ def rule_spoken_interleave(series_list: list[dict], msgs: list[str]) -> None:
                 )
 
 
+def _spoken_literals(body: str) -> list[str]:
+    """容器体内的口播字面量：跳过注释与空串。
+
+    取分组必须用 `is not None`：单引号空串 `''` 落在 group(1)=='' 为假，
+    `group(1) or group(2)` 会误取到 None，下游 `t in s` 抛 TypeError。"""
+    out: list[str] = []
+    for tok in SPOKEN_TOKEN_RE.finditer(body):
+        if tok.group("cmt") is not None:
+            continue
+        s = tok.group("s") if tok.group("s") is not None else tok.group("d")
+        if s:
+            out.append(s)
+    return out
+
+
 def rule_spoken_component_literals(series_list: list[dict], msgs: list[str]) -> None:
     """规则 1 扩面：组件口播字面量容器（NARRATION/SUBS）——跨系列全局同权。
 
@@ -271,24 +297,23 @@ def rule_spoken_component_literals(series_list: list[dict], msgs: list[str]) -> 
             own = {e["title"] for e in eps if e["path"].split("/")[-1] in segs}
             rel = f.relative_to(PROJECT)
             for m in SPOKEN_CONTAINER_RE.finditer(text):
-                for lit in SPOKEN_LITERAL_RE.finditer(m.group("body")):
-                    s = lit.group(1) or lit.group(2)
-                    hit_other = [t for t in all_titles if t in s and t not in own]
-                    if hit_other:
-                        msgs.append(
-                            f"FAIL 规则1：{rel} {m.group(1)} 口播字面量"
-                            f"出现他集标题「{hit_other[0]}」"
-                        )
-                    if w := ORDINAL_WORDS.search(s):
-                        msgs.append(
-                            f"FAIL 规则1：{rel} {m.group(1)} 口播字面量出现顺序词"
-                            f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
-                        )
-                    if w := EN_ORDINAL_WORDS.search(s):
-                        msgs.append(
-                            f"FAIL 规则1：{rel} {m.group(1)} 口播字面量出现顺序词"
-                            f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
-                        )
+                name, lits = m.group("name"), _spoken_literals(m.group("body"))
+                # 他集标题按拼接串判：`'…：' + '…'` 折行 / SUBS 切窗会把标题切在
+                # 两个字面量之间；顺序词 2–4 字无内部标点，仍逐字面量判。
+                joined = "".join(lits)
+                hit_other = [t for t in all_titles if t in joined and t not in own]
+                if hit_other:
+                    msgs.append(
+                        f"FAIL 规则1：{rel} {name} 口播字面量"
+                        f"出现他集标题「{hit_other[0]}」"
+                    )
+                for s in lits:
+                    for pat in (ORDINAL_WORDS, EN_ORDINAL_WORDS):
+                        if w := pat.search(s):
+                            msgs.append(
+                                f"FAIL 规则1：{rel} {name} 口播字面量出现顺序词"
+                                f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
+                            )
 
 
 def rule_title_order(

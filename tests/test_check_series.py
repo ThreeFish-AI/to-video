@@ -904,7 +904,8 @@ def test_rule1_component_en_ordinal_word_fails(tmp_path):
 
 
 def test_rule1_component_other_title_fails(tmp_path):
-    """容器内他集标题——宿主集（ep-a）之外的标题互查，跨系列全局同权。"""
+    """容器内他集标题——宿主集（ep-a）之外的同系列他集标题互查。
+    跨系列语义由 test_rule1_component_cross_series_title_fails 单独钉住。"""
     ws = build_workspace(
         tmp_path,
         [S("t", EP1, EP2)],
@@ -924,3 +925,184 @@ def test_rule1_component_own_title_passes(tmp_path):
     )
     rc, out = run_series_check(ws)
     assert rc == 0, out
+
+
+# ── 组件口播容器加固（PR #42 评审 15 条）──────────────────────────────────────
+#: 容器正则的边界形态：评审用内存变异实证，下列每条都能让 RSI-050 首版 7 例仍全绿。
+#: 分「修复型」（首版红）与「钉住型」（首版也绿，防加固后又被改坏——变异杀手）两类。
+SCENE_TSX = "episodes/ep-a/video/src/scenes/P0Hook.tsx"
+EP_X_TITLE_SUBS = "const SUBS = ['我们接着《丙集标题》讲'] as const;\n"
+
+
+def test_rule1_component_empty_string_literal_does_not_crash(tmp_path):
+    """单引号空串曾让 `lit.group(1) or lit.group(2)` 得到 None，`t in s` 抛
+    TypeError——整个 check_series 裸 Traceback 退出、其余规则不再执行。
+    空串必须被跳过，且不影响同容器内其余字面量的执法。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const SUBS = ['开场', '', '本系列'] as const;\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert "Traceback" not in out, out
+    assert rc == 1 and "规则1" in out and "本系列" in out
+
+
+def test_rule1_component_empty_string_only_passes(tmp_path):
+    """`SUBS.join('')` 之类派生写法里只有空串——静默放行而非崩溃。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const NARRATION = ['开场', '收尾'].join('');\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert "Traceback" not in out and rc == 0, out
+
+
+@pytest.mark.parametrize(
+    "decl",
+    [
+        "const NARRATION: string = '本系列视频';\n",
+        "const SUBS: readonly string[] = ['本系列'];\n",
+    ],
+)
+def test_rule1_component_type_annotation_fails(tmp_path, decl):
+    """带类型注解的容器（`const X: T = …`）曾整块逃出执法面。"""
+    ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {INTRO_TSX: decl})
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "本系列" in out
+
+
+def test_rule1_component_en_suffixed_container_fails(tmp_path):
+    """en 口播容器 `NARRATION_EN` / `SUBS_EN`——双语共存时 en 同权执法的锚点。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const NARRATION_EN = 'In the next episode we cover it.';\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "next episode" in out
+    assert "NARRATION_EN" in out
+
+
+def test_rule1_component_unrelated_const_not_captured(tmp_path):
+    """`NARRATION_FOO` 不是口播容器（后缀只认两位大写语种码）——不误捕。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const NARRATION_FOO = '本系列';\nconst T = {a: '第一集'};\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 0, out
+
+
+def test_rule1_component_semicolonless_does_not_swallow_visual_layer(tmp_path):
+    """无分号写法（合法 TS）：容器后紧跟视觉层 `ep: '第一集'` 进度卡——曾被
+    `.*?;` 一路吞到下个分号，造成假 FAIL。容器必须在下一条声明处终止。
+    这是仓内价值观「常假报的门等于被关掉的门」的直接回归。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {
+            INTRO_TSX: (
+                "const NARRATION = '这套视频讲一个循环'\n"
+                "const CARDS = [{ep: '第一集'}, {ep: '第二集'}];\n"
+            )
+        },
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 0, out
+
+
+def test_rule1_component_semicolonless_still_enforced(tmp_path):
+    """无分号容器内的顺序词仍必须 FAIL——终止条件放宽不得变成漏检。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {
+            INTRO_TSX: (
+                "const NARRATION = '本系列视频讲一个循环'\n"
+                "const CARDS = [{ep: '第一集'}];\n"
+            )
+        },
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "本系列" in out
+    assert "第一集" not in out, "视觉层 `ep: '第一集'` 不应被卷进容器体"
+
+
+@pytest.mark.parametrize(
+    ("body", "expect_fail"),
+    [
+        # 注释里的 `;` 不得截断容器体——其后的「本系列」仍须被抓到
+        ("const SUBS = [\n  // 注意; 这里\n  '本系列',\n];\n", True),
+        ("const SUBS = [\n  /* 旧稿; 删 */\n  '本系列',\n];\n", True),
+        # 注释掉的字符串不是口播——不得误收
+        ("const SUBS = [\n  // '本系列'\n  '干净',\n];\n", False),
+        ("const SUBS = [\n  /* '第一集' */\n  '干净',\n];\n", False),
+    ],
+)
+def test_rule1_component_comments_are_not_spoken(tmp_path, body, expect_fail):
+    ws = build_workspace(tmp_path, [S("t", EP1, EP2)], {INTRO_TSX: body})
+    rc, out = run_series_check(ws)
+    assert (rc == 1 and "规则1" in out) if expect_fail else rc == 0, out
+
+
+def test_rule1_component_title_split_across_literals_fails(tmp_path):
+    """他集标题被 `+` 折行 / SUBS 切窗切在两个字面量之间——真实 NARRATION 正是
+    在「，」「：」后折行，且多数标题自带这类标点。他集标题须在容器内字面量
+    按序拼接后的串上判；顺序词仍逐字面量判（防 SUBS 窗口边界假命中）。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const NARRATION = '接着《乙集' + '标题》讲';\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "乙集标题" in out and "他集标题" in out
+
+
+def test_rule1_component_container_boundary_exempts_rest_of_file(tmp_path):
+    """钉住型：同一 series-intro.tsx 内，干净容器之后的视觉层 `ep: '第一集'`
+    进度卡必须放行——这才是真实 series-intro.tsx 的形态。把扫描改成贪婪匹配
+    或扫到文件尾，本例立刻变红（RSI-050 首版的 P0Hook 用例里根本没有容器，
+    只证明了「无容器文件不扫」，没证明「同文件容器之外豁免」）。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {
+            INTRO_TSX: (
+                "const NARRATION = '这套视频讲一个循环';\n"
+                "const SUBS = ['这套视频', '讲一个循环'] as const;\n"
+                "const CARD = {ep: '第一集', next: '第二集'};\n"
+            )
+        },
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 0, out
+
+
+def test_rule1_scenes_container_ordinal_word_fails(tmp_path):
+    """钉住型：SPOKEN_CONTAINER_GLOBS 含 scenes/*.tsx，但首版 4 条 FAIL 用例
+    全走 components/——把 glob 收窄为只扫 components，首版 7 例仍全绿，
+    scenes/ 内的 NARRATION 顺序词静默放行。本例钉死 scenes/ 的执法路径。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {SCENE_TSX: "const NARRATION = '本系列视频讲一个循环。';\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "本系列" in out
+    assert "scenes/P0Hook.tsx" in out and "NARRATION" in out
+
+
+def test_rule1_component_cross_series_title_fails(tmp_path):
+    """钉住型：他集标题互查跨系列全局同权——ep-a（alpha 系）的组件容器提到
+    beta 系的标题仍 FAIL。把候选标题收窄为宿主所在系列，同系列用例仍绿而
+    本例变红。仿 narration 侧 test_cross_series_spoken_title_fails。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("alpha", EP1, EP2), S("beta", OTHER1)],
+        {INTRO_TSX: EP_X_TITLE_SUBS},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "丙集标题" in out and "他集标题" in out
