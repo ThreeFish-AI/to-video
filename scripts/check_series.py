@@ -6,8 +6,11 @@
 自己的片名「上线之后」——正确排除自身标题必须知道标题属于哪个工程，也就是
 必须有清单。本脚本按价值降序执行六条规则：
 
-  1. 口播反串线：任一集 narration.md 的口播行出现**他集标题**或顺序词
-     （上一集/上期/第N集/前两集/本系列…）即 FAIL；自身标题排除；「下期」白名单
+  1. 口播反串线：任一集 narration.md 的口播行、或**组件口播字面量容器**
+     （scenes/ 与 components/ 的 `const NARRATION|SUBS = …;` 块内字符串
+     字面量——系列片头口播是独立音轨资产、不入 narration.md，上游 ISSUE-208
+     「本系列」漏网实证）出现**他集标题**或顺序词（上一集/上期/第N集/前两集/
+     本系列…）即 FAIL；自身标题排除（组件按宿主集路径段识别）；「下期」白名单
      （顺序无关收尾语）
   2. 多标题顺序：同一文件出现**同系列** ≥2 集标题时，首现顺序必须等于清单
      episode 顺序 —— 一条规则覆盖 SeriesThree 数组、storyboard、README、
@@ -93,6 +96,28 @@ EN_ORDINAL_WORDS = re.compile(
     r"\b(?:previous|next|last) episode\b|\bepisode \d+\b|\bthis series\b(?!\s+of\b)",
     re.I,
 )
+#: 规则 1 组件口播字面量容器（RSI-050）：片头/预告等组件的口播是独立音轨资产，
+#: 设计上不入 narration.md——只扫 narration.md 时组件字面量即执法盲区（上游
+#: ISSUE-208：「本系列」在 series-intro.tsx NARRATION 漏网，人工核对才发现、
+#: 重配音收口）。容器名 NARRATION/SUBS 硬编码为机制契约（组件口播面的命名
+#: 约定，见 references/SERIES-INTRO.md §五），不进 toml——与 course_series_ids
+#: 的内容策略分置。视觉层（场景内联 `ep: '第一集'` 进度卡等）结构性不进门：
+#: 序号活在视觉层是既定不变量，全量扫观众层文本会误伤合法进度卡、逼出逃逸口
+#: （常假报的门等于被关掉的门）。
+SPOKEN_CONTAINER_GLOBS = (
+    "episodes/*/video/src/scenes/*.tsx",
+    "episodes/*/video/src/components/*.tsx",
+)
+#: `const (NARRATION|SUBS) = …;`：DOTALL 非贪婪到首个分号。已知残余（近似
+#: 口径，TSX 正则本质近似的仓内既定声明，同 check_scenes 家族）：反引号模板
+#: 串不扫；容器体内字符串字面量含 ASCII 分号会截断容器体；注释掉的字符串
+#: 可能误收。
+SPOKEN_CONTAINER_RE = re.compile(
+    r"\bconst\s+(NARRATION|SUBS)\s*=\s*(?P<body>.*?);", re.DOTALL
+)
+#: 容器体内的单/双引号字符串字面量（不支持转义序列——叙事容器是纯口播文本，
+#: 转义形态无先例，同属近似口径的既定残余）。
+SPOKEN_LITERAL_RE = re.compile(r"'([^'\\\n]*)'|\"([^\"\\\n]*)\"")
 SPOKEN_LINE_RE = re.compile(r"^- \[(?P<id>[a-z0-9-]+)\]\s+(?P<text>.+)$", re.M)
 REL_LINK_RE = re.compile(r"\]\((\.{1,2}/[^)#?]+)\)")
 EP_NUM = re.compile(r"第([一二三四五六七八九十])集")
@@ -222,6 +247,48 @@ def rule_spoken_interleave(series_list: list[dict], msgs: list[str]) -> None:
                     f"FAIL 规则1：{ep['slug']} {m.group('id')} en 口播出现顺序词"
                     f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
                 )
+
+
+def rule_spoken_component_literals(series_list: list[dict], msgs: list[str]) -> None:
+    """规则 1 扩面：组件口播字面量容器（NARRATION/SUBS）——跨系列全局同权。
+
+    片头口播不入 narration.md（独立音轨资产契约，见 references/SERIES-INTRO.md
+    §一），narration 扫描对它结构性失明——上游 ISSUE-208 的「本系列」漏网即此
+    盲区实证。判据与 narration 扫描同源：zh/en 顺序词过同一 ORDINAL_WORDS /
+    EN_ORDINAL_WORDS，他集标题互查按宿主集排除自身（组件文件按路径段识别所属
+    集，同规则 2/3 的锚定法）。视觉层字符串（不在 NARRATION/SUBS 容器内）
+    结构性不进门：进度卡序数词是「序号活在视觉层」的合法形态，全量扫会误伤
+    （self-evolving 系 P6Ending 的 `ep: '第一集'` 进度卡即实测反例）。"""
+    eps = all_episodes(series_list)
+    all_titles = [e["title"] for e in eps]
+    for g in SPOKEN_CONTAINER_GLOBS:
+        for f in sorted(WORKSPACE.glob(g)):
+            try:
+                text = f.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            segs = set(f.parts)
+            own = {e["title"] for e in eps if e["path"].split("/")[-1] in segs}
+            rel = f.relative_to(PROJECT)
+            for m in SPOKEN_CONTAINER_RE.finditer(text):
+                for lit in SPOKEN_LITERAL_RE.finditer(m.group("body")):
+                    s = lit.group(1) or lit.group(2)
+                    hit_other = [t for t in all_titles if t in s and t not in own]
+                    if hit_other:
+                        msgs.append(
+                            f"FAIL 规则1：{rel} {m.group(1)} 口播字面量"
+                            f"出现他集标题「{hit_other[0]}」"
+                        )
+                    if w := ORDINAL_WORDS.search(s):
+                        msgs.append(
+                            f"FAIL 规则1：{rel} {m.group(1)} 口播字面量出现顺序词"
+                            f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
+                        )
+                    if w := EN_ORDINAL_WORDS.search(s):
+                        msgs.append(
+                            f"FAIL 规则1：{rel} {m.group(1)} 口播字面量出现顺序词"
+                            f"「{w.group(0)}」——序号只允许存在于视觉层与 series.json"
+                        )
 
 
 def rule_title_order(
@@ -564,6 +631,7 @@ def main() -> None:
     files = covered_files()
     msgs: list[str] = []
     rule_spoken_interleave(series_list, msgs)
+    rule_spoken_component_literals(series_list, msgs)
     rule_title_order(series_list, files, msgs)
     rule_ordinal_binding(series_list, files, msgs)
     rule_manifest_integrity(series_list, msgs)

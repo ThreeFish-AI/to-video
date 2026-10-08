@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **check_series 规则1 扩面至组件口播字面量容器（NARRATION/SUBS）**（RSI-050）：系列片头等组件的口播是独立音轨资产、不入 narration.md，规则1 只扫 narration.md 时组件字面量即执法盲区——上游 ISSUE-208 实证「本系列」在 `series-intro.tsx` NARRATION 全绿漏放行、人工核对才发现、重配音（take 18.08s）收口。修复：规则1 新增扫描面 `episodes/*/video/src/{scenes,components}/*.tsx` 的 `const (NARRATION|SUBS) = …;` 块内字符串字面量，过 zh/en 顺序词与他集标题互查（跨系列全局、与 narration 同权，宿主集排除自身标题）；容器名硬编码为机制契约（不进 toml）。全量扫 tsx 观众层的替代方案因误伤视觉层合法进度卡序数词（`ep: '第一集'`）否决——序号活在视觉层是既定不变量。回归测试 +7（含事故形态复刻与方案 B 否决钉），扩面前红 / 扩面后绿；真实 15 集工作区新门零误报。
+
 ### Breaking（更名 to-video → vibe-video + 阶段重编号 RSI-013 + 模板钉版追新 RSI-016；建议发版 3.0.0）
 
 - skill 整体更名 **to-video → vibe-video**（GitHub 仓名、SKILL.md `name`、安装软链名同步；旧仓名靠 GitHub 重定向存活，不得复用）。运行时标识符全部随名：6 个 env `TO_VIDEO_*` → `VIBE_VIDEO_*`（WORKSPACE / HOME / DELIVER_ROOT / INDEX_TTS_ROOT / TEST_WORKSPACE / TTS_STORE）、工作区哨兵 `.to-video-root` → `.vibe-video-root`、工作区配置 `to-video.toml` → `vibe-video.toml`、tts-store 默认目录 `~/Library/Application Support/to-video` → `…/vibe-video`。无旧名 fallback（干净切换）。**既有工作区迁移**：① `mv .to-video-root .vibe-video-root`、`mv to-video.toml vibe-video.toml`（tracked 文件用 `git mv`）；② 各包装器按新模板整文件覆盖（resolver 链与 `VIBE_VIDEO_WORKSPACE` 注入行随名）；③ `mkdir -p ~/Library/Application\ Support/vibe-video && mv ~/Library/Application\ Support/to-video/tts-store ~/Library/Application\ Support/vibe-video/`（目标已存在改 `rsync -a` 合并，勿 mv 嵌套）；④ shell profile 与 Claude settings 里的 env 键同步改名（值不变）。

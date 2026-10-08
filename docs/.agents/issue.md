@@ -754,3 +754,17 @@
 **后续防范**：字幕内容门与 `fitText` 渲染适配不得互相替代；zh 字幕出现第二行即 FAIL，优先回到 narration/storyboard 在语义边界拆句，再回到 Remotion 做窗口时序；每次字幕布局变更必须抽查长句本身及其前后切换帧。
 
 **同类问题影响**：所有自定义字幕 overlay、系列片头和未来双语字幕都适用该边界；en 仍按 frozen `Subtitle.tsx` 的两行 `textWrap: balance` 回落规则处理，不得把 zh 的单行约束泛化为英文实现。
+
+## RSI-050 check_series 规则1 只扫 narration.md，组件口播字面量（NARRATION/SUBS）是顺序词执法盲区
+
+**表因**（2026-10-08，上游 ISSUE-208 回流）：Claude Code 系列片头组件 `series-intro.tsx` 的 NARRATION/SUBS 字面量口播首词「本系列视频」违反系列禁词表（顺序词），`check_series.py` 规则1 全绿漏放行——该组件在 `video/src/components/` 而非 `scenes/`，连规则 7 的 AUDIENCE_GLOBS 都不覆盖；靠 2026-10-07 评审轮人工按禁词表核对才发现，收口须重配音（take 18.08s）并按新静音带全量重排 T 表（上游修复 commit 595b8bfdf）。上游台账：https://github.com/ThreeFish-AI/negentropy/blob/ThreeFish-AI/claude-code-video-opening/docs/.agents/issue.md（分支 ThreeFish-AI/claude-code-video-opening）。
+
+**根因**：规则1 的受检面枚举只含 narration.md / narration.en.md，而系列片头口播是独立音轨资产、设计上**不入** narration SSOT——narration 扫描对它结构性失明。「口播永不出现顺序词」的不变量覆盖一切口播面，受检面枚举却漏了组件字面量这一承载形态（机制纵容了它）。
+
+**定性**：阻断性缺陷（机器门漏放行已上线违规口播；收口代价＝整段重配音 + 重排 T 表）。
+
+**处理方式**：本 PR（分支 ThreeFish-AI/rsi-050-series-intro-knowledge-batch，PR 链接合入后回填）。`scripts/check_series.py` 规则1 新增扫描面：`episodes/*/video/src/{scenes,components}/*.tsx` 中 `const (NARRATION|SUBS) = …;` 块（DOTALL 非贪婪到首个分号）内的单/双引号字符串字面量，过 ORDINAL_WORDS / EN_ORDINAL_WORDS / 他集标题互查（跨系列全局、与 narration 扫描同权；组件按宿主集路径段排除自身标题）。容器名 NARRATION/SUBS 硬编码为机制契约，不进 toml——与 course_series_ids 的内容策略分置。方案比选：**B**（全量扫 tsx 观众层文本）否决——实测误伤 self-evolving 系 P6Ending.tsx 合法视觉层 `ep: '第一集'` 进度卡序数词（「序号活在视觉层」是既定不变量；常假报的门等于被关掉的门）；**C**（组件口播与 narration.md 对账）否决——片头口播设计上就不入 narration.md（独立音轨资产契约），对账要么恒 FAIL 要么排除后零对象，结构性不可行。红绿闭环：tests/test_check_series.py 新节「组件口播字面量（RSI-050）」+7（NARRATION 顺序词 FAIL 事故复刻 / SUBS 数组序数词 FAIL / 场景内联视觉层序数词 PASS 钉死方案 B 否决 / 干净容器 PASS / en 顺序词 FAIL / 他集标题 FAIL / 宿主集自身标题 PASS），扩面前 4 条命中型用例全红（rc==0 漏放行）、扩面后 7/7 绿。真实树对拍：修复前组件（595b8bfdf^ 版本）放入 15 集真实 series.json 的 tmp 工作区，旧门规则1 零命中、新门报出 NARRATION/SUBS 两条「本系列」FAIL；修复后真实工作区（negentropy ulaanbaatar-v1）新门 FAIL 0（存量 WARN 5 条为规则 6 既有，零新增误报）。PIPELINE.md 脚本表与 03 系列纪律条同步。
+
+**后续防范**：新增口播承载形态（片头/预告/品牌声画组件）时，口播文本一律进 NARRATION/SUBS 命名容器——容器名是规则1 扩面的执法锚（命名约定见 references/SERIES-INTRO.md §五，RSI-051）；改稿先过机器门、再人工核对禁词表（机器门拦形态、人工拦语义——五同步检查单第 5 条）。已知残余不改判（近似口径，同 check_scenes 家族既定声明）：反引号模板串不扫；容器体内字符串含 ASCII 分号会截断容器体；注释掉的字符串可能误收。
+
+**同类问题影响**：所有独立挂载音轨的组件（片头、预告、品牌声画）；en 侧组件口播（EN_ORDINAL_WORDS 同权执法）；两集字幕容器复述口播的形态（SUBS 与 NARRATION 同容器族执法）。

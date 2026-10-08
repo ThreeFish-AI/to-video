@@ -817,3 +817,110 @@ def test_rule7_en_narration_in_audience_globs(tmp_path):
     )
     rc, out = run_series_check(ws)
     assert rc == 1 and "规则7" in out and "s01" in out and "narration.en.md" in out
+
+
+# ── 组件口播字面量容器（RSI-050）──────────────────────────────────────────────
+#: 系列片头等组件的口播是独立音轨资产、设计上不入 narration.md——规则 1 若只扫
+#: narration.md，组件 NARRATION/SUBS 字面量即执法盲区（上游 ISSUE-208：「本系列」
+#: 在 series-intro.tsx NARRATION 漏网，人工核对才发现、重配音收口）。判据与
+#: narration 扫描同源：zh/en 顺序词 + 他集标题互查（宿主集路径段排除自身）；
+#: 视觉层（不在容器内的场景内联序数词）结构性不进门——序号活在视觉层。
+INTRO_TSX = "episodes/ep-a/video/src/components/series-intro.tsx"
+
+
+def test_rule1_component_narration_ordinal_word_fails(tmp_path):
+    """NARRATION 容器含「本系列」——上游事故形态的机器复刻：扩面前此处全绿
+    漏放行（本用例即红），扩面后必须 FAIL。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const NARRATION = '本系列视频讲一个循环。';\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "本系列" in out
+    assert "series-intro.tsx" in out and "NARRATION" in out
+
+
+def test_rule1_component_subs_ordinal_word_fails(tmp_path):
+    """SUBS 数组（…as const 形态）含「第N集」序数词——容器体到分号截断后逐串受检。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: ("const SUBS = [\n  '开场',\n  '第三集讲什么',\n] as const;\n")},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "第三集" in out and "SUBS" in out
+
+
+def test_rule1_visual_layer_ordinal_word_passes(tmp_path):
+    """场景内联 `ep: '第一集'` 是视觉层进度卡（序号活在视觉层）——不在
+    NARRATION/SUBS 容器内的序数词必须放行。方案比选反例：全量扫 tsx 观众层
+    文本会误伤 self-evolving 系 P6Ending 的合法进度卡、逼出逃逸口
+    （常假报的门等于被关掉的门）。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {
+            "episodes/ep-a/video/src/scenes/P0Hook.tsx": (
+                "export const P0Hook = () => null;\n"
+                "const EPS = [\n"
+                "  {title: '甲集标题', ep: '第一集'},\n"
+                "  {title: '乙集标题', ep: '第二集'},\n"
+                "];\n"
+            )
+        },
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 0, out
+
+
+def test_rule1_clean_spoken_containers_pass(tmp_path):
+    """干净容器（修订后的口播文案）静默——扩面不制造存量假报。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {
+            INTRO_TSX: (
+                "const NARRATION =\n"
+                "  '这套视频讲一个循环，' +\n"
+                "  '机制层层递进。';\n"
+                "const SUBS = ['这套视频讲一个循环', '机制层层递进'] as const;\n"
+            )
+        },
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 0, out
+
+
+def test_rule1_component_en_ordinal_word_fails(tmp_path):
+    """容器内英文顺序词（next episode 等）——en 侧与 narration.en.md 同权执法。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const NARRATION = 'In the next episode we cover the loop.';\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "next episode" in out
+
+
+def test_rule1_component_other_title_fails(tmp_path):
+    """容器内他集标题——宿主集（ep-a）之外的标题互查，跨系列全局同权。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const SUBS = ['我们接着《乙集标题》讲'] as const;\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 1 and "规则1" in out and "乙集标题" in out and "他集标题" in out
+
+
+def test_rule1_component_own_title_passes(tmp_path):
+    """宿主集自身标题放行——与 narration 扫描「欢迎来到《本集》」同一先例
+    （场景组件的字幕容器复述本集标题是合法形态）。"""
+    ws = build_workspace(
+        tmp_path,
+        [S("t", EP1, EP2)],
+        {INTRO_TSX: "const SUBS = ['欢迎来到《甲集标题》'] as const;\n"},
+    )
+    rc, out = run_series_check(ws)
+    assert rc == 0, out
