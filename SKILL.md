@@ -21,13 +21,13 @@ allowed-tools: Read Write Edit Glob Grep Bash
 | 任务 | 走法 | 先读 |
 |---|---|---|
 | 全新制作一集 | 下节「工作流」逐步过门；进每阶段前读速查表对应规格 | 阶段规格 |
-| GL 精读产物成片 | 已有 /guided-learn《精读与通俗拆解》→ ① 走 C 型（冻结快照 + 穿透抽查），后续同主流水线 | [01](references/01-source-extraction.md) |
+| GL 精读产物成片 | 已有 /guided-learn 产物 → ① C 型（冻结快照+抽查），后续同主流水线 | [01](references/01-source-extraction.md) |
 | 改稿迭代（已有集改口播） | 只改 `narration.md` → `build` → `check` → `tts` → `render` + `qa`；只改画面跳过 `tts`；需交付接工作流第 7 步 | 速查表 ③④⑨ |
 | 润色成稿（语句断续、像 AI 写的） | 按 ⑤ 规格四层 pass 原地改稿，事实与句 id 冻结；独立子代理成文评审 → 改动句回 ④ 复核 → `build` → `check`（无分镜时改跑 `check_script.py --pre-tts`） | 速查表 ⑤ |
-| 出英文版 / 双语 | `pipeline.toml` 声明 `narration.langs = ["zh","en"]` + 句 id 对齐的译稿 `narration.en.md`；tts/render/captions/deliver 加 `--lang en`（build/check 缺省全覆盖，产物加 `.en` 后缀） | [PIPELINE.md §五「双语渲染」](references/PIPELINE.md) |
-| 评审后重配音（本人声音） | 零改稿换声：toml 升 indextts＋填 ref 指纹 → tts --allow-voice-switch --final-voice → render → qa → check → captions → render --final；en 追配同轨 [tts.en]（先跨语种试听，独立一次显式要求） | [07](references/07-tts-voice.md) |
+| 出英文版 / 双语 | `pipeline.toml` 声明 `narration.langs = ["zh","en"]` + 句 id 对齐的译稿 `narration.en.md`；tts/render/captions/deliver 加 `--lang en`（build/check 缺省全覆盖） | [PIPELINE.md §五「双语渲染」](references/PIPELINE.md) |
+| 评审后重配音（本人声音） | 零改稿换声：toml 升 indextts＋填 ref 指纹 → tts --allow-voice-switch --final-voice → render → qa → check → captions → render --final；en 追配独立触发 | [07](references/07-tts-voice.md) |
 | 交付归档 | 终渲后显式 `deliver`；根路径 `--root`（一次性）或 env `VIBE_VIDEO_DELIVER_ROOT`（持久，不进 toml） | 速查表 ⑩ |
-| 环境 / 状态排障 | `pipeline.py doctor`（配置/时序/指纹/TTS/浏览器 `--clean-browsers`）/ `status`（新鲜度） | [PIPELINE.md §三](references/PIPELINE.md) |
+| 环境 / 状态排障 | `pipeline.py doctor`（配置/时序/指纹/TTS/浏览器 `--clean-browsers`）/ `status` | [PIPELINE.md §三](references/PIPELINE.md) |
 | 本 Skill 自身缺陷或改进 | 走「自改进回路（RSI）」，不顺手改 `$T` | [RSI.md](RSI.md) |
 
 ## 工作流（全新制作）
@@ -115,7 +115,8 @@ uv run --no-project $T/scripts/pipeline.py --project $P deliver   # → <根>/<�
 | [DIRECTING-CRAFT.md](references/DIRECTING-CRAFT.md) | ②⑥⑧⑨ 导演判据设计时 |
 | [PRON-GLOSSARY.md](references/PRON-GLOSSARY.md) | 遇多音字/专名读音、复听纠音时 |
 | [VOICE-CLONING.md](references/VOICE-CLONING.md) | 部署 IndexTTS、备样、选风格档、配音排障 |
-| [INDEXTTS-2.5-ADVANCED.md](references/INDEXTTS-2.5-ADVANCED.md) | 机制循证、配音调优（非日常） |
+| [SERIES-INTRO.md](references/SERIES-INTRO.md) | 做系列片头时 |
+| [INDEXTTS-2.5-ADVANCED.md](references/INDEXTTS-2.5-ADVANCED.md) | 机制循证、配音调优 |
 | [RSI.md](RSI.md) | 发现本 Skill 自身缺陷或改进项时 |
 | [README.md](README.md) | 安装/更新/依赖版本 |
 

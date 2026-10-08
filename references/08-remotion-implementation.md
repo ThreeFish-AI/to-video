@@ -358,6 +358,9 @@ QA 验收：逐幕抽帧目检色契约遵守、beat 窗口不越界、角标不
 > 层序/层名/发布态/下集标题自 `video/src/series-layers.json`（build_narration 从
 > series.json 派生，硬编码即漂移）。**EP2–5 待同步**（复制 harness-stack.tsx + 各幕
 > 挂 HarnessBadge + P0/P6 编排）——五集不一致状态显式化于此，终渲前逐集补齐。
+> 同一 seeded 复制模式的系列片头组件（`components/series-intro.tsx`：独立音轨 +
+> 静音带 T 表 + NARRATION/SUBS 口播容器命名约定）资产契约见
+> [SERIES-INTRO.md](SERIES-INTRO.md)。
 
 ### 五层栈母题（HarnessStack）
 

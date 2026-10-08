@@ -23,6 +23,7 @@
 | [PRON-GLOSSARY.md](../../references/PRON-GLOSSARY.md) | 易错字台账：发音标注跨集复用表 |
 | [MODELING-PLAYBOOK.md](../../references/MODELING-PLAYBOOK.md) | 动效画面建模手册（有界经验库，门 `check_playbook.py`） |
 | [DIRECTING-CRAFT.md](../../references/DIRECTING-CRAFT.md) | 导演手艺知识库：镜头语言/节奏/动画原则/导演级审查判据（`@shot` 词表 SSOT，RSI-048） |
+| [SERIES-INTRO.md](../../references/SERIES-INTRO.md) | 系列片头资产契约：独立音轨/静音带 T 表方法论/改稿五同步/双语 drift 登记/NARRATION-SUBS 口播容器命名约定（RSI-051） |
 
 ## 元机制、评测与研究
 
