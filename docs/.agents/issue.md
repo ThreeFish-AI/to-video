@@ -735,7 +735,7 @@
 
 **定性**：非阻断改进（知识融入·用户点名启动；零 parser/frozen/stages.toml/机器门改动）。
 
-**处理方式**：[PR #41](https://github.com/ThreeFish-AI/vibe-video/pull/41)（commit 006125d，分支 `ThreeFish-AI/rsi-048-directing-craft`）。新建 [DIRECTING-CRAFT.md](../../references/DIRECTING-CRAFT.md)（工艺层 SSOT，六节+28 反模式表）+ [研究文档](../research/directing-craft.md)（G2 比选存证+数据契约 roadmap）；⑥ 规格 `@shot:` 景别约定（落画面列，check_motion 不读该列零干扰，误写动效列得「不在词表」WARN 免费护栏）；②⑥⑧⑨⑤ 五阶段规格注入指针+核心规范；09 目检清单 +「导演级四维」（焦点/节奏/连续性/静音语义）；SKILL 按需加载表 +1 行（等量压缩保 8000 预算）；05 §七.4 冻结清单加 `@shot`；tests/test_directing_craft.py 5 锚点 + test_check_script 2 护栏钉。机械门族（@cam 词表门/eye-trace/read-time lint）作为后续 RSI roadmap 存证于研究文档——「先有数据再有门」，首集 @shot 实践产出校准数据后再立项。
+**处理方式**：[PR #41](https://github.com/ThreeFish-AI/vibe-video/pull/41)（commit 006125d，分支 `ThreeFish-AI/rsi-048-directing-craft`）。新建 [DIRECTING-CRAFT.md](../../references/DIRECTING-CRAFT.md)（工艺层 SSOT，六节+28 反模式表）+ [研究文档](../research/directing-craft.md)（G2 比选存证+数据契约 roadmap）；⑥ 规格 `@shot:` 景别约定（落画面列，check_motion 不读该列零干扰，误写动效列得「不在词表」WARN 免费护栏）；②⑥⑧⑨ 四阶段规格注入指针+核心规范（⑤ 冻结清单另加 `@shot` 记号）；09 目检清单 +「导演级四维」（焦点/节奏/连续性/静音语义）；SKILL 按需加载表 +1 行（等量压缩保 8000 预算）；05 §七.4 冻结清单加 `@shot`；tests/test_directing_craft.py 5 锚点 + test_check_script 2 护栏钉。机械门族（@cam 词表门/eye-trace/read-time lint）作为后续 RSI roadmap 存证于研究文档——「先有数据再有门」，首集 @shot 实践产出校准数据后再立项。
 
 **后续防范**：新增视觉质量维度先查 DIRECTING-CRAFT 是否已有判据，再决定立新定式或扩展词表；导演经验（构图/隐喻类）仍走建模手册策展分支，镜头语言/节奏类归 DIRECTING-CRAFT——两层候选不互投。
 

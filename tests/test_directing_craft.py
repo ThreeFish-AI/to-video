@@ -2,7 +2,8 @@
 
 执法五类纪律（同 test_voice_tiers 的跨文档行锚先例——防规格漂移的最低成本形态）：
   1. 存在性与预算：DIRECTING-CRAFT.md 存在、带目录、行数 ≤500（知识库自身防 context rot）；
-  2. 规格注入行锚：②⑥⑧⑨ 四阶段规格与 05 冻结清单各含核心规范 + 指针（指针断裂即红）；
+  2. 规格注入行锚：②⑥⑧⑨ 四阶段规格各含核心规范 + 指针（指针断裂即红）；
+     05 冻结清单只须含 `@shot` 记号本身（不要求指针）；
   3. SSOT 边界：@shot 五档枚举完整枚举只在 DIRECTING-CRAFT——06 只许指针 + ≤2 档样例
      （防第二事实源，同 archify 覆盖门「docstring SSOT、分镜侧摘要同构」纪律）；
   4. 免费护栏钉：@shot 在动效列得「不在词表」WARN 是预期行为（在 test_check_script）；
@@ -41,7 +42,7 @@ def test_doc_exists_with_toc_and_budget():
 
 
 def test_stage_specs_inject_pointer_and_core_rule():
-    """四阶段规格 + 05 冻结清单各含核心规范与 DIRECTING-CRAFT 指针（指针断裂即红）。"""
+    """②⑥⑧⑨ 四阶段规格各含核心规范与 DIRECTING-CRAFT 指针（指针断裂即红）；05 冻结清单只含 `@shot` 记号。"""
     checks = {
         "02-planning.md": ("镜头语言基调与节奏蓝图", "DIRECTING-CRAFT"),
         "06-storyboard.md": ("@shot:", "DIRECTING-CRAFT"),

@@ -35,6 +35,7 @@
 | [prose-refinement.md](../research/prose-refinement.md) | ⑤ 成文优化的语料取证、理论依据（IEEE 引用）与方案比选（落位 / 插入位置 / 执法力度） |
 | [dependency-policy-and-asset-tools.md](../research/dependency-policy-and-asset-tools.md) | 依赖版本策略比选、HyperFrames 复核（vs Remotion）与 text-to-cad 评估（RSI-016 循证） |
 | [motion-engineering.md](../research/motion-engineering.md) | Visual Lock、Morph Continuity、过渡/循环抽帧验收与 Motion Blur opt-in 的方案依据 |
+| [directing-craft.md](../research/directing-craft.md) | 导演手艺知识库的调研综合、方案比选（G2）与机械门族数据契约 roadmap（RSI-048） |
 
 ## 资产
 

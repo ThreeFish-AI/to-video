@@ -10,11 +10,11 @@
 
 ## 二、六路调研 → 落位映射（17 原则）
 
-调研维度：动画十二原则（Disney）/ 镜头语言（cinematography for motion graphics）/ 剪辑与节奏（Murch、认知心理学）/ 视觉叙事（Kurzgesagt、3B1B 访谈、信息可视化文献）/ 科普频道方法论（TED-Ed、Veritasium）/ 导演工作流（Pixar 访谈、storyboard 教学）。综合排序 17 条原则——完整索引表见 DIRECTING-CRAFT 头部（原则 → 手册节 → 执法面三列映射），此处只记映射决策：
+调研维度：动画十二原则（Disney）[1] / 镜头语言（cinematography for motion graphics）/ 剪辑与节奏（Murch [2]、认知心理学 [3]）/ 视觉叙事（Kurzgesagt、3B1B 访谈、信息可视化文献 [4][7][8]）/ 科普频道方法论（TED-Ed、Veritasium——misconception-first 实证 [6]）/ 导演工作流（Pixar 访谈、storyboard 教学 [9]）。综合排序 17 条原则——完整索引表见 DIRECTING-CRAFT 头部（原则 → 手册节 → 执法面三列映射），此处只记映射决策：
 
 | 调研原则簇 | 既有纹理可挂靠 | 零覆盖需新建 |
 |---|---|---|
-| 旁白锚定时序 | 08 铁律「`rel(beat,'句id')` 句边界推导」 | 词级落点（Land on the Word）、画面先行 0–0.5s |
+| 旁白锚定时序 | 08 铁律「`rel(beat,'句id')` 句边界推导」 | 词级落点（Land on the Word）、画面先行 0–0.5s [5] |
 | Overview-First | 四定式 1「全景坐标先行」 | 回看密度规则（每 2–3 局部镜回拉全景） |
 | 消融对比/基线标尺 | 四定式 3/4 | — |
 | 情绪曲线 | 03 声音导演规则 | 视觉张力曲线（景别行程、呼吸幕） |
@@ -88,7 +88,7 @@ parser 顺序修正（必钉回归测试）：parse_motion_tags 先剥离 @cam/@
 ## 五、撤销条件与已知局限
 
 - **撤销条件**：若 `@shot` 约定在 ≥3 集中零使用（Agent 不认领），说明约定写法的摩擦大于价值——撤销画面列约定、改走 roadmap 的动效列契约或纯目检路线；DIRECTING-CRAFT 知识本体不受影响（§二–§七判据独立于标注形态）。
-- **已知局限**：① `@shot` 拼写错误本期无机器护栏（目检兜底）；② read-time 公式常数（1.5s 基线、0.8–1.2s/元素、13 CPS）来自文献未经本仓校准，仅作人工判据参考；③ eye-trace 「1/3 屏宽」是文献阈值的一维近似，帧上人工判读有主观带；④ 声音 cue 轨（原则 17）不落地——BGM 留空轨是 02「不做的事」既有边界，推翻须用户决策。
+- **已知局限**：① `@shot` 拼写错误本期无机器护栏（目检兜底）；② read-time 公式常数（1.5s 基线、0.8–1.2s/元素——segmenting 口径 [3]；13 CPS——通用阅读速度估值）来自文献未经本仓校准，仅作人工判据参考；③ eye-trace 「1/3 屏宽」是文献阈值的一维近似 [2]，帧上人工判读有主观带；④ 声音 cue 轨（原则 17）不落地——BGM 留空轨是 02「不做的事」既有边界，推翻须用户决策。
 
 ## References
 
@@ -97,7 +97,7 @@ parser 顺序修正（必钉回归测试）：parse_motion_tags 先剥离 @cam/@
 [3] R. E. Mayer, *Multimedia Learning*, 3rd ed. Cambridge: Cambridge Univ. Press, 2020（redundancy/signaling/segmenting 原则）.
 [4] J. Heer and G. Robertson, "Animated transitions in statistical data graphics," *IEEE Trans. Vis. Comput. Graph.*, vol. 13, no. 6, pp. 1240–1247, 2007（动画转场优于静态跳切的实证）.
 [5] ITU-R BT.1359-1, *Relative time-advance of sound with vision*. Geneva: ITU, 1998（音画异步感知不对称阈）.
-[6] D. Muller, M. Sharma, P. Eklund, and J. McKittrick, "Reverse engineering the 3Blue1Brown video style: A case study in clarity-first animation," in *Proc. AIED Workshop*, 2021（clear-explanation trap 实证）.
+[6] D. E. Muller, "Designing effective multimedia for physics education," Ph.D. dissertation, Univ. of Sydney, Sydney, Australia, 2008（clear-explanation 零增益与 misconception-first 三段式实证——Veritasium 创始人的博士研究）.
 [7] J. Hullman, "Why authors don't visualize uncertainty," *IEEE Trans. Vis. Comput. Graph.*, vol. 26, no. 1, pp. 10–14, 2020（图解叙事的注意力引导）.
 [8] B. Tversky, J. B. Morrison, and M. Bétrancourt, "Animation: Can it facilitate?," *Int. J. Hum.-Comput. Stud.*, vol. 57, no. 4, pp. 247–262, 2002（动画有效性的边界条件——时机与编排）.
-[9] Kurzgesagt 团队公开访谈与制作流程分享（色彩策略、脚本-动画迭代）；3Blue1Brown（G. Sanderson）Manim 设计哲学与运镜作为注意力语言的公开阐述；TED-Ed 动画协作 guideline（modal division）——原始链接见 RSI-048 工作区调研记录。
+[9] Kurzgesagt 团队制作流程与色彩策略的公开分享 [Online]. Available: https://kurzgesagt.org/；3Blue1Brown（G. Sanderson）关于 Manim 设计哲学与动画作为注意力语言的公开访谈 [Online]. Available: https://www.dwarkesh.com/p/grant-sanderson；TED-Ed 动画协作模式（educator–animator collaboration，动画承载讲解的一部分）[Online]. Available: https://ed.ted.com/。

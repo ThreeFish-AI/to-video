@@ -229,7 +229,7 @@ export const P2FiveObjects: React.FC<{scene: SceneRange}> = ({scene}) => {
   1. **AAS（Anticipation-Action-Settle）**：关键揭示用「主作用前 ≤3 帧小反相位移（`useEnter` 组合）+ 主作用 + `SPRING.settle` 收束」表达预备与落定，**零新 hook**；settle 窗（0.2–0.3s）内禁叠第二个动画；
   2. **Eye-Trace**：镜切换前后焦点位移 ≤1/3 屏宽，超限须引导动画（`@travel` 接力、连线延伸）——相邻镜焦点衔接与新元素入场落点对齐句内关键词（Land on the Word，词级落点细化）；
   3. **数据本体红线**：柱高/点位/数值标注等数据语义元素**永不吃过冲弹簧**（钳 seat=1，3D「弹簧过冲要钳行程」实践泛化）——squash/夸张只作用于概念隐喻层。
-- **运镜实现约定**：pullOut = `usePushIn(at, {scale: 0.94})` 组合、pan/tracking = 容器 transform + `useProgress`（bespoke 逃生舱合法形态，Easing.inOut 禁匀速）、静态图兜底 Ken Burns = 长周期 `usePushIn`（8–15s 内 1.0→1.08）；完整映射表与动机律见 [导演手艺 §1.2](./DIRECTING-CRAFT.md)。**frozen 化触发条件**：≥2 集真实使用 pullOut/pan 且评审出现「组合约定失真」事故 ⇒ 另立 RSI 评估（届时词表迁 hooks 派生）。
+- **运镜实现约定**：pullOut = `usePushIn(at, {scale: -0.06})`（scale 为增量：1.0→0.94）组合、pan/tracking = 容器 transform + `useProgress`（bespoke 逃生舱合法形态，Easing.inOut 禁匀速）、静态图兜底 Ken Burns = 长周期 `usePushIn`（8–15s 内 1.0→1.08）；完整映射表与动机律见 [导演手艺 §1.2](./DIRECTING-CRAFT.md)。**frozen 化触发条件**：≥2 集真实使用 pullOut/pan 且评审出现「组合约定失真」事故 ⇒ 另立 RSI 评估（届时词表迁 hooks 派生）。
 
 ## 双语 i18n（场景文案，双语集）
 
